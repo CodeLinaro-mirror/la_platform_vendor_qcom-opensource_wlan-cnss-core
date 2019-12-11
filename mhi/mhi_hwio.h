@@ -148,6 +148,10 @@
 #define MHIDATALIMIT_HIGHER_MHIDATALIMIT_HIGHER_MASK 0xffffffff
 #define MHIDATALIMIT_HIGHER_MHIDATALIMIT_HIGHER_SHIFT 0x0
 
+/* Host request register */
+#define MHI_SOC_RESET_REQ_OFFSET (0xB0)
+#define MHI_SOC_RESET_REQ BIT(0)
+
 #define CHDB_LOWER_n(n) (0x0400 + 0x8 * (n))
 #define CHDB_LOWER_n_CHDB_LOWER_MASK 0xffffffff
 #define CHDB_LOWER_n_CHDB_LOWER_SHIFT 0x0
@@ -167,6 +171,7 @@
 #define ERDB_HIGHER_n_ERDB_HIGHER_MASK 0xffffffff
 #define ERDB_HIGHER_n_ERDB_HIGHER_SHIFT 0x0
 
+#ifdef CONFIG_HST_IMX
 #define PCIE_TXVECDB (0x360)
 #define PCIE_TXVECSTATUS (0x368)
 #define PCIE_RXVECDB (0x394)
@@ -178,5 +183,6 @@
 #define PCIE_REMAP_1M_BAR_CTRL (0x310c)
 
 #define WLAON_WARM_SW_ENTRY (0x1f80504)
+#endif
 
 #endif

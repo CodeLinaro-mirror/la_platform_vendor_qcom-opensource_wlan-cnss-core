@@ -1,8 +1,7 @@
-objs += ipc_router_core.o
-objs += ipc_router_socket.o
-objs += ipc_router_security.o
+#
+# Makefile for the Linux IPC_ROUTER
+#
 
-obj-$(CONFIG_IPC_ROUTER) += ipc_router.o
-ipc_router-y := $(objs)
-
-ccflags-y += -I$(src)/../inc
+obj-$(CONFIG_IPC_ROUTER) := ipc_router_core.o
+obj-$(CONFIG_IPC_ROUTER) += ipc_router_socket.o
+obj-$(CONFIG_IPC_ROUTER_SECURITY) += ipc_router_security.o

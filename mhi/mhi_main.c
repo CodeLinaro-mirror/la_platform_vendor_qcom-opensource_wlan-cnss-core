@@ -15,9 +15,11 @@
 #include <linux/of_gpio.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 #include <linux/msm-bus.h>
 #endif
+#include <linux/dmapool.h>
+#include <linux/pci.h>
 #include <linux/cpu.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
@@ -52,24 +54,16 @@ static int enable_bb_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt,
 
 	if (mhi_dev_ctxt->flags.bb_required) {
 		char pool_name[32];
-#ifdef CONFIG_NAPIER_X86
-		snprintf(pool_name, sizeof(pool_name), "mhi%d_%d",
-			 0, chan);
-#else
+
 		snprintf(pool_name, sizeof(pool_name), "mhi%d_%d",
 			 mhi_dev_ctxt->plat_dev->id, chan);
-#endif
 
 		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
-			"Creating pool %s for chan:%d payload: 0x%zu\n",
+			"Creating pool %s for chan:%d payload: 0x%lx\n",
 			pool_name, chan, max_payload);
 
 		bb_ctxt->dma_pool = dma_pool_create(pool_name,
-#ifdef CONFIG_NAPIER_X86
-			&mhi_dev_ctxt->pcie_device->dev, max_payload, 0, 0);
-#else
 			&mhi_dev_ctxt->plat_dev->dev, max_payload, 0, 0);
-#endif
 		if (unlikely(!bb_ctxt->dma_pool))
 			goto dma_pool_error;
 
@@ -195,7 +189,7 @@ static void mhi_move_interrupts(struct mhi_device_ctxt *mhi_dev_ctxt, u32 cpu)
 				mhi_dev_ctxt->ev_ring_props[i].flags)) {
 			irq_to_affin = mhi_dev_ctxt->ev_ring_props[i].msi_vec;
 			irq_to_affin += mhi_dev_ctxt->core.irq_base;
-#ifdef CONFIG_NAPIER_X86
+#ifdef CONFIG_HST_IMX
 			irq_set_affinity_hint(irq_to_affin, get_cpu_mask(cpu));
 #else
 			irq_set_affinity(irq_to_affin, get_cpu_mask(cpu));
@@ -232,14 +226,35 @@ int mhi_cpu_notifier_cb(struct notifier_block *nfb, unsigned long action,
 	return NOTIFY_OK;
 }
 
-#ifdef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
+int get_chan_props(struct mhi_device_ctxt *mhi_dev_ctxt, int chan,
+		   struct mhi_chan_info *chan_info)
+{
+	char dt_prop[MAX_BUF_SIZE];
+	int r;
+
+	scnprintf(dt_prop, MAX_BUF_SIZE, "%s%d", "mhi-chan-cfg-", chan);
+	r = of_property_read_u32_array(
+			mhi_dev_ctxt->plat_dev->dev.of_node,
+			dt_prop,
+			(u32 *)chan_info,
+			sizeof(struct mhi_chan_info) / sizeof(u32));
+	return r;
+}
+#else
 struct mhi_chan_info mhi_chan[] =
-{{0x0, 0x80, 0x1, 0x92},
+{
+ {0x0, 0x80, 0x1, 0x92},
  {0x1, 0x80, 0x1, 0xa2},
  {0x4, 0x80, 0x1, 0x92},
  {0x5, 0x80, 0x1, 0xa2},
+#ifndef CONFIG_HST_IMX
  {0x10, 0x40, 0x1, 0x92},
  {0x11, 0x40, 0x1, 0xa2},
+#else
+ {0x14, 0x40, 0x1, 0x92},
+ {0x15, 0x40, 0x1, 0xa2},
+#endif
 };
 
 int get_chan_props(struct mhi_device_ctxt *mhi_dev_ctxt, int chan,
@@ -257,21 +272,6 @@ int get_chan_props(struct mhi_device_ctxt *mhi_dev_ctxt, int chan,
 
 	return -1;
 }
-#else
-int get_chan_props(struct mhi_device_ctxt *mhi_dev_ctxt, int chan,
-		   struct mhi_chan_info *chan_info)
-{
-	char dt_prop[MAX_BUF_SIZE];
-	int r;
-
-	scnprintf(dt_prop, MAX_BUF_SIZE, "%s%d", "mhi-chan-cfg-", chan);
-	r = of_property_read_u32_array(
-			mhi_dev_ctxt->plat_dev->dev.of_node,
-			dt_prop,
-			(u32 *)chan_info,
-			sizeof(struct mhi_chan_info) / sizeof(u32));
-	return r;
-}
 #endif
 
 int mhi_release_chan_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt,
@@ -280,11 +280,8 @@ int mhi_release_chan_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt,
 {
 	if (cc_list == NULL || ring == NULL)
 		return -EINVAL;
-#ifdef CONFIG_NAPIER_X86
-	dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
-#else
+
 	dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
-#endif
 			  ring->len,
 			  ring->base,
 			  cc_list->mhi_trb_ring_base_addr);
@@ -322,11 +319,7 @@ static int populate_tre_ring(struct mhi_client_config *client_config)
 
 	chan_ctxt = &mhi_dev_ctxt->dev_space.ring_ctxt.cc_list[chan];
 	ring_local_addr =
-#ifdef CONFIG_NAPIER_X86
-		dma_alloc_coherent(&mhi_dev_ctxt->pcie_device->dev,
-#else
-                dma_alloc_coherent(&mhi_dev_ctxt->plat_dev->dev,
-#endif
+		dma_alloc_coherent(&mhi_dev_ctxt->plat_dev->dev,
 				   nr_desc * sizeof(union mhi_xfer_pkt),
 				   &ring_dma_addr,
 				   GFP_KERNEL);
@@ -518,27 +511,7 @@ error_tre_ring:
 }
 EXPORT_SYMBOL(mhi_open_channel);
 
-#ifdef CONFIG_NAPIER_X86
-bool mhi_is_device_ready(const struct device * const dev,
-			 const char *node_name)
-{
-	struct mhi_device_ctxt *itr;
-	bool match_found = false;
-
-	if (!mhi_device_drv)
-		return false;
-
-	mutex_lock(&mhi_device_drv->lock);
-	list_for_each_entry(itr, &mhi_device_drv->head, node) {
-		if (itr->ready) {
-			match_found = true;
-			break;
-		}
-	}
-	mutex_unlock(&mhi_device_drv->lock);
-	return match_found;
-}
-#else
+#ifdef CONFIG_ARCH_QCOM
 bool mhi_is_device_ready(const struct device * const dev,
 			 const char *node_name)
 {
@@ -567,6 +540,26 @@ bool mhi_is_device_ready(const struct device * const dev,
 	mutex_unlock(&mhi_device_drv->lock);
 	return match_found;
 }
+#else
+bool mhi_is_device_ready(const struct device * const dev,
+			 const char *node_name)
+{
+	struct mhi_device_ctxt *itr;
+	bool match_found = false;
+
+	if (!mhi_device_drv)
+		return false;
+
+	mutex_lock(&mhi_device_drv->lock);
+	list_for_each_entry(itr, &mhi_device_drv->head, node) {
+		if (itr->ready) {
+			match_found = true;
+			break;
+		}
+	}
+	mutex_unlock(&mhi_device_drv->lock);
+	return match_found;
+}
 #endif
 EXPORT_SYMBOL(mhi_is_device_ready);
 
@@ -574,24 +567,42 @@ int mhi_register_channel(struct mhi_client_handle **client_handle,
 			 struct mhi_client_info_t *client_info)
 {
 	struct mhi_device_ctxt *mhi_dev_ctxt = NULL, *itr;
+#ifdef CONFIG_ARCH_QCOM
+	const struct device_node *of_node;
+#endif
 	struct mhi_client_config *client_config;
 	const char *node_name;
 	enum MHI_CLIENT_CHANNEL chan;
 	struct mhi_chan_info chan_info = {0};
 	int ret;
 
+#ifdef CONFIG_ARCH_QCOM
+	if (!client_info || client_info->dev->of_node == NULL)
+#else
 	if (!client_info)
+#endif
 		return -EINVAL;
 
 	node_name = client_info->node_name;
 	chan = client_info->chan;
+#ifdef CONFIG_ARCH_QCOM
+	of_node = of_parse_phandle(client_info->dev->of_node, node_name, 0);
+	if (!of_node || !mhi_device_drv || chan >= MHI_MAX_CHANNELS)
+#else
 	if (!mhi_device_drv || chan >= MHI_MAX_CHANNELS)
+#endif
 		return -EINVAL;
 
 	/* Traverse thru the list */
 	mutex_lock(&mhi_device_drv->lock);
 	list_for_each_entry(itr, &mhi_device_drv->head, node) {
+#ifdef CONFIG_ARCH_QCOM
+		struct platform_device *pdev = itr->plat_dev;
+
+		if (pdev->dev.of_node == of_node) {
+#else
 		if (itr->ready) {
+#endif
 			mhi_dev_ctxt = itr;
 			break;
 		}
@@ -834,7 +845,7 @@ static int create_bb(struct mhi_device_ctxt *mhi_dev_ctxt,
 	get_element_index(&mhi_dev_ctxt->mhi_local_chan_ctxt[chan],
 			   mhi_dev_ctxt->mhi_local_chan_ctxt[chan].rp,
 			   &ctxt_index_rp);
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 	BUG_ON(bb_index != ctxt_index_wp);
 #endif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE,
@@ -848,11 +859,7 @@ static int create_bb(struct mhi_device_ctxt *mhi_dev_ctxt,
 	bb_info->client_buf = buf;
 	bb_info->dir = dir;
 	bb_info->bb_p_addr = dma_map_single(
-#ifdef CONFIG_NAPIER_X86
-					&mhi_dev_ctxt->pcie_device->dev,
-#else
 					&mhi_dev_ctxt->plat_dev->dev,
-#endif
 					bb_info->client_buf,
 					bb_info->buf_len,
 					bb_info->dir);
@@ -861,11 +868,7 @@ static int create_bb(struct mhi_device_ctxt *mhi_dev_ctxt,
 		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 			"Buffer outside DMA range 0x%lx, size 0x%zx\n",
 			(uintptr_t)bb_info->bb_p_addr, buf_len);
-#ifdef CONFIG_NAPIER_X86
-		dma_unmap_single(&mhi_dev_ctxt->pcie_device->dev,
-#else
 		dma_unmap_single(&mhi_dev_ctxt->plat_dev->dev,
-#endif
 				bb_info->bb_p_addr,
 				bb_info->buf_len,
 				bb_info->dir);
@@ -917,11 +920,7 @@ static void free_bounce_buffer(struct mhi_device_ctxt *mhi_dev_ctxt,
 	mhi_log(mhi_dev_ctxt, MHI_MSG_RAW, "Entered\n");
 	if (!bb->bb_active)
 		/* This buffer was maped directly to device */
-#ifdef CONFIG_NAPIER_X86
-		dma_unmap_single(&mhi_dev_ctxt->pcie_device->dev,
-#else
 		dma_unmap_single(&mhi_dev_ctxt->plat_dev->dev,
-#endif
 				 bb->bb_p_addr, bb->buf_len, bb->dir);
 
 	bb->bb_active = 0;
@@ -938,10 +937,8 @@ static int mhi_queue_dma_xfer(
 	struct mhi_device_ctxt *mhi_dev_ctxt;
 
 	mhi_dev_ctxt = client_config->mhi_dev_ctxt;
-#ifndef CONFIG_NAPIER_X86
 	MHI_ASSERT(VALID_BUF(buf, buf_len, mhi_dev_ctxt),
 			"Client buffer is of invalid length\n");
-#endif
 	chan = client_config->chan_info.chan_nr;
 
 	pkt_loc = mhi_dev_ctxt->mhi_local_chan_ctxt[chan].wp;
@@ -985,7 +982,7 @@ int mhi_queue_xfer(struct mhi_client_handle *client_handle,
 {
 	int r;
 	enum dma_data_direction dma_dir;
-	struct mhi_buf_info *bb = NULL;
+	struct mhi_buf_info *bb;
 	struct mhi_device_ctxt *mhi_dev_ctxt;
 	u32 chan;
 	unsigned long flags;
@@ -1459,7 +1456,7 @@ int parse_xfer_event(struct mhi_device_ctxt *mhi_dev_ctxt,
 		print_tre(mhi_dev_ctxt, chan,
 			  &mhi_dev_ctxt->mhi_local_chan_ctxt[chan],
 			  (struct mhi_tx_pkt *)local_ev_trb_loc);
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 		BUG();
 #endif
 	break;
@@ -1543,7 +1540,6 @@ void reset_bb_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt,
 	bb_ctxt->wp = bb_ctxt->base;
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Exited\n");
 }
-
 
 void mhi_reset_chan(struct mhi_device_ctxt *mhi_dev_ctxt, int chan)
 {
@@ -1821,6 +1817,18 @@ void mhi_assert_device_wake(struct mhi_device_ctxt *mhi_dev_ctxt,
 	}
 }
 
+void mhi_force_wake_request(struct mhi_device *mhi_dev)
+{
+	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_dev->mhi_dev_ctxt;
+
+	if (mhi_dev_ctxt) {
+		mutex_lock(&mhi_dev_ctxt->pm_lock);
+		mhi_assert_device_wake(mhi_dev_ctxt, true);
+		mutex_unlock(&mhi_dev_ctxt->pm_lock);
+	}
+}
+EXPORT_SYMBOL(mhi_force_wake_request);
+
 void mhi_deassert_device_wake(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	unsigned long flags;
@@ -1840,6 +1848,28 @@ void mhi_deassert_device_wake(struct mhi_device_ctxt *mhi_dev_ctxt)
 			     0);
 	spin_unlock_irqrestore(&mhi_dev_ctxt->dev_wake_lock, flags);
 }
+
+void mhi_force_wake_release(struct mhi_device *mhi_dev)
+{
+	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_dev->mhi_dev_ctxt;
+
+	if (mhi_dev_ctxt) {
+		mutex_lock(&mhi_dev_ctxt->pm_lock);
+		mhi_deassert_device_wake(mhi_dev_ctxt);
+		mutex_unlock(&mhi_dev_ctxt->pm_lock);
+	}
+}
+EXPORT_SYMBOL(mhi_force_wake_release);
+
+bool mhi_is_device_awake(struct mhi_device *mhi_dev)
+{
+	if (mhi_dev->mhi_dev_ctxt)
+		return mhi_dev->mhi_dev_ctxt->mhi_state == MHI_STATE_M0 ?
+			true : false;
+
+	return true;
+}
+EXPORT_SYMBOL(mhi_is_device_awake);
 
 int mhi_set_lpm(struct mhi_client_handle *client_handle, bool enable_lpm)
 {
@@ -1861,19 +1891,7 @@ int mhi_set_lpm(struct mhi_client_handle *client_handle, bool enable_lpm)
 }
 EXPORT_SYMBOL(mhi_set_lpm);
 
-#ifdef CONFIG_NAPIER_X86
-int mhi_set_bus_request(struct mhi_device_ctxt *mhi_dev_ctxt,
-				int index) {return 0;}
-
-void mhi_pcie_sw_soc_reset(struct mhi_device *mhi_device)
-{
-	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_device->mhi_dev_ctxt;
-
-	mhi_pcie_sw_reset(mhi_dev_ctxt);
-}
-EXPORT_SYMBOL(mhi_pcie_sw_soc_reset);
-
-#else
+#ifdef CONFIG_ARCH_QCOM
 int mhi_set_bus_request(struct mhi_device_ctxt *mhi_dev_ctxt,
 				int index)
 {
@@ -1882,6 +1900,17 @@ int mhi_set_bus_request(struct mhi_device_ctxt *mhi_dev_ctxt,
 	return msm_bus_scale_client_update_request(mhi_dev_ctxt->bus_client,
 								index);
 }
+#else
+int mhi_set_bus_request(struct mhi_device_ctxt *mhi_dev_ctxt,
+                                int index) { return 0; }
+
+void mhi_pcie_sw_soc_reset(struct mhi_device *mhi_device)
+{
+	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_device->mhi_dev_ctxt;
+
+	mhi_pcie_sw_reset(mhi_dev_ctxt);
+}
+EXPORT_SYMBOL(mhi_pcie_sw_soc_reset);
 #endif
 
 int mhi_deregister_channel(struct mhi_client_handle *client_handle)
@@ -1910,6 +1939,9 @@ int mhi_register_device(struct mhi_device *mhi_device,
 			const char *node_name,
 			void *user_data)
 {
+#ifdef CONFIG_ARCH_QCOM
+	const struct device_node *of_node;
+#endif
 	struct mhi_device_ctxt *mhi_dev_ctxt = NULL, *itr;
 	struct pcie_core_info *core_info;
 	struct pci_dev *pci_dev = mhi_device->pci_dev;
@@ -1919,13 +1951,32 @@ int mhi_register_device(struct mhi_device *mhi_device,
 	u32 slot = PCI_SLOT(pci_dev->devfn);
 	int ret, i;
 	char node[32];
-	struct pcie_core_info *core = NULL;
+	struct pcie_core_info *core;
+
+#ifdef CONFIG_ARCH_QCOM
+	of_node = of_parse_phandle(mhi_device->dev->of_node, node_name, 0);
+	if (!of_node)
+		return -EINVAL;
+#endif
+
+	if (!mhi_device_drv)
+		return -EPROBE_DEFER;
 
 	/* Traverse thru the list */
 	mutex_lock(&mhi_device_drv->lock);
 	list_for_each_entry(itr, &mhi_device_drv->head, node) {
+#ifdef CONFIG_ARCH_QCOM
+		struct platform_device *pdev = itr->plat_dev;
+#endif
+
 		core = &itr->core;
-		if ((core->dev_id == PCI_ANY_ID || (core->dev_id == dev_id))) {
+#ifdef CONFIG_ARCH_QCOM
+		if (pdev->dev.of_node == of_node && core->domain == domain &&
+		    core->bus == bus && core->slot == slot &&
+		    (core->dev_id == PCI_ANY_ID || (core->dev_id == dev_id))) {
+#else
+		if (core->dev_id == PCI_ANY_ID || (core->dev_id == dev_id)) {
+#endif
 			/* change default dev_id to current dev_id */
 			core->dev_id = dev_id;
 			mhi_dev_ctxt = itr;
@@ -1940,10 +1991,11 @@ int mhi_register_device(struct mhi_device *mhi_device,
 
 	snprintf(node, sizeof(node), "mhi_%04x_%02u.%02u.%02u",
 		 core->dev_id, core->domain, core->bus, core->slot);
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 	mhi_dev_ctxt->mhi_ipc_log =
 		ipc_log_context_create(MHI_IPC_LOG_PAGES, node, 0);
 #endif
+
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 		"Registering Domain:%02u Bus:%04u dev:0x%04x slot:%04u\n",
 		domain, bus, dev_id, slot);
@@ -1970,8 +2022,8 @@ int mhi_register_device(struct mhi_device *mhi_device,
 		switch (resource_type(res)) {
 		case IORESOURCE_MEM:
 			/* bus master already mapped it */
-			core_info->bar0_base = (void __iomem *)(uintptr_t)res->start;
-			core_info->bar0_end = (void __iomem *)(uintptr_t)res->end;
+			core_info->bar0_base = (void __iomem *)res->start;
+			core_info->bar0_end = (void __iomem *)res->end;
 			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 				"bar mapped to:0x%llx - 0x%llx (virtual)\n",
 				res->start, res->end);
@@ -2022,7 +2074,7 @@ int mhi_register_device(struct mhi_device *mhi_device,
 		mhi_dev_ctxt->bhi_ctxt.rddm_table.sequence = 1;
 
 		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
-			"Device support rddm of size:0x%zu bytes\n",
+			"Device support rddm of size:0x%lx bytes\n",
 			mhi_dev_ctxt->bhi_ctxt.rddm_size);
 	}
 
@@ -2047,7 +2099,7 @@ void mhi_deregister_device(struct mhi_device *mhi_device)
 	struct pci_dev *pci_dev = mhi_device->pci_dev;
 	struct mhi_device_ctxt *mhi_ctxt = NULL;
 	struct mhi_device_ctxt *entry;
-	struct pcie_core_info *core = NULL;
+	struct pcie_core_info *core;
 
 	if (!mhi_device)
 		return;
@@ -2075,7 +2127,6 @@ void mhi_deregister_device(struct mhi_device *mhi_device)
 	mhi_ctxt->pcie_device = NULL;
 }
 EXPORT_SYMBOL(mhi_deregister_device);
-
 
 int mhi_xfer_rddm(struct mhi_device *mhi_device, enum mhi_rddm_segment seg,
 		  struct scatterlist **sg_list)
@@ -2215,15 +2266,49 @@ u32 mhi_reg_read_field(void __iomem *io_addr, uintptr_t io_offset,
 
 u32 mhi_reg_read(void __iomem *io_addr, uintptr_t io_offset)
 {
-	return ioread32(io_addr + io_offset);
+	u32 ret;
+	ret = ioread32(io_addr + io_offset);
+	mhi_log(mhi_dev_ctxt, MHI_MSG_RAW,
+                "d.s 0x%p off: 0x%lx 0x%x\n", io_addr, io_offset, ret);
+	return ret;
 }
 
 #define MAX_UNWINDOWED_ADDRESS 0x80000
+#ifndef CONFIG_HST_IMX
 #define WINDOW_ENABLE_BIT 0x80000000
+#else
+#define WINDOW_ENABLE_BIT 0x40000000
+#endif
 #define WINDOW_SHIFT 19
 #define WINDOW_VALUE_MASK 0x3F
 #define WINDOW_START MAX_UNWINDOWED_ADDRESS
 #define WINDOW_RANGE_MASK 0x7FFFF
+
+#ifdef CONFIG_HST_IMX
+/* 4k - 32bytes */
+#define MAPPED_REF_OFF (4096 - 32 -1)
+void mhi_check_assert_wake(struct mhi_device_ctxt *mhi_dev_ctxt,
+			   uintptr_t offset)
+{
+	if (offset > MAPPED_REF_OFF) {
+		mutex_lock(&mhi_dev_ctxt->pm_lock);
+		mhi_assert_device_wake(mhi_dev_ctxt, true);
+		mutex_unlock(&mhi_dev_ctxt->pm_lock);
+	}
+}
+void mhi_check_deassert_wake(struct mhi_device_ctxt *mhi_dev_ctxt,
+			     uintptr_t offset)
+{
+	if (offset > MAPPED_REF_OFF) {
+		mutex_lock(&mhi_dev_ctxt->pm_lock);
+		mhi_deassert_device_wake(mhi_dev_ctxt);
+		mutex_unlock(&mhi_dev_ctxt->pm_lock);
+	}
+}
+#else
+#define mhi_check_assert_wake(mhi_dev_ctxt, offset) /* nop */
+#define mhi_check_deassert_wake(mhi_dev_ctxt, offset) /* nop */
+#endif
 
 static inline void mhi_reg_select_window(void __iomem *io_addr, u32 offset)
 {
@@ -2234,8 +2319,12 @@ static inline void mhi_reg_select_window(void __iomem *io_addr, u32 offset)
 	wmb();
 }
 
-u32 mhi_reg_read_remap(void __iomem *io_addr, uintptr_t io_offset)
+u32 mhi_reg_read_remap(struct mhi_device_ctxt *mhi_dev_ctxt,
+		       void __iomem *io_addr,
+		       uintptr_t io_offset)
 {
+	mhi_check_assert_wake(mhi_dev_ctxt, io_offset);
+
 	if (io_offset < MAX_UNWINDOWED_ADDRESS) {
 		return ioread32(io_addr + io_offset);
 	} else {
@@ -2243,17 +2332,25 @@ u32 mhi_reg_read_remap(void __iomem *io_addr, uintptr_t io_offset)
 		return ioread32(io_addr + WINDOW_START +
 				(io_offset & WINDOW_RANGE_MASK));
 	}
+
+	mhi_check_deassert_wake(mhi_dev_ctxt, io_offset);
 }
 
-void mhi_reg_write_remap(void __iomem *io_addr, uintptr_t io_offset, u32 val)
+void mhi_reg_write_remap(struct mhi_device_ctxt *mhi_dev_ctxt,
+			 void __iomem *io_addr,
+			 uintptr_t io_offset, u32 val)
 {
+	mhi_check_assert_wake(mhi_dev_ctxt, io_offset);
+
 	if (io_offset < MAX_UNWINDOWED_ADDRESS) {
 		iowrite32(val, io_addr + io_offset);
 	} else {
 		mhi_reg_select_window(io_addr, io_offset);
 		iowrite32(val, io_addr + WINDOW_START +
-				(io_offset & WINDOW_RANGE_MASK));
+			  (io_offset & WINDOW_RANGE_MASK));
 	}
 	wmb();
+
+	mhi_check_deassert_wake(mhi_dev_ctxt, io_offset);
 }
 

@@ -14,6 +14,7 @@
 #define _H_MHI
 
 #include "mhi_macros.h"
+#include <linux/msm_mhi.h>
 #include <linux/types.h>
 #include <linux/pm.h>
 #include <linux/completion.h>
@@ -22,24 +23,18 @@
 #include <linux/interrupt.h>
 #include <linux/sched.h>
 #include <linux/cdev.h>
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 #include <linux/msm_pcie.h>
-#include <linux/msm_mhi.h>
-#else
-#include "msm_mhi.h"
-#include <linux/dmapool.h>
-#include <linux/pci.h>
 #endif
 #include <linux/sched.h>
 #include <linux/irqreturn.h>
 #include <linux/list.h>
 #include <linux/dma-mapping.h>
-
-#define UNUSED(x)			(void)(x)
+#include <linux/pci.h>
 
 struct mhi_device_ctxt;
 
-#ifdef CONFIG_NAPIER_X86
+#ifdef CONFIG_HST_IMX
 struct fw_remote_mem {
 	size_t size;
 	void *vaddr;
@@ -114,7 +109,7 @@ struct bhi_ctxt_t {
 	struct bhie_vec_table fw_table;
 	struct bhie_vec_table rddm_table;
 	size_t rddm_size;
-#ifdef CONFIG_NAPIER_X86
+#ifdef CONFIG_HST_IMX
 	struct fw_remote_mem fw_mem; /* fw remote heap etc */
 #endif
 };
@@ -426,8 +421,12 @@ enum MHI_EXEC_ENV {
 	MHI_EXEC_ENV_PBL = 0x0,
 	MHI_EXEC_ENV_SBL = 0x1,
 	MHI_EXEC_ENV_AMSS = 0x2,
+#ifdef CONFIG_HST_IMX
+	MHI_EXEC_ENV_RDDM = 0x3,
+#else
 	MHI_EXEC_ENV_BHIE = 0x3,
 	MHI_EXEC_ENV_RDDM = 0x4,
+#endif
 	MHI_EXEC_ENV_DISABLE_TRANSITION, /* local EE, not related to mhi spec */
 };
 
@@ -552,10 +551,10 @@ struct mhi_dev_space {
 struct mhi_device_ctxt {
 	struct list_head node;
 	struct pcie_core_info core;
-#ifdef CONFIG_NAPIER_X86
-	bool ready;
-#else
+#ifdef CONFIG_ARCH_QCOM
 	struct msm_pcie_register_event mhi_pci_link_event;
+#else
+	bool ready;
 #endif
 	struct pci_dev *pcie_device;
 	struct bhi_ctxt_t bhi_ctxt;
@@ -724,7 +723,7 @@ int mhi_ctxt_init(struct mhi_device_ctxt *mhi_dev_ctxt);
 void mhi_ctxt_exit(struct mhi_device_ctxt *mhi_dev_ctxt);
 int mhi_get_chan_max_buffers(u32 chan);
 int mhi_esoc_register(struct mhi_device_ctxt *mhi_dev_ctxt);
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 void mhi_link_state_cb(struct msm_pcie_notify *notify);
 #else
 void mhi_pcie_sw_reset(struct mhi_device_ctxt *mhi_dev_ctxt);
@@ -768,8 +767,13 @@ void mhi_reg_write(struct mhi_device_ctxt *mhi_dev_ctxt,
 u32 mhi_reg_read(void __iomem *io_addr, uintptr_t io_offset);
 u32 mhi_reg_read_field(void __iomem *io_addr, uintptr_t io_offset,
 			 u32 mask, u32 shift);
-u32 mhi_reg_read_remap(void __iomem *io_addr, uintptr_t io_offset);
-void mhi_reg_write_remap(void __iomem *io_addr, uintptr_t io_offset, u32 val);
+u32 mhi_reg_read_remap(struct mhi_device_ctxt *mhi_dev_ctxt,
+		       void __iomem *io_addr,
+		       uintptr_t io_offset);
+void mhi_reg_write_remap(struct mhi_device_ctxt *mhi_dev_ctxt,
+			 void __iomem *io_addr,
+			 uintptr_t io_offset,
+			 u32 val);
 void mhi_exit_m2(struct mhi_device_ctxt *mhi_dev_ctxt);
 int mhi_runtime_suspend(struct device *dev);
 int get_chan_props(struct mhi_device_ctxt *mhi_dev_ctxt, int chan,
@@ -808,5 +812,8 @@ void mhi_reset_pcie_txvecdb(struct mhi_device_ctxt *mhi_dev_ctxt);
 void mhi_reset_pcie_txvecstatus(struct mhi_device_ctxt *mhi_dev_ctxt);
 void mhi_reset_pcie_rxvecdb(struct mhi_device_ctxt *mhi_dev_ctxt);
 void mhi_reset_pcie_rxvecstatus(struct mhi_device_ctxt *mhi_dev_ctxt);
+#ifdef CONFIG_HST_IMX
+void mhi_set_pcie_mhictrl_reset(struct mhi_device_ctxt *mhi_dev_ctxt);
+#endif
 
 #endif

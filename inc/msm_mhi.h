@@ -172,7 +172,7 @@ enum mhi_rddm_segment {
 	MHI_RDDM_RD_SEGMENT,
 };
 
-#if defined(CONFIG_MSM_MHI)
+#if defined(CONFIG_HST_IMX)
 /**
  * mhi_is_device_ready - Check if MHI is ready to register clients
  *
@@ -196,6 +196,15 @@ int mhi_register_device(struct mhi_device *mhi_device, const char *node_name,
 			void *user_data);
 
 void mhi_deregister_device(struct mhi_device *mhi_device);
+
+bool mhi_is_device_awake(struct mhi_device *mhi_dev);
+
+void mhi_force_wake_release(struct mhi_device *mhi_dev);
+
+void mhi_force_wake_request(struct mhi_device *mhi_dev);
+
+void mhi_set_fw_remote_mem(struct mhi_device *mhi_device, void *vaddr,
+			   size_t size);
 
 /**
  * mhi_register_channel - Client must call this function to obtain a handle for
@@ -227,20 +236,6 @@ int mhi_pm_control_device(struct mhi_device *mhi_device,
  */
 int mhi_xfer_rddm(struct mhi_device *mhi_device, enum mhi_rddm_segment seg,
 		  struct scatterlist **sg_list);
-
-#ifdef CONFIG_NAPIER_X86
-/**
- * mhi_set_fw_remote_mem - transfer fw remote mem to mhi device
- * @mhi_device: registered device structure
- * @vaddr: fw remote memory virtual address
- * @size: fw remote memory size
-*/
-void mhi_set_fw_remote_mem(struct mhi_device *mhi_device,
-			   void *vaddr,
-			   size_t size);
-
-void mhi_pcie_sw_soc_reset(struct mhi_device *mhi_device);
-#endif
 
 /**
  * mhi_deregister_channel - de-register callbacks from MHI
@@ -347,11 +342,6 @@ static inline bool mhi_is_device_ready(const struct device * const dev,
 
 static inline int mhi_register_device(struct mhi_device *mhi_device,
 				      const char *node_name, void *user_data)
-{
-	return -EINVAL;
-};
-
-static inline int mhi_deregister_device(struct mhi_device *mhi_device)
 {
 	return -EINVAL;
 };

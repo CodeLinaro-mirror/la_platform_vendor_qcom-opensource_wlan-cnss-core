@@ -88,6 +88,7 @@ int delete_element(struct mhi_ring *ring, void **rp,
 	r = get_element_index(ring, *wp, &d_wp);
 	if (r)
 		return r;
+
 	if (d_wp == d_rp) {
 		if (NULL != assigned_addr)
 			*assigned_addr = NULL;

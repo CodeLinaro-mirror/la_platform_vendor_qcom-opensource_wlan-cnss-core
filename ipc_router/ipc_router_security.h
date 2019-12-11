@@ -18,9 +18,10 @@
 #include <linux/errno.h>
 
 #ifdef CONFIG_IPC_ROUTER_SECURITY
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 #include <linux/android_aid.h>
 #endif
+
 /**
  * check_permisions() - Check whether the process has permissions to
  *                      create an interface handle with IPC Router

@@ -19,11 +19,7 @@
 #include <linux/list.h>
 #include <linux/socket.h>
 #include <linux/gfp.h>
-#ifdef CONFIG_NAPIER_X86
-#include "qmi_encdec.h"
-#else
 #include <linux/qmi_encdec.h>
-#endif
 
 #define QMI_ENCDEC_ENCODE_TLV(type, length, p_dst) do { \
 	*p_dst++ = type; \

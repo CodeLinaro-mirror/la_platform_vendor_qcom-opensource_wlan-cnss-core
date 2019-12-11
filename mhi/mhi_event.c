@@ -23,13 +23,7 @@
 
 int mhi_populate_event_cfg(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
-#ifdef CONFIG_NAPIER_X86
-	int i;
-	u32 evt_cfgs[2][6] = {{0xa, 0x0, 0x1, 0, 1, 0x31},
-			     {0x80, 0x1, 0x1, 0, 1, 0x31}};
-
-	mhi_dev_ctxt->mmio_info.nr_event_rings = 2;
-#else
+#ifdef CONFIG_ARCH_QCOM
 	int r, i;
 	char dt_prop[MAX_BUF_SIZE];
 	const struct device_node *np =
@@ -42,6 +36,11 @@ int mhi_populate_event_cfg(struct mhi_device_ctxt *mhi_dev_ctxt)
 			"Failed to pull event ring info from DT, %d\n", r);
 		return -EINVAL;
 	}
+#else
+	int i;
+	u32 evt_cfgs[2][6] = {{0xa, 0x0, 0x1, 0, 1, 0x31},
+			{0x80, 0x1, 0x1, 0, 1, 0x31}};
+	mhi_dev_ctxt->mmio_info.nr_event_rings = 2;
 #endif
 	mhi_dev_ctxt->ev_ring_props =
 				kzalloc(sizeof(struct mhi_event_ring_cfg) *
@@ -52,7 +51,7 @@ int mhi_populate_event_cfg(struct mhi_device_ctxt *mhi_dev_ctxt)
 
 	for (i = 0; i < mhi_dev_ctxt->mmio_info.nr_event_rings; ++i) {
 		u32 dt_configs[6];
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 		int no_elements;
 
 		scnprintf(dt_prop, MAX_BUF_SIZE, "%s%d", "mhi-event-cfg-", i);
@@ -74,7 +73,6 @@ int mhi_populate_event_cfg(struct mhi_device_ctxt *mhi_dev_ctxt)
 #else
 		memcpy(dt_configs, evt_cfgs[i], sizeof(u32)*6);
 #endif
-
 		mhi_dev_ctxt->ev_ring_props[i].nr_desc = dt_configs[0];
 		mhi_dev_ctxt->ev_ring_props[i].msi_vec = dt_configs[1];
 		mhi_dev_ctxt->ev_ring_props[i].intmod = dt_configs[2];
@@ -113,7 +111,7 @@ int mhi_populate_event_cfg(struct mhi_device_ctxt *mhi_dev_ctxt)
 	}
 
 	return 0;
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 dt_error:
 	kfree(mhi_dev_ctxt->ev_ring_props);
 	mhi_dev_ctxt->ev_ring_props = NULL;

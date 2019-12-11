@@ -14,24 +14,17 @@
 #define _CNSS_SDIO_H
 
 #include "main.h"
-#include "qcn_sdio_al.h"
+#ifdef CONFIG_SDIO_QCN
+#include <linux/qcn_sdio_al.h>
 
 struct cnss_sdio_data {
 	struct cnss_plat_data *plat_priv;
 	struct sdio_al_client_handle *al_client_handle;
 	struct cnss_sdio_wlan_driver *ops;
-	struct sdio_device_id device_id;
+	struct sdio_device_id *device_id;
 	void *client_priv;
 };
 
-static inline struct cnss_plat_data *cnss_sdio_priv_to_plat_priv(void *bus_priv)
-{
-	struct cnss_sdio_data *sdio_priv = bus_priv;
-
-	return sdio_priv->plat_priv;
-}
-
-#ifdef CONFIG_CNSS2_SDIO
 int cnss_sdio_init(struct cnss_plat_data *plat_priv);
 int cnss_sdio_deinit(struct cnss_plat_data *plat_priv);
 int cnss_sdio_register_driver_hdlr(struct cnss_sdio_data *sdio_info,
@@ -41,45 +34,52 @@ int cnss_sdio_dev_powerup(struct cnss_sdio_data *cnss_info);
 int cnss_sdio_dev_shutdown(struct cnss_sdio_data *cnss_info);
 int cnss_sdio_call_driver_probe(struct cnss_sdio_data *sdio_priv);
 int cnss_sdio_call_driver_remove(struct cnss_sdio_data *sdio_priv);
+void cnss_sdio_fw_boot_timeout_hdlr(void *bus_priv);
 #else
-static inline int cnss_sdio_init(struct cnss_plat_data *plat_priv)
+inline int cnss_sdio_init(void *plat_priv)
 {
-        return 0;
+	return -EINVAL;
 }
 
-static inline int cnss_sdio_deinit(struct cnss_plat_data *plat_priv)
+inline int cnss_sdio_deinit(void *plat_priv)
 {
-        return 0;
+	return -EINVAL;
 }
 
-static inline int cnss_sdio_register_driver_hdlr(struct cnss_sdio_data *sdio_info, void *data)
+inline int cnss_sdio_register_driver_hdlr(void *sdio_info,
+				   void *data)
 {
-        return 0;
+	return -EINVAL;
 }
 
-static inline int cnss_sdio_unregister_driver_hdlr(struct cnss_sdio_data *sdio_info)
+inline int cnss_sdio_unregister_driver_hdlr(void *sdio_info)
 {
-	return 0;
+	return -EINVAL;
 }
 
-static inline int cnss_sdio_dev_powerup(struct cnss_sdio_data *cnss_info)
+inline int cnss_sdio_dev_powerup(void *cnss_info)
 {
-	return 0;
+	return -EINVAL;
 }
 
-static inline int cnss_sdio_dev_shutdown(struct cnss_sdio_data *cnss_info)
+inline int cnss_sdio_dev_shutdown(void *cnss_info)
 {
-	return 0;
+	return -EINVAL;
 }
 
-static inline int cnss_sdio_call_driver_probe(struct cnss_sdio_data *sdio_priv)
+inline int cnss_sdio_call_driver_probe(void *sdio_priv)
 {
-	return 0;
+	return -EINVAL;
 }
 
-static inline int cnss_sdio_call_driver_remove(struct cnss_sdio_data *sdio_priv)
+inline int cnss_sdio_call_driver_remove(void *sdio_priv)
 {
-	return 0;
+	return -EINVAL;
+}
+
+inline void cnss_sdio_fw_boot_timeout_hdlr(void *bus_priv)
+{
+	/* no op */
 }
 #endif
 

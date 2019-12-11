@@ -24,20 +24,16 @@
 #include <linux/list.h>
 #include <linux/socket.h>
 #include <linux/gfp.h>
+#include <linux/qmi_encdec.h>
 #include <linux/workqueue.h>
 #include <linux/mutex.h>
 #include <linux/hashtable.h>
-#ifdef CONFIG_NAPIER_X86
-#include "ipc_router.h"
-#include "qmi_encdec.h"
-#include "msm_qmi_interface.h"
-#else
-#include <linux/qmi_encdec.h>
 #include <linux/ipc_router.h>
+#ifdef CONFIG_ARCH_QCOM
 #include <linux/ipc_logging.h>
+#endif
 
 #include <soc/qcom/msm_qmi_interface.h>
-#endif
 
 #include "qmi_interface_priv.h"
 
@@ -46,19 +42,7 @@
 #define MAX_WQ_NAME_LEN 20
 #define QMI_REQ_RESP_LOG_PAGES 3
 #define QMI_IND_LOG_PAGES 2
-#ifdef CONFIG_NAPIER_X86
-#define QMI_REQ_RESP_LOG(buf...) \
-do { \
-	if (qmi_req_resp_log_ctx) { \
-	} \
-} while (0)
-
-#define QMI_IND_LOG(buf...) \
-do { \
-	if (qmi_ind_log_ctx) { \
-	} \
-} while (0)
-#else
+#ifdef CONFIG_ARCH_QCOM
 #define QMI_REQ_RESP_LOG(buf...) \
 do { \
 	if (qmi_req_resp_log_ctx) { \
@@ -71,6 +55,18 @@ do { \
 	if (qmi_ind_log_ctx) { \
 		ipc_log_string(qmi_ind_log_ctx, buf); \
 	} \
+} while (0)
+#else
+#define QMI_REQ_RESP_LOG(buf...) \
+do { \
+        if (qmi_req_resp_log_ctx) { \
+        } \
+} while (0) \
+
+#define QMI_IND_LOG(buf...) \
+do { \
+        if (qmi_ind_log_ctx) { \
+        } \
 } while (0)
 #endif
 
@@ -210,12 +206,14 @@ static void qmi_log(struct qmi_handle *handle,
 	 * <Message Length>			:
 	 * <Service ID>				:
 	 */
-	if (((cntl_flag == QMI_REQUEST_CONTROL_FLAG) ||
+	if (qmi_req_resp_log_ctx &&
+		((cntl_flag == QMI_REQUEST_CONTROL_FLAG) ||
 		(cntl_flag == QMI_RESPONSE_CONTROL_FLAG))) {
 		QMI_REQ_RESP_LOG("%s %s CF:%x TI:%x MI:%x ML:%x SvcId: %x",
 		(handle->handle_type == QMI_CLIENT_HANDLE ? "QCCI" : "QCSI"),
 		ops_type, cntl_flag, txn_id, msg_id, msg_len, service_id);
-	} else if ((cntl_flag == QMI_INDICATION_CONTROL_FLAG)) {
+	} else if (qmi_ind_log_ctx &&
+		(cntl_flag == QMI_INDICATION_CONTROL_FLAG)) {
 		QMI_IND_LOG("%s %s CF:%x TI:%x MI:%x ML:%x SvcId: %x",
 		(handle->handle_type == QMI_CLIENT_HANDLE ? "QCCI" : "QCSI"),
 		ops_type, cntl_flag, txn_id, msg_id, msg_len, service_id);
@@ -2155,7 +2153,7 @@ static void qmi_svc_event_notifier_init(void)
  */
 void qmi_log_init(void)
 {
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 	qmi_req_resp_log_ctx =
 		ipc_log_context_create(QMI_REQ_RESP_LOG_PAGES,
 			"kqmi_req_resp", 0);
@@ -2264,18 +2262,12 @@ int qmi_svc_unregister(struct qmi_handle *handle)
 }
 EXPORT_SYMBOL(qmi_svc_unregister);
 
-#ifdef CONFIG_WLAN_CNSS_CORE
-int qmi_interface_init(void)
-#else
 static int __init qmi_interface_init(void)
-#endif
 {
 	qmi_log_init();
 	return 0;
 }
-
-#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(qmi_interface_init);
+
 MODULE_DESCRIPTION("MSM QMI Interface");
 MODULE_LICENSE("GPL v2");
-#endif

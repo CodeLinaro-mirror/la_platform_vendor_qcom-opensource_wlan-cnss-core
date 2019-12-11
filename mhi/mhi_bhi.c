@@ -38,21 +38,17 @@ static int bhi_alloc_bhie_xfer(struct mhi_device_ctxt *mhi_dev_ctxt,
 			       struct bhie_vec_table *vec_table)
 {
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
-#ifdef CONFIG_NAPIER_X86
-	struct device *dev = &mhi_dev_ctxt->pcie_device->dev;
-#else
 	struct device *dev = &mhi_dev_ctxt->plat_dev->dev;
-#endif
 	const phys_addr_t align = bhi_ctxt->alignment - 1;
 	size_t seg_size = bhi_ctxt->firmware_info.segment_size;
 	/* We need one additional entry for Vector Table */
 	int segments = DIV_ROUND_UP(size, seg_size) + 1;
 	int i;
 	struct scatterlist *sg_list;
-	struct bhie_mem_info *bhie_mem_info, *info = NULL;
+	struct bhie_mem_info *bhie_mem_info, *info;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
-		"Total size:%zu total_seg:%d seg_size:%zu\n",
+		"Total size:%lu total_seg:%d seg_size:%lu\n",
 		size, segments, seg_size);
 
 	sg_list = kcalloc(segments, sizeof(*sg_list), GFP_KERNEL);
@@ -88,14 +84,12 @@ static int bhi_alloc_bhie_xfer(struct mhi_device_ctxt *mhi_dev_ctxt,
 	}
 
 	sg_init_table(sg_list, segments);
-	if (info) {
-		sg_set_buf(sg_list, info->aligned, info->size);
-		sg_dma_address(sg_list) = info->phys_addr;
-		sg_dma_len(sg_list) = info->size;
-		vec_table->bhi_vec_entry = info->aligned;
-	}
+	sg_set_buf(sg_list, info->aligned, info->size);
+	sg_dma_address(sg_list) = info->phys_addr;
+	sg_dma_len(sg_list) = info->size;
 	vec_table->sg_list = sg_list;
 	vec_table->bhie_mem_info = bhie_mem_info;
+	vec_table->bhi_vec_entry = info->aligned;
 	vec_table->segment_count = segments;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
@@ -120,11 +114,7 @@ static int bhi_alloc_pbl_xfer(struct mhi_device_ctxt *mhi_dev_ctxt,
 {
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
 	const phys_addr_t align_len = bhi_ctxt->alignment;
-#ifdef CONFIG_NAPIER_X86
-	struct device *dev = &mhi_dev_ctxt->pcie_device->dev;
-#else
 	struct device *dev = &mhi_dev_ctxt->plat_dev->dev;
-#endif
 
 	mem_info->size = size;
 	mem_info->alloc_size = size + (align_len - 1);
@@ -139,7 +129,7 @@ static int bhi_alloc_pbl_xfer(struct mhi_device_ctxt *mhi_dev_ctxt,
 	mem_info->aligned = mem_info->pre_aligned + (mem_info->phys_addr -
 						     mem_info->dma_handle);
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
-		"alloc_size:%zu image_size:%zu unal_addr:0x%llx0x al_addr:0x%llx\n",
+		"alloc_size:%lu image_size:%lu unal_addr:0x%llx0x al_addr:0x%llx\n",
 		mem_info->alloc_size, mem_info->size,
 		mem_info->dma_handle, mem_info->phys_addr);
 
@@ -275,12 +265,13 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 
 	if (!in_panic) {
 		ret = bhi_rddm_graceful(mhi_dev_ctxt);
-#ifdef CONFIG_NAPIER_X86
+#ifdef CONFIG_HST_IMX
 		if (!ret)
 			dump_fw_to_file(mhi_dev_ctxt);
 #endif
 		return ret;
 	}
+
 	/*
 	 * Below code should only be executed during kernel panic,
 	 * we expect other cores to be shutting down while we're
@@ -292,11 +283,14 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "pm_state:0x%x mhi_state:%s\n",
 		mhi_dev_ctxt->mhi_pm_state,
 		TO_MHI_STATE_STR(mhi_dev_ctxt->mhi_state));
+#ifndef CONFIG_HST_IMX
+	/* Patch from MSM gerrit#2559251 */
 	if (!MHI_REG_ACCESS_VALID(mhi_dev_ctxt->mhi_pm_state)) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 			"Register access not allowed\n");
 		return -EIO;
 	}
+#endif
 
 	/*
 	 * Normally we only set mhi_pm_state after grabbing pm_xfer_lock as a
@@ -333,6 +327,35 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 		"Triggering Device into RDDM mode\n");
 	mhi_set_m_state(mhi_dev_ctxt, MHI_STATE_SYS_ERR);
+
+#ifdef CONFIG_HST_IMX
+{
+	/* Patch from MSM gerrit#2559249 */
+	int rddm_retry = (200000) / BHIE_RDDM_DELAY_TIME_US; /* time to enter rddm */
+
+	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "Waiting for device to enter RDDM\n");
+	while (rddm_retry--) {
+		cur_exec = mhi_reg_read(bhi_ctxt->bhi_base, BHI_EXECENV);
+		if (cur_exec == MHI_EXEC_ENV_RDDM)
+			break;
+
+		udelay(BHIE_RDDM_DELAY_TIME_US);
+	}
+
+	if (rddm_retry <= 0) {
+		/* This is a hardware reset should gurantee device enter rddm */
+		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
+			"Did not enter RDDM triggering host req. reset to force rddm\n");
+		mhi_reg_write(mhi_dev_ctxt, mhi_dev_ctxt->mmio_info.mmio_addr,
+			MHI_SOC_RESET_REQ_OFFSET, MHI_SOC_RESET_REQ);
+	}
+	cur_exec = mhi_reg_read(bhi_ctxt->bhi_base, BHI_EXECENV);
+	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
+		"Waiting for image download completion, current EE:%x\n", cur_exec);
+	/* End of of patch-2 */
+}
+#endif	
+
 	i = 0;
 
 	while (timeout--) {
@@ -359,7 +382,7 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 		    (current_seq == rx_sequence)) {
 			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 				"rddm transfer completed\n");
-#ifdef CONFIG_NAPIER_X86
+#ifdef CONFIG_HST_IMX
 			dump_fw_info_to_kmsg(mhi_dev_ctxt);
 #endif
 			return 0;
@@ -563,7 +586,8 @@ void bhi_firmware_download(struct work_struct *work)
 		msecs_to_jiffies(MHI_MAX_STATE_TRANSITION_TIMEOUT));
 	if (!ret || mhi_dev_ctxt->mhi_pm_state == MHI_PM_LD_ERR_FATAL_DETECT) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
-			"MHI is not in valid state for firmware download\n");
+			"MHI is not in valid state for firmware download pm=%d, mhi_state=%d\n",
+			mhi_dev_ctxt->mhi_pm_state, mhi_dev_ctxt->mhi_state);
 		return;
 	}
 
@@ -580,13 +604,23 @@ void bhi_firmware_download(struct work_struct *work)
 				  STATE_TRANSITION_RESET);
 
 	wait_event_timeout(*mhi_dev_ctxt->mhi_ev_wq.bhi_event,
+#ifdef CONFIG_HST_IMX
+		mhi_dev_ctxt->dev_exec_env == MHI_EXEC_ENV_SBL ||
+#else
 		mhi_dev_ctxt->dev_exec_env == MHI_EXEC_ENV_BHIE ||
+#endif
 		mhi_dev_ctxt->mhi_pm_state == MHI_PM_LD_ERR_FATAL_DETECT,
 		msecs_to_jiffies(bhi_ctxt->poll_timeout));
 	if (mhi_dev_ctxt->mhi_pm_state == MHI_PM_LD_ERR_FATAL_DETECT ||
-	    mhi_dev_ctxt->dev_exec_env != MHI_EXEC_ENV_BHIE) {
+#ifdef CONFIG_HST_IMX
+	    mhi_dev_ctxt->dev_exec_env != MHI_EXEC_ENV_SBL
+#else
+	    mhi_dev_ctxt->dev_exec_env != MHI_EXEC_ENV_BHIE
+#endif
+	) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
-			"Failed to Enter EXEC_ENV_BHIE\n");
+			"Failed to Enter EXEC_ENV_BHIE %d %d\n",
+			mhi_dev_ctxt->mhi_pm_state, mhi_dev_ctxt->dev_exec_env);
 		return;
 	}
 
@@ -619,18 +653,12 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 		fw_info->segment_size <<= 1;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
-		"max sbl image size:%zu segment size:%zu\n",
+		"max sbl image size:%lu segment size:%lu\n",
 		fw_info->max_sbl_len, fw_info->segment_size);
 
-#ifdef CONFIG_NAPIER_X86
-	/* Read the fw image */
-	ret = request_firmware(&firmware, fw_info->fw_image,
-			       &mhi_dev_ctxt->pcie_device->dev);
-#else
 	/* Read the fw image */
 	ret = request_firmware(&firmware, fw_info->fw_image,
 			       &mhi_dev_ctxt->plat_dev->dev);
-#endif
 	if (ret) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 			"Error request firmware for:%s ret:%d\n",
@@ -686,6 +714,46 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 					rddm_table->bhie_mem_info[i].phys_addr;
 				sg_dma_len(itr) = size;
 			}
+
+#ifdef CONFIG_HST_IMX
+			/* Patch from MSM gerrit#2559248 */
+			if (mhi_dev_ctxt->core.bar0_base) {
+				u32 pcie_word_val = 0;
+				void __iomem *bhi_base;
+				u32 bhie_off;
+
+				bhi_base = mhi_dev_ctxt->core.bar0_base;
+				pcie_word_val = mhi_reg_read(bhi_base, BHIOFF);
+
+				/* confirm it's a valid reading */
+				if (unlikely(pcie_word_val == U32_MAX)) {
+					mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+						"Invalid BHI Offset:0x%x\n", pcie_word_val);
+					return -EIO;
+				}
+				bhi_base += pcie_word_val;
+
+				pr_err("patch-1: clear rx-vec, bhi_base as 0x%p", bhi_ctxt->bhi_base);
+				if (bhi_base) {
+					/*
+					 * This controller supports rddm, we need to manually clear
+					 * BHIE RX registers since por values are undefined.
+					 */
+					bhie_off = mhi_reg_read(bhi_base, BHIE_OFFSET);
+					if (unlikely(bhie_off == U32_MAX)) {
+						pr_err("Error getting bhie offset\n");
+						/* TODO: goto bhie_error as MSM to avoid memory leak */
+						return -1;
+					}
+
+					/* clear all BHIE rxvec register space */
+					memset_io(bhi_base + BHIE_RXVECADDR_LOW_OFFS,
+							0, BHIE_RXVECSTATUS_OFFS - BHIE_RXVECADDR_LOW_OFFS + 4);
+				} else {
+					pr_err("patch-1: bhi_base not initialized, ignore patch-1");
+				}
+			}
+#endif
 		} else {
 			/* out of memory for rddm, not fatal error */
 			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
@@ -703,11 +771,7 @@ void bhi_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
 	struct bhie_vec_table *fw_table = &bhi_ctxt->fw_table;
 	struct bhie_vec_table *rddm_table = &bhi_ctxt->rddm_table;
-#ifdef CONFIG_NAPIER_X86
-	struct device *dev = &mhi_dev_ctxt->pcie_device->dev;
-#else
 	struct device *dev = &mhi_dev_ctxt->plat_dev->dev;
-#endif
 	struct bhie_mem_info *bhie_mem_info;
 	int i;
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,15 +13,12 @@
 #ifndef _CNSS_PCI_H
 #define _CNSS_PCI_H
 
-#ifdef CONFIG_NAPIER_X86
-#include <linux/iommu.h>
-#include "msm_mhi.h"
-#else
+#ifdef CONFIG_ARCH_QCOM
 #include <asm/dma-iommu.h>
-#include <linux/iommu.h>
-#include <linux/msm_mhi.h>
 #include <linux/msm_pcie.h>
 #endif
+#include <linux/iommu.h>
+#include <linux/msm_mhi.h>
 #include <linux/pci.h>
 
 #include "main.h"
@@ -33,6 +30,8 @@
 #define QCA6174_REV3_2_VERSION		0x5030000
 #define QCA6290_VENDOR_ID		0x17CB
 #define QCA6290_DEVICE_ID		0x1100
+#define QCA6390_VENDOR_ID               0x17CB
+#define QCA6390_DEVICE_ID               0x1101
 #define QCA6290_EMULATION_VENDOR_ID	0x168C
 #define QCA6290_EMULATION_DEVICE_ID	0xABCD
 
@@ -72,10 +71,12 @@ struct cnss_pci_data {
 	bool pci_link_state;
 	bool pci_link_down_ind;
 	struct pci_saved_state *saved_state;
-#ifndef CONFIG_NAPIER_X86
+	struct pci_saved_state *default_state;
+#ifdef CONFIG_ARCH_QCOM
 	struct msm_pcie_register_event msm_pci_event;
 #endif
 	atomic_t auto_suspended;
+	u8 drv_connected_last;
 	bool monitor_wake_intr;
 	struct dma_iommu_mapping *smmu_mapping;
 	dma_addr_t smmu_iova_start;
@@ -134,121 +135,47 @@ static inline int cnss_pci_get_auto_suspended(void *bus_priv)
 	return atomic_read(&pci_priv->auto_suspended);
 }
 
-int cnss_pci_get_bar_info(struct cnss_pci_data *pci_priv, void __iomem **va,
-			  phys_addr_t *pa);
-void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv);
-void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv);
-int cnss_pm_request_resume(struct cnss_pci_data *pci_priv);
-int cnss_pci_dev_ramdump(struct cnss_pci_data *pci_priv);
-
-#ifdef CONFIG_CNSS2_PCIE
+#ifdef CONFIG_PCI_MSM
 int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv);
 int cnss_resume_pci_link(struct cnss_pci_data *pci_priv);
-void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv);
-u32 cnss_pci_get_wake_msi(struct cnss_pci_data *pci_priv);
-int cnss_pci_dev_crash_shutdown(struct cnss_pci_data *pci_priv);
-int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv);
-int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv);
-int cnss_pci_call_driver_modem_status(struct cnss_pci_data *pci_priv,
-				      int modem_current_status);
-int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
-			   enum cnss_mhi_state state);
-int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv);
-int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv);
-int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv);
-int cnss_pci_load_m3(struct cnss_pci_data *pci_priv);
-void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv);
-int cnss_pci_recovery_update_status(struct cnss_pci_data *pci_priv);
-int cnss_pci_init(struct cnss_plat_data *plat_priv);
-void cnss_pci_deinit(struct cnss_plat_data *plat_priv);
-int cnss_pci_register_driver_hdlr(struct cnss_pci_data *pci_priv, void *data);
-int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv);
-int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv);
-int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv);
-void cnss_pci_shutdown(struct pci_dev *pci_dev);
-#else
+#else /* CONFIG_PCI_MSM */
 static inline int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
 {
 	return 0;
 }
+
 static inline int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
 {
 	return 0;
 }
-static inline void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv)
-{ }
-static inline u32 cnss_pci_get_wake_msi(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline int cnss_pci_dev_crash_shutdown(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline int cnss_pci_call_driver_modem_status(struct cnss_pci_data *pci_priv,
-				      int modem_current_status)
-{
-	return 0;
-}
-static inline int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
-			   enum cnss_mhi_state state)
-{
-	return 0;
-}
-static inline int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
-{ }
-static inline int cnss_pci_recovery_update_status(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline int cnss_pci_init(struct cnss_plat_data *plat_priv)
-{
-	return 0;
-}
-static inline void cnss_pci_deinit(struct cnss_plat_data *plat_priv)
-{ }
-static inline int cnss_pci_register_driver_hdlr(struct cnss_pci_data *pci_priv, void *data)
-{
-	return 0;
-}
-static inline int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-static inline void cnss_pci_shutdown(struct pci_dev *pci_dev)
-{
-}
-#endif
+#endif /* CONFIG_PCI_MSM */
+
+int cnss_pci_init(struct cnss_plat_data *plat_priv);
+void cnss_pci_deinit(struct cnss_plat_data *plat_priv);
+int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv);
+int cnss_pci_load_m3(struct cnss_pci_data *pci_priv);
+int cnss_pci_get_bar_info(struct cnss_pci_data *pci_priv, void __iomem **va,
+			  phys_addr_t *pa);
+int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
+			   enum cnss_mhi_state state);
+int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv);
+void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv);
+void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv);
+void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv);
+int cnss_pm_request_resume(struct cnss_pci_data *pci_priv);
+u32 cnss_pci_get_wake_msi(struct cnss_pci_data *pci_priv);
+int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv);
+void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv);
+int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv);
+int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv);
+int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv);
+int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv);
+int cnss_pci_dev_crash_shutdown(struct cnss_pci_data *pci_priv);
+int cnss_pci_dev_ramdump(struct cnss_pci_data *pci_priv);
+int cnss_pci_register_driver_hdlr(struct cnss_pci_data *pci_priv, void *data);
+int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv);
+int cnss_pci_call_driver_modem_status(struct cnss_pci_data *pci_priv,
+				      int modem_current_status);
+int cnss_pci_recovery_update_status(struct cnss_pci_data *pci_priv);
+void cnss_pci_shutdown(struct pci_dev *pci_dev);
 #endif /* _CNSS_PCI_H */

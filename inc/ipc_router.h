@@ -19,11 +19,7 @@
 #include <linux/mm.h>
 #include <linux/list.h>
 #include <linux/pm.h>
-#ifdef CONFIG_NAPIER_X86
-#include "msm_ipc.h"
-#else
 #include <linux/msm_ipc.h>
-#endif
 #include <linux/device.h>
 #include <linux/kref.h>
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,21 +19,17 @@
 #include <linux/poll.h>
 #include <linux/fcntl.h>
 #include <linux/gfp.h>
+#include <linux/msm_ipc.h>
 #include <linux/sched.h>
 #include <linux/thread_info.h>
 #include <linux/slab.h>
 #include <linux/kmemleak.h>
+#ifdef CONFIG_ARCH_QCOM
+#include <linux/ipc_logging.h>
+#endif
 #include <linux/string.h>
 #include <linux/atomic.h>
-#include <linux/version.h>
-#ifdef CONFIG_NAPIER_X86
-#include "msm_ipc.h"
-#include "ipc_router.h"
-#else
-#include <linux/msm_ipc.h>
-#include <linux/ipc_logging.h>
 #include <linux/ipc_router.h>
-#endif
 
 #include <net/sock.h>
 
@@ -144,7 +140,12 @@ static int msm_ipc_router_extract_msg(struct msghdr *m,
 	hdr = &(pkt->hdr);
 	if (addr && (hdr->type == IPC_ROUTER_CTRL_CMD_RESUME_TX)) {
 		temp = skb_peek(pkt->pkt_fragment_q);
+		if (!temp || !temp->data) {
+			IPC_RTR_ERR("%s: Invalid skb\n", __func__);
+			return -EINVAL;
+		}
 		ctl_msg = (union rr_control_msg *)(temp->data);
+		memset(addr, 0x0, sizeof(*addr));
 		addr->family = AF_MSM_IPC;
 		addr->address.addrtype = MSM_IPC_ADDR_ID;
 		addr->address.addr.port_addr.node_id = ctl_msg->cli.node_id;
@@ -153,6 +154,7 @@ static int msm_ipc_router_extract_msg(struct msghdr *m,
 		return offset;
 	}
 	if (addr && (hdr->type == IPC_ROUTER_CTRL_CMD_DATA)) {
+		memset(addr, 0x0, sizeof(*addr));
 		addr->family = AF_MSM_IPC;
 		addr->address.addrtype = MSM_IPC_ADDR_ID;
 		addr->address.addr.port_addr.node_id = hdr->src_node_id;
@@ -195,11 +197,7 @@ static int msm_ipc_router_create(struct net *net,
 		return -EPROTOTYPE;
 	}
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
-	sk = sk_alloc(net, AF_MSM_IPC, GFP_KERNEL, &msm_ipc_proto);
-#else
 	sk = sk_alloc(net, AF_MSM_IPC, GFP_KERNEL, &msm_ipc_proto, kern);
-#endif
 	if (!sk) {
 		IPC_RTR_ERR("%s: sk_alloc failed\n", __func__);
 		return -ENOMEM;

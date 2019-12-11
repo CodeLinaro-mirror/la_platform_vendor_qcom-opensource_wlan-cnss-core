@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,38 +15,25 @@
 
 #include <linux/etherdevice.h>
 #include <linux/pm_qos.h>
-#ifdef CONFIG_NAPIER_X86
-#include "cnss2.h"
-#else
+#include <net/cnss2.h>
+#ifdef CONFIG_ARCH_QCOM
 #include <linux/esoc_client.h>
 #include <linux/msm-bus.h>
-#include "cnss2.h"
 #include <soc/qcom/memory_dump.h>
 #include <soc/qcom/subsystem_restart.h>
 #endif
 
 #include "qmi.h"
 
-#ifdef CONFIG_USB_EMULATION
-#define FW_FPGA_ONLY_TEST_BYPASS 1
-#endif
-
 #define MAX_NO_OF_MAC_ADDR		4
 #define CNSS_RDDM_TIMEOUT_MS		20000
-#define UNUSED(x)			(void)(x)
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
 #define CNSS_EVENT_SYNC_UNINTERRUPTIBLE (CNSS_EVENT_SYNC | \
 				CNSS_EVENT_UNINTERRUPTIBLE)
 #define QCN7605_CALDB_SIZE 614400
-
-#ifdef CONFIG_NAPIER_X86
-/* Dummy structure to eliminate compiler warning */
-struct subsys_desc {
-	;
-};
-#endif
+#define HOST_WAKE_GPIO_IN 144
 
 enum cnss_dev_bus_type {
 	CNSS_BUS_NONE = -1,
@@ -71,9 +58,16 @@ struct cnss_pinctrl_info {
 	struct pinctrl_state *wlan_en_sleep;
 };
 
+#ifndef CONFIG_ARCH_QCOM
+/* Dummy structure to eliminate compiler warning */
+struct subsys_desc {
+	;
+};
+#endif
+
 struct cnss_subsys_info {
 	struct subsys_device *subsys_device;
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 	struct subsys_desc subsys_desc;
 #endif
 	void *subsys_handle;
@@ -84,7 +78,7 @@ struct cnss_ramdump_info {
 	unsigned long ramdump_size;
 	void *ramdump_va;
 	phys_addr_t ramdump_pa;
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 	struct msm_dump_data dump_data;
 #endif
 };
@@ -126,22 +120,12 @@ struct cnss_bus_bw_info {
 	int current_bw_vote;
 };
 
-struct cnss_wlan_mac_addr {
-	u8 mac_addr[MAX_NO_OF_MAC_ADDR][ETH_ALEN];
-	u32 no_of_mac_addr_set;
-};
-
-struct cnss_wlan_mac_info {
-	struct cnss_wlan_mac_addr wlan_mac_addr;
-	bool is_wlan_mac_set;
-};
-
 struct cnss_fw_mem {
 	size_t size;
 	void *va;
 	phys_addr_t pa;
 	bool valid;
-	int type;
+	u32 type;
 };
 
 enum cnss_driver_event_type {
@@ -228,10 +212,8 @@ struct cnss_plat_data {
 	struct cnss_platform_cap cap;
 	struct pm_qos_request qos_request;
 	unsigned long device_id;
-	struct cnss_wlan_driver *driver_ops;
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
-	struct cnss_wlan_mac_info wlan_mac_info;
 	unsigned long driver_state;
 	struct list_head event_list;
 	spinlock_t event_lock; /* spinlock for driver work event handling */
@@ -266,11 +248,24 @@ struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
 unsigned long *cnss_get_debug_quirks(void);
 int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 			   enum cnss_driver_event_type type,
-			   u32 flag, void *data);
+			   u32 flags, void *data);
 int cnss_get_vreg(struct cnss_plat_data *plat_priv);
 int cnss_get_pinctrl(struct cnss_plat_data *plat_priv);
+
+#ifndef CONFIG_MSM_GVM_QUIN
 int cnss_power_on_device(struct cnss_plat_data *plat_priv);
 void cnss_power_off_device(struct cnss_plat_data *plat_priv);
+#else /* CONFIG_MSM_GVM_QUIN */
+static inline int cnss_power_on_device(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+static inline void cnss_power_off_device(struct cnss_plat_data *plat_priv)
+{
+}
+#endif /* CONFIG_MSM_GVM_QUIN */
+
 int cnss_register_subsys(struct cnss_plat_data *plat_priv);
 void cnss_unregister_subsys(struct cnss_plat_data *plat_priv);
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv);
@@ -279,5 +274,6 @@ void cnss_set_pin_connect_status(struct cnss_plat_data *plat_priv);
 u32 cnss_get_wake_msi(struct cnss_plat_data *plat_priv);
 bool *cnss_get_qmi_bypass(void);
 bool is_qcn7605_device(u16 device_id);
-
+void cnss_set_wlan_chip_to_host_wakeup(unsigned int wakeup_gpio_num);
+int cnss_enable_wow_wake(const char *val, const struct kernel_param *kp);
 #endif /* _CNSS_MAIN_H */

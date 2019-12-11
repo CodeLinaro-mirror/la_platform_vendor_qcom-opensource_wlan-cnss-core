@@ -21,11 +21,7 @@
 #include <linux/gfp.h>
 #include <linux/uaccess.h>
 #include <linux/kernel.h>
-#ifdef CONFIG_NAPIER_X86
-#include "msm_ipc.h"
-#else
 #include <linux/msm_ipc.h>
-#endif
 #include <linux/rwsem.h>
 #include <linux/uaccess.h>
 
@@ -228,10 +224,10 @@ static int msm_ipc_add_default_rule(void)
 	rule->service_id = ALL_SERVICE;
 	rule->instance_id = ALL_INSTANCE;
 	rule->num_group_info = 1;
-#ifdef CONFIG_NAPIER_X86
-	*(rule->group_id) = KGIDT_INIT(3004);//AID_NET_RAW;
-#else
+#ifdef CONFIG_ARCH_QCOM
 	*(rule->group_id) = AID_NET_RAW;
+#else
+	*(rule->group_id) = KGIDT_INIT(3004);
 #endif
 	down_write(&security_rules_lock_lha4);
 	key = (ALL_SERVICE & (SEC_RULES_HASH_SZ - 1));

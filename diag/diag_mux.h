@@ -33,7 +33,7 @@ struct diag_mux_ops {
 #define DIAG_MEMORY_DEVICE_MODE		1
 #define DIAG_NO_LOGGING_MODE		2
 #define DIAG_MULTI_MODE			3
-#define DIAG_LOCAL_MODE                 4
+#define DIAG_LOCAL_MODE 		4             
 
 #define DIAG_MUX_LOCAL		0
 #define DIAG_MUX_LOCAL_LAST	1
@@ -85,11 +85,7 @@ enum cnss_diag_type {
 	DIAG_TYPE_DBG_LEVEL,          /* DBG LEVEL-from diag */
 };
 
-
-
 int diag_local_send_done(int proc);
 
 int diag_local_cmd_handler(void *buf);
-
-
 #endif

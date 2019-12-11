@@ -2,7 +2,12 @@
 # IPC_ROUTER Configuration
 #
 
+menuconfig HST_IMX
+        bool "Enable hasting on IMX8"
+        help
+
 menuconfig IPC_ROUTER
+	depends on HST_IMX
 	bool "IPC Router support"
 	help
 	  IPC Router provides a connectionless message routing service

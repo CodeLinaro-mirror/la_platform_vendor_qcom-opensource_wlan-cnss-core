@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,6 +13,10 @@
 #ifndef DIAGIPCLOG_H
 #define DIAGIPCLOG_H
 
+#ifdef CONFIG_ARCH_QCOM
+#include <linux/ipc_logging.h>
+#endif
+
 #define DIAG_IPC_LOG_PAGES	50
 
 #define DIAG_DEBUG_USERSPACE	0x0001
@@ -22,14 +26,21 @@
 #define DIAG_DEBUG_MASKS	0x0010
 #define DIAG_DEBUG_POWER	0x0020
 #define DIAG_DEBUG_BRIDGE	0x0040
+#define DIAG_DEBUG_CONTROL	0x0080
 
-#ifdef DIAG_DEBUG
-#define DIAG_LOG(log_lvl, msg, ...)  \
-        do{                          \
-          printk("[%s] "msg, __func__, ##__VA_ARGS__); \
-        }while (0)
+#ifdef CONFIG_IPC_LOGGING
+extern uint16_t diag_debug_mask;
+extern void *diag_ipc_log;
+
+#define DIAG_LOG(log_lvl, msg, ...)					\
+	do {								\
+		if (diag_ipc_log && (log_lvl & diag_debug_mask)) {	\
+			ipc_log_string(diag_ipc_log,			\
+				"[%s] " msg, __func__, ##__VA_ARGS__);	\
+		}							\
+	} while (0)
 #else
-#define DIAG_LOG(log_lvl, msg, ...) 
+#define DIAG_LOG(log_lvl, msg, ...)
 #endif
 
 #endif

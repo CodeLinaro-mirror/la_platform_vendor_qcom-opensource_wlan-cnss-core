@@ -2434,7 +2434,7 @@ struct elem_info wlfw_host_cap_req_msg_v01_ei[] = {
 		.is_array       = NO_ARRAY,
 		.tlv_type       = 0x1D,
 		.offset         = offsetof(struct wlfw_host_cap_req_msg_v01,
-					cal_duration_valid),
+					   cal_duration_valid),
 	},
 	{
 		.data_type      = QMI_UNSIGNED_2_BYTE,
@@ -2443,7 +2443,7 @@ struct elem_info wlfw_host_cap_req_msg_v01_ei[] = {
 		.is_array       = NO_ARRAY,
 		.tlv_type       = 0x1D,
 		.offset         = offsetof(struct wlfw_host_cap_req_msg_v01,
-					cal_duration),
+					   cal_duration),
 	},
 	{
 		.data_type      = QMI_EOTI,

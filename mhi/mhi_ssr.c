@@ -11,13 +11,9 @@
  */
 
 #include <linux/pm_runtime.h>
-#ifdef CONFIG_NAPIER_X86
-#include "mhi_sys.h"
-#include "mhi.h"
-
-#else
 #include <mhi_sys.h>
 #include <mhi.h>
+#ifdef CONFIG_ARCH_QCOM
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <linux/esoc_client.h>
@@ -169,14 +165,14 @@ void process_disable_transition(enum MHI_PM_STATE transition_state,
 	chan_cfg = mhi_dev_ctxt->mhi_chan_cfg;
 	bb_ring = mhi_dev_ctxt->chan_bb_list;
 
-	 /*
-	  * WR: There are two channels for diag, MHI_CLIENT_DIAG_OUT &
-	  * MHI_CLIENT_DIAG_IN. While notify MHI_CB_MHI_SHUTDOWN to diag,
-	  * channel MHI_CLIENT_DIAG_OUT will free all buf including using
-	  * by MHI_CLIENT_DIAG_IN, while some dma buf using by
-	  * MHI_CLIENT_DIAG_IN has not been unmapped at this point.
-	  * so reset channel MHI_CLIENT_DIAG_IN before shutdown.
-	  */
+	/*
+	 * WR: There are two channels for diag, MHI_CLIENT_DIAG_OUT &
+	 * MHI_CLIENT_DIAG_IN. While notify MHI_CB_MHI_SHUTDOWN to diag,
+	 * channel MHI_CLIENT_DIAG_OUT will free all buf including using
+	 * by MHI_CLIENT_DIAG_IN, while some dma buf using by
+	 * MHI_CLIENT_DIAG_IN has not been unmapped at this point.
+	 * so reset channel MHI_CLIENT_DIAG_IN before shutdown.
+	 */
 	mutex_lock(&chan_cfg[MHI_CLIENT_DIAG_IN].chan_lock);
 	if (MHI_CHAN_STATE_ENABLED == ch_ring[MHI_CLIENT_DIAG_IN].ch_state)
 		reset_bb_ctxt(mhi_dev_ctxt, &bb_ring[MHI_CLIENT_DIAG_IN]);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,11 +18,7 @@
 #include <linux/errno.h>
 #include <linux/io.h>
 #include <linux/string.h>
-#ifdef CONFIG_NAPIER_X86
-#include "qmi_encdec.h"
-#else
 #include <linux/qmi_encdec.h>
-#endif
 
 #include "qmi_encdec_priv.h"
 
@@ -714,8 +710,8 @@ static int qmi_decode_string_elem(struct elem_info *ei_array, void *buf_dst,
 		decoded_bytes += rc;
 	}
 
-	if (string_len > temp_ei->elem_len) {
-		pr_err("%s: String len %d > Max Len %d\n",
+	if (string_len >= temp_ei->elem_len) {
+		pr_err("%s: String len %d >= Max Len %d\n",
 			__func__, string_len, temp_ei->elem_len);
 		return -ETOOSMALL;
 	} else if (string_len > tlv_len) {

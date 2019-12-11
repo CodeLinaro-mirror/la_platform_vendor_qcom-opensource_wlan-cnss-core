@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,7 +13,6 @@
 #include <linux/err.h>
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>
-#include <linux/version.h>
 #include "main.h"
 #include "debug.h"
 #include "pci.h"
@@ -115,12 +114,33 @@ static int cnss_stats_show_state(struct seq_file *s,
 	return 0;
 }
 
+static int cnss_stats_show_capability(struct seq_file *s,
+				      struct cnss_plat_data *plat_priv)
+{
+	if (test_bit(CNSS_FW_READY, &plat_priv->driver_state)) {
+		seq_puts(s, "\n<---------- FW Capability ----------->\n");
+		seq_printf(s, "Chip ID: 0x%x\n",
+			   plat_priv->chip_info.chip_id);
+		seq_printf(s, "Chip family: 0x%x\n",
+			   plat_priv->chip_info.chip_family);
+		seq_printf(s, "Board ID: 0x%x\n",
+			   plat_priv->board_info.board_id);
+		seq_printf(s, "SOC Info: 0x%x\n",
+			   plat_priv->soc_info.soc_id);
+		seq_printf(s, "Firmware Version: 0x%x\n",
+			   plat_priv->fw_version_info.fw_version);
+		seq_printf(s, "Firmware Build Timestamp: %s\n",
+			   plat_priv->fw_version_info.fw_build_timestamp);
+	}
+	return 0;
+}
+
 static int cnss_stats_show(struct seq_file *s, void *data)
 {
 	struct cnss_plat_data *plat_priv = s->private;
 
 	cnss_stats_show_state(s, plat_priv);
-
+	cnss_stats_show_capability(s, plat_priv);
 	return 0;
 }
 
@@ -143,16 +163,10 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 {
 	struct cnss_plat_data *plat_priv =
 		((struct seq_file *)fp->private_data)->private;
-	struct cnss_pci_data *pci_priv;
 	char buf[64];
 	char *cmd;
 	unsigned int len = 0;
 	int ret = 0;
-
-	if (!plat_priv)
-		return -ENODEV;
-
-	pci_priv = plat_priv->bus_priv;
 
 	len = min(count, sizeof(buf) - 1);
 	if (copy_from_user(buf, user_buf, len))
@@ -168,11 +182,12 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 	} else if (sysfs_streq(cmd, "enumerate")) {
 		ret = cnss_pci_init(plat_priv);
 	} else if (sysfs_streq(cmd, "download")) {
-		ret = cnss_pci_start_mhi(pci_priv);
+		set_bit(CNSS_DRIVER_DEBUG, &plat_priv->driver_state);
+		ret = cnss_pci_start_mhi(plat_priv->bus_priv);
 	} else if (sysfs_streq(cmd, "linkup")) {
-		ret = cnss_resume_pci_link(pci_priv);
+		ret = cnss_resume_pci_link(plat_priv->bus_priv);
 	} else if (sysfs_streq(cmd, "linkdown")) {
-		ret = cnss_suspend_pci_link(pci_priv);
+		ret = cnss_suspend_pci_link(plat_priv->bus_priv);
 	} else if (sysfs_streq(cmd, "powerup")) {
 		set_bit(CNSS_DRIVER_DEBUG, &plat_priv->driver_state);
 		ret = cnss_driver_event_post(plat_priv,
@@ -184,6 +199,7 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 					     CNSS_EVENT_SYNC, NULL);
 		clear_bit(CNSS_DRIVER_DEBUG, &plat_priv->driver_state);
 	} else if (sysfs_streq(cmd, "assert")) {
+		struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 		ret = cnss_force_fw_assert(&pci_priv->pci_dev->dev);
 	} else {
 		cnss_pr_err("Device boot debugfs command is invalid\n");
@@ -243,11 +259,9 @@ static int cnss_reg_read_debug_show(struct seq_file *s, void *data)
 		   plat_priv->diag_reg_read_mem_type,
 		   plat_priv->diag_reg_read_len);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 	seq_hex_dump(s, "", DUMP_PREFIX_OFFSET, 32, 4,
 		     plat_priv->diag_reg_read_buf,
 		     plat_priv->diag_reg_read_len, false);
-#endif
 
 	plat_priv->diag_reg_read_len = 0;
 	kfree(plat_priv->diag_reg_read_buf);
@@ -488,10 +502,7 @@ void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv)
 	debugfs_remove_recursive(plat_priv->root_dentry);
 }
 
-#ifdef CONFIG_NAPIER_X86
-int cnss_debug_init(void) {return 0;}
-void cnss_debug_deinit(void) {}
-#else
+#ifdef CONFIG_ARCH_QCOM
 int cnss_debug_init(void)
 {
 	cnss_ipc_log_context = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
@@ -511,4 +522,8 @@ void cnss_debug_deinit(void)
 		cnss_ipc_log_context = NULL;
 	}
 }
+#else
+int cnss_debug_init(void) { return 0; }
+
+void cnss_debug_deinit(void) { }
 #endif

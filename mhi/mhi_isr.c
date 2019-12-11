@@ -52,10 +52,8 @@ static int mhi_process_event_ring(
 	local_rp = (union mhi_event_pkt *)local_ev_ctxt->rp;
 	spin_unlock_irqrestore(&local_ev_ctxt->ring_lock, flags);
 	BUG_ON(validate_ev_el_addr(local_ev_ctxt, (uintptr_t)device_rp));
-
 	while ((local_rp != device_rp) && (event_quota > 0) &&
 			(device_rp != NULL) && (local_rp != NULL)) {
-
 		spin_lock_irqsave(&local_ev_ctxt->ring_lock, flags);
 		event_to_process = *local_rp;
 		recycle_trb_and_ring(mhi_dev_ctxt,
@@ -63,7 +61,6 @@ static int mhi_process_event_ring(
 				     MHI_RING_TYPE_EVENT_RING,
 				     ev_index);
 		spin_unlock_irqrestore(&local_ev_ctxt->ring_lock, flags);
-
 		switch (MHI_TRB_READ_INFO(EV_TRB_TYPE, &event_to_process)) {
 		case MHI_PKT_TYPE_CMD_COMPLETION_EVENT:
 		{
@@ -126,8 +123,8 @@ static int mhi_process_event_ring(
 			unsigned long flags;
 			new_state = MHI_READ_STATE(&event_to_process);
 			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
-				"MHI STE received ring 0x%x State:%s\n",
-				ev_index, state_transition_str(new_state));
+				"MHI STE received ring 0x%x State:%s, new_state is %d, mhi_state is %d\n",
+				ev_index, state_transition_str(new_state), new_state, mhi_dev_ctxt->mhi_state);
 
 			switch (new_state) {
 			case STATE_TRANSITION_M0:
@@ -200,9 +197,11 @@ static int mhi_process_event_ring(
 			case MHI_EXEC_ENV_AMSS:
 				new_state = STATE_TRANSITION_AMSS;
 				break;
+#ifndef CONFIG_HST_IMX
 			case MHI_EXEC_ENV_BHIE:
 				new_state = STATE_TRANSITION_BHIE;
 				break;
+#endif
 			case MHI_EXEC_ENV_RDDM:
 				new_state = STATE_TRANSITION_RDDM;
 				break;
@@ -256,6 +255,17 @@ void mhi_ev_task(unsigned long data)
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Enter\n");
 
+#ifdef CONFIG_HST_IMX
+	/* Patch from MSM as gerrit#2559252 */
+	/*
+	 * we can check pm_state w/o a lock here because there is no way
+	 * pm_state can change from reg access valid to no access while this
+	 * therad being executed.
+	 */
+	if (!MHI_REG_ACCESS_VALID(mhi_dev_ctxt->mhi_pm_state))
+		return;
+#endif
+
 	/* Process event ring */
 	ret = mhi_process_event_ring(mhi_dev_ctxt, ev_index, U32_MAX);
 	/*
@@ -268,7 +278,10 @@ void mhi_ev_task(unsigned long data)
 		enum MHI_PM_STATE new_state;
 
 		read_lock_bh(&mhi_dev_ctxt->pm_xfer_lock);
+#ifndef CONFIG_HST_IMX
+		/* Patch from MSM as gerrit#2559252 */
 		if (MHI_REG_ACCESS_VALID(mhi_dev_ctxt->mhi_pm_state))
+#endif
 			in_sys_err = mhi_in_sys_err(mhi_dev_ctxt);
 		read_unlock_bh(&mhi_dev_ctxt->pm_xfer_lock);
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,11 +14,12 @@
 #include <linux/of.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
+#include <linux/gpio.h>
 
 #include "main.h"
 #include "debug.h"
 
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 static struct cnss_vreg_info cnss_vreg_info[] = {
 	{NULL, "vdd-wlan-core", 1300000, 1300000, 0, 0},
 	{NULL, "vdd-wlan-io", 1800000, 1800000, 0, 0},
@@ -44,7 +45,7 @@ static struct cnss_vreg_info cnss_vreg_info[] = {
 #define BOOTSTRAP_DELAY			1000
 #define WLAN_ENABLE_DELAY		1000
 
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 int cnss_get_vreg(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -113,6 +114,7 @@ out:
 	return ret;
 }
 
+#ifndef CONFIG_MSM_GVM_QUIN
 static int cnss_vreg_on(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -232,6 +234,7 @@ static int cnss_vreg_off(struct cnss_plat_data *plat_priv)
 
 	return ret;
 }
+#endif /* CONFIG_MSM_GVM_QUIN */
 
 int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
 {
@@ -288,6 +291,7 @@ out:
 	return ret;
 }
 
+#ifndef CONFIG_MSM_GVM_QUIN
 static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 				     bool state)
 {
@@ -371,6 +375,7 @@ void cnss_power_off_device(struct cnss_plat_data *plat_priv)
 	cnss_select_pinctrl_state(plat_priv, false);
 	cnss_vreg_off(plat_priv);
 }
+#endif /* CONFIG_MSM_GVM_QUIN */
 #else
 int cnss_power_on_device(struct cnss_plat_data *plat_priv) {return 0;}
 void cnss_power_off_device(struct cnss_plat_data *plat_priv) {};
@@ -390,4 +395,53 @@ void cnss_set_pin_connect_status(struct cnss_plat_data *plat_priv)
 	set_bit(CNSS_PCIE_RST, &pin_status);
 
 	plat_priv->pin_result.host_pin_result = pin_status;
+}
+
+static irqreturn_t wlan_wakeup_interrupt(int irq, void *dev_id)
+{
+	return IRQ_HANDLED;
+}
+
+void cnss_set_wlan_chip_to_host_wakeup(unsigned int wakeup_gpio_num)
+{
+	int ret = 0;
+	int wakeup_irq_num;
+
+	ret = gpio_request(wakeup_gpio_num, "qcom_wlan_wakeup");
+	if (ret)
+		cnss_pr_err("wakeup gpio request failed\n");
+
+	ret = gpio_direction_input(wakeup_gpio_num);
+	if (ret) {
+		cnss_pr_err("wake gpio set dir output failed\n");
+		goto free_gpio;
+	}
+
+	wakeup_irq_num = gpio_to_irq(wakeup_gpio_num);
+	if (wakeup_irq_num < 0) {
+		cnss_pr_err("wake gpio_to_irq err %d\n", wakeup_irq_num);
+		goto free_gpio;
+	}
+	ret = request_irq(wakeup_irq_num, wlan_wakeup_interrupt,
+			  IRQF_TRIGGER_FALLING, "qcom_wlan_wakeup_irq", NULL);
+	if (ret) {
+		cnss_pr_err("request_irq err %d\n", ret);
+		goto free_gpio;
+	}
+
+	ret = enable_irq_wake(wakeup_irq_num);
+	if (!ret) {
+		cnss_pr_err("enable irq wakeup success %d\n", ret);
+	} else {
+		cnss_pr_err("enable irq wakeup FAILURE %d\n", ret);
+		goto irq_free;
+	}
+	ret = gpio_get_value(wakeup_gpio_num);
+	cnss_pr_err("gpio get val ret = %d wakeup_gpio_num %d\n", ret,
+		    wakeup_gpio_num);
+	return;
+irq_free:
+	free_irq(wakeup_irq_num, NULL);
+free_gpio:
+	gpio_free(wakeup_gpio_num);
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,26 +25,19 @@
 #include <linux/platform_device.h>
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
-#include <linux/of.h>
 #include <linux/rwsem.h>
-#ifdef CONFIG_NAPIER_X86
-#include "ipc_router.h"
-#include "ipc_router_xprt.h"
-#else
+#ifdef CONFIG_ARCH_QCOM
 #include <linux/ipc_logging.h>
-#include <linux/ipc_router.h>
-#include <linux/ipc_router_xprt.h>
-#include <soc/qcom/smem_log.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/subsystem_restart.h>
+#include <soc/qcom/smem_log.h>
 #endif
 #include <linux/uaccess.h>
+#include <linux/ipc_router.h>
+#include <linux/ipc_router_xprt.h>
 #include <linux/kref.h>
 
-
 #include <asm/byteorder.h>
-
-
 
 #include "ipc_router_private.h"
 #include "ipc_router_security.h"
@@ -61,7 +54,7 @@ module_param_named(debug_mask, msm_ipc_router_debug_mask,
 
 #define IPC_RTR_INFO_PAGES 6
 
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 #define IPC_RTR_INFO(log_ctx, x...) do { \
 if (log_ctx) \
 	ipc_log_string(log_ctx, x); \
@@ -69,8 +62,8 @@ if (msm_ipc_router_debug_mask & RTR_DBG) \
 	pr_info("[IPCRTR] "x); \
 } while (0)
 #else
-#define IPC_RTR_INFO(log_ctx, x, ...) do {	\
-	} while (0)
+#define IPC_RTR_INFO(log_ctx, x...) do { \
+} while (0)
 #endif
 
 #define IPC_ROUTER_LOG_EVENT_TX         0x01
@@ -237,6 +230,25 @@ void msm_ipc_router_set_ws_allowed(bool flag)
 	is_wakeup_source_allowed = flag;
 }
 
+/**
+ * is_sensor_port() - Check if the remote port is sensor service or not
+ * @rport: Pointer to the remote port.
+ *
+ * Return: true if the remote port is sensor service else false.
+ */
+static int is_sensor_port(struct msm_ipc_router_remote_port *rport)
+{
+	u32 svcid = 0;
+
+	if (rport && rport->server) {
+		svcid = rport->server->name.service;
+		if (svcid == 400 || (svcid >= 256 && svcid <= 320))
+			return true;
+	}
+
+	return false;
+}
+
 static void init_routing_table(void)
 {
 	int i;
@@ -290,7 +302,7 @@ static uint32_t ipc_router_calc_checksum(union rr_control_msg *msg)
  */
 static void skb_copy_to_log_buf(struct sk_buff_head *skb_head,
 				unsigned int pl_len, unsigned int hdr_offset,
-				uint64_t *log_buf)
+				unsigned char *log_buf)
 {
 	struct sk_buff *temp_skb;
 	unsigned int copied_len = 0, copy_len = 0;
@@ -370,7 +382,8 @@ static void ipc_router_log_msg(void *log_ctx, uint32_t xchng_type,
 			else if (hdr->version == IPC_ROUTER_V2)
 				hdr_offset = sizeof(struct rr_header_v2);
 		}
-		skb_copy_to_log_buf(skb_head, buf_len, hdr_offset, &pl_buf);
+		skb_copy_to_log_buf(skb_head, buf_len, hdr_offset,
+				    (unsigned char *)&pl_buf);
 
 		if (port_ptr && rport_ptr && (port_ptr->type == CLIENT_PORT)
 				&& (rport_ptr->server != NULL)) {
@@ -2743,7 +2756,6 @@ static void do_read_data(struct work_struct *work)
 	struct rr_packet *pkt = NULL;
 	struct msm_ipc_port *port_ptr;
 	struct msm_ipc_router_remote_port *rport_ptr;
-	int ret;
 
 	struct msm_ipc_router_xprt_info *xprt_info =
 		container_of(work,
@@ -2751,16 +2763,7 @@ static void do_read_data(struct work_struct *work)
 			     read_data);
 
 	while ((pkt = rr_read(xprt_info)) != NULL) {
-		if (pkt->length < calc_rx_header_size(xprt_info) ||
-		    pkt->length > MAX_IPC_PKT_SIZE) {
-			IPC_RTR_ERR("%s: Invalid pkt length %d\n",
-				__func__, pkt->length);
-			goto read_next_pkt1;
-		}
 
-		ret = extract_header(pkt);
-		if (ret < 0)
-			goto read_next_pkt1;
 		hdr = &(pkt->hdr);
 
 		if ((hdr->dst_node_id != IPC_ROUTER_NID_LOCAL) &&
@@ -2780,7 +2783,7 @@ static void do_read_data(struct work_struct *work)
 			goto read_next_pkt1;
 		}
 
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 		if (msm_ipc_router_debug_mask & SMEM_LOG) {
 			smem_log_event((SMEM_LOG_PROC_ID_APPS |
 				SMEM_LOG_IPC_ROUTER_EVENT_BASE |
@@ -2793,6 +2796,7 @@ static void do_read_data(struct work_struct *work)
 				(hdr->size & 0xffff));
 		}
 #endif
+
 		port_ptr = ipc_router_get_port_ref(hdr->dst_port_id);
 		if (!port_ptr) {
 			IPC_RTR_ERR("%s: No local port id %08x\n", __func__,
@@ -2950,6 +2954,10 @@ static int loopback_data(struct msm_ipc_port *src,
 	}
 
 	temp_skb = skb_peek_tail(pkt->pkt_fragment_q);
+	if (!temp_skb) {
+		IPC_RTR_ERR("%s: Empty skb\n", __func__);
+		return -EINVAL;
+	}
 	align_size = ALIGN_SIZE(pkt->length);
 	skb_put(temp_skb, align_size);
 	pkt->length += align_size;
@@ -3111,6 +3119,11 @@ static int msm_ipc_router_write_pkt(struct msm_ipc_port *src,
 	}
 
 	temp_skb = skb_peek_tail(pkt->pkt_fragment_q);
+	if (!temp_skb) {
+		IPC_RTR_ERR("%s: Abort invalid pkt\n", __func__);
+		ret = -EINVAL;
+		goto out_write_pkt;
+	}
 	align_size = ALIGN_SIZE(pkt->length);
 	skb_put(temp_skb, align_size);
 	pkt->length += align_size;
@@ -3132,7 +3145,7 @@ out_write_pkt:
 	update_comm_mode_info(&src->mode_info, xprt_info);
 	ipc_router_log_msg(xprt_info->log_ctx,
 		IPC_ROUTER_LOG_EVENT_TX, pkt, hdr, src, rport_ptr);
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 	if (msm_ipc_router_debug_mask & SMEM_LOG) {
 		smem_log_event((SMEM_LOG_PROC_ID_APPS |
 			SMEM_LOG_IPC_ROUTER_EVENT_BASE |
@@ -3145,6 +3158,7 @@ out_write_pkt:
 			(hdr->size & 0xffff));
 	}
 #endif
+
 	ipc_router_put_xprt_info_ref(xprt_info);
 	return hdr->size;
 }
@@ -3439,7 +3453,8 @@ int msm_ipc_router_recv_from(struct msm_ipc_port *port_ptr,
 	align_size = ALIGN_SIZE(data_len);
 	if (align_size) {
 		temp_skb = skb_peek_tail((*pkt)->pkt_fragment_q);
-		skb_trim(temp_skb, (temp_skb->len - align_size));
+		if (temp_skb)
+			skb_trim(temp_skb, (temp_skb->len - align_size));
 	}
 	return data_len;
 }
@@ -3691,7 +3706,7 @@ static void pil_vote_load_worker(struct work_struct *work)
 
 	vote_info = container_of(work, struct pil_vote_info, load_work);
 	if (strlen(default_peripheral)) {
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 		vote_info->pil_handle = subsystem_get(default_peripheral);
 		if (IS_ERR(vote_info->pil_handle)) {
 			IPC_RTR_ERR("%s: Failed to load %s\n",
@@ -3717,7 +3732,8 @@ static void pil_vote_unload_worker(struct work_struct *work)
 	struct pil_vote_info *vote_info;
 
 	vote_info = container_of(work, struct pil_vote_info, unload_work);
-#ifndef CONFIG_NAPIER_X86
+
+#ifdef CONFIG_ARCH_QCOM
 	if (vote_info->pil_handle) {
 		subsystem_put(vote_info->pil_handle);
 		vote_info->pil_handle = NULL;
@@ -3969,7 +3985,7 @@ static void *ipc_router_create_log_ctx(char *name)
 				GFP_KERNEL);
 	if (!sub_log_ctx)
 		return NULL;
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_ARCH_QCOM
 	sub_log_ctx->log_ctx = ipc_log_context_create(
 				IPC_RTR_INFO_PAGES, name, 0);
 	if (!sub_log_ctx->log_ctx) {
@@ -4204,6 +4220,7 @@ void msm_ipc_router_xprt_notify(struct msm_ipc_router_xprt *xprt,
 {
 	struct msm_ipc_router_xprt_info *xprt_info = xprt->priv;
 	struct msm_ipc_router_xprt_work *xprt_work;
+	struct msm_ipc_router_remote_port *rport_ptr = NULL;
 	struct rr_packet *pkt;
 	int ret;
 
@@ -4247,25 +4264,47 @@ void msm_ipc_router_xprt_notify(struct msm_ipc_router_xprt *xprt,
 	if (!data)
 		return;
 
-	while (!xprt_info) {
-		msleep(100);
-		xprt_info = xprt->priv;
+	if (!xprt_info) {
+		return;
 	}
 
 	pkt = clone_pkt((struct rr_packet *)data);
 	if (!pkt)
 		return;
 
+	if (pkt->length < calc_rx_header_size(xprt_info) ||
+	    pkt->length > MAX_IPC_PKT_SIZE) {
+		IPC_RTR_ERR("%s: Invalid pkt length %d\n",
+			    __func__, pkt->length);
+		release_pkt(pkt);
+		return;
+	}
+
+	ret = extract_header(pkt);
+	if (ret < 0) {
+		release_pkt(pkt);
+		return;
+	}
+
 	pkt->ws_need = false;
+	if (pkt->hdr.type == IPC_ROUTER_CTRL_CMD_DATA)
+		rport_ptr = ipc_router_get_rport_ref(pkt->hdr.src_node_id,
+						     pkt->hdr.src_port_id);
+
 	mutex_lock(&xprt_info->rx_lock_lhb2);
 	list_add_tail(&pkt->list, &xprt_info->pkt_list);
-	if (!xprt_info->dynamic_ws) {
-		__pm_stay_awake(&xprt_info->ws);
-		pkt->ws_need = true;
-	} else {
-		if (is_wakeup_source_allowed) {
+	/* check every pkt is from SENSOR services or not and
+	 * avoid holding both edge and port specific wake-up sources
+	 */
+	if (!is_sensor_port(rport_ptr)) {
+		if (!xprt_info->dynamic_ws) {
 			__pm_stay_awake(&xprt_info->ws);
 			pkt->ws_need = true;
+		} else {
+			if (is_wakeup_source_allowed) {
+				__pm_stay_awake(&xprt_info->ws);
+				pkt->ws_need = true;
+			}
 		}
 	}
 	mutex_unlock(&xprt_info->rx_lock_lhb2);
@@ -4279,16 +4318,17 @@ void msm_ipc_router_xprt_notify(struct msm_ipc_router_xprt *xprt,
  *
  * @return: 0 on success, -ENODEV on failure.
  */
-static int parse_devicetree(struct device_node *node)
+int parse_devicetree(struct device_node *node)
 {
 	char *key;
 	const char *peripheral = NULL;
 
+#ifdef CONFIG_ARCH_QCOM
 	key = "qcom,default-peripheral";
 	peripheral = of_get_property(node, key, NULL);
 	if (peripheral)
 		strlcpy(default_peripheral, peripheral, PIL_SUBSYSTEM_NAME_LEN);
-
+#endif
 	return 0;
 }
 
@@ -4383,14 +4423,11 @@ static int ipc_router_core_init(void)
 	return ret;
 }
 
-#ifdef CONFIG_WLAN_CNSS_CORE
-int msm_ipc_router_init(void)
-#else
 static int msm_ipc_router_init(void)
-#endif
 {
 	int ret;
 
+	printk("%s-Enter-\n",__func__);
 	ret = ipc_router_core_init();
 	if (ret < 0)
 		return ret;
@@ -4405,23 +4442,11 @@ static int msm_ipc_router_init(void)
 		IPC_RTR_ERR("%s: Init sockets failed\n", __func__);
 
 	ipc_router_log_ctx_init();
+
+	printk("%s-Exit-\n",__func__);
 	return ret;
 }
-#ifndef CONFIG_WLAN_CNSS_CORE
+
 module_init(msm_ipc_router_init);
 MODULE_DESCRIPTION("MSM IPC Router");
 MODULE_LICENSE("GPL v2");
-#endif
-EXPORT_SYMBOL(clone_pkt);
-EXPORT_SYMBOL(ipc_router_peek_pkt_size);
-EXPORT_SYMBOL(release_pkt);
-EXPORT_SYMBOL(create_pkt);
-EXPORT_SYMBOL(msm_ipc_router_xprt_notify);
-EXPORT_SYMBOL(msm_ipc_router_create_port);
-EXPORT_SYMBOL(msm_ipc_router_lookup_server_name);
-EXPORT_SYMBOL(msm_ipc_router_close_port);
-EXPORT_SYMBOL(msm_ipc_router_read_msg);
-EXPORT_SYMBOL(msm_ipc_router_bind_control_port);
-EXPORT_SYMBOL(msm_ipc_router_send_msg);
-EXPORT_SYMBOL(msm_ipc_router_register_server);
-EXPORT_SYMBOL(msm_ipc_router_unregister_server);

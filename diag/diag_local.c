@@ -22,7 +22,6 @@
 #include <linux/spinlock.h>
 #include <linux/ratelimit.h>
 
-
 #include "diagchar.h"
 #include "diagfwd.h"
 #include "diag_mux.h"
@@ -34,16 +33,13 @@
 #define MSG_SSID_WLAN_LAST  4583
 #define MASK_LOW_LEVEL      0x1F
 
-
-
 int diag_local_send_done(int proc)
 {
-   /* process send done completion */
-   /* free write buffuer to pool?  */
-    DIAG_LOG(DIAG_DEBUG_BRIDGE,"diag: %s enter.\n", __func__);
-    return 0;
+	/* process send done completion */
+	/* free write buffuer to pool?  */
+	DIAG_LOG(DIAG_DEBUG_BRIDGE,"diag: %s enter.\n", __func__);
+	return 0;
 }
-
 
 /* send local data */
 static int diag_local_write(void *buf, int len)
@@ -59,7 +55,6 @@ static int diag_local_write(void *buf, int len)
 		pr_err("diag: In %s, invalid len: %d", __func__, len);
 		return -EBADMSG;
 	}
-
 
 	do {
 		if (driver->hdlc_encode_buf_len == 0)
@@ -95,47 +90,44 @@ static int diag_local_write(void *buf, int len)
 #if 0
 int diag_local_enable_log(void)
 {
-/* try to create msg enable cmd and call diag_local_write to send */
+	/* try to create msg enable cmd and call diag_local_write to send */
+	struct diag_msg_build_mask_t *req = NULL;
+	int req_len = 0;
+	int ret = 0;
+	int range = MSG_SSID_WLAN_LAST - MSG_SSID_WLAN + 1;
+	int i = 0;
+	uint32_t *mask_ptr = NULL;
 
-   struct diag_msg_build_mask_t *req = NULL;
-   int req_len = 0;
-   int ret = 0;
-   int range = MSG_SSID_WLAN_LAST - MSG_SSID_WLAN + 1;
-   int i = 0;
-   uint32_t *mask_ptr = NULL;
+	req = diagmem_alloc(driver,DIAG_MAX_REQ_SIZE,POOL_TYPE_COPY);
+	if(!req)
+		return -EINVAL;
 
-   req = diagmem_alloc(driver,DIAG_MAX_REQ_SIZE,POOL_TYPE_COPY);
-   if(!req)
-   	return -EINVAL;
+	req_len = sizeof(struct diag_msg_build_mask_t) + (range * sizeof (uint32_t));
+	mask_ptr = (uint32_t *) (req + 1);
 
-    req_len = sizeof(struct diag_msg_build_mask_t) + (range * sizeof (uint32_t));
-    mask_ptr = (uint32_t *) (req + 1);
-   
+	req->cmd_code   = DIAG_CMD_MSG_CONFIG;
+	req->sub_cmd    = DIAG_CMD_OP_SET_MSG_MASK;
+	req->ssid_first = MSG_SSID_WLAN;
+	req->ssid_last   = MSG_SSID_WLAN_LAST;
+	req->padding = 0;
+	req->status = 0;
 
-   req->cmd_code   = DIAG_CMD_MSG_CONFIG;
-   req->sub_cmd    = DIAG_CMD_OP_SET_MSG_MASK;
-   req->ssid_first = MSG_SSID_WLAN;
-   req->ssid_last   = MSG_SSID_WLAN_LAST;
-   req->padding = 0;
-   req->status = 0;
+	for(i = 0; i < range; i ++)
+		mask_ptr[i] = MASK_LOW_LEVEL;
 
-   for(i = 0; i < range; i ++)
-   	mask_ptr[i] = MASK_LOW_LEVEL;
+	/* start to send */
+	ret = diag_local_write(req, req_len, 0);
 
+	diagmem_free(driver, req, POOL_TYPE_COPY);
 
-   /* start to send */
-   ret = diag_local_write(req, req_len, 0);
-
-   diagmem_free(driver, req, POOL_TYPE_COPY);
-   
-   return ret;
+	return ret;
 }
 #endif
 
 int diag_local_cmd_handler(void *buf)
 {
-   int ret = 0;
-   struct dbglog_slot *slot = (struct dbglog_slot *)buf;
+	int ret = 0;
+	struct dbglog_slot *slot = (struct dbglog_slot *)buf;
    
 	switch (slot->diag_type) {
 	case DIAG_TYPE_FW_MSG: /* cmd to onfigure */
@@ -150,14 +142,9 @@ int diag_local_cmd_handler(void *buf)
 		ret = diag_local_write(slot->payload, slot->length); /* has done hdlc encode in user app */
 		break;
 	default:
-		pr_err("Unknown cmd[%d] error\n",
-						slot->diag_type);
+		pr_err("Unknown cmd[%d] error\n", slot->diag_type);
 		break;
 	}
 
    return ret;
 }
-
-
-
-

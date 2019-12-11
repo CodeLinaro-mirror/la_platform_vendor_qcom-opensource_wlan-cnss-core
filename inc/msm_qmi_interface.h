@@ -19,11 +19,7 @@
 #include <linux/list.h>
 #include <linux/socket.h>
 #include <linux/gfp.h>
-#ifdef CONFIG_NAPIER_X86
-#include "qmi_encdec.h"
-#else
 #include <linux/qmi_encdec.h>
-#endif
 #include <linux/workqueue.h>
 
 #define QMI_COMMON_TLV_TYPE 0
@@ -151,7 +147,7 @@ struct qmi_svc_ops_options {
 		      void *req);
 };
 
-#ifdef CONFIG_MSM_QMI_INTERFACE
+#ifdef CONFIG_HST_IMX
 
 /* Element info array describing common qmi response structure */
 extern struct elem_info qmi_response_type_v01_ei[];
