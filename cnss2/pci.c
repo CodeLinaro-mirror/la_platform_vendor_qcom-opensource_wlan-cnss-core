@@ -19,8 +19,8 @@
 #include <linux/memblock.h>
 #include <linux/completion.h>
 #include <linux/platform_device.h>
-#include <soc/qcom/ramdump.h>
 
+#include "ramdump.h"
 #include "main.h"
 #include "bus.h"
 #include "debug.h"

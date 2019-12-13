@@ -19,7 +19,7 @@
 #include <linux/list.h>
 #include <linux/socket.h>
 #include <linux/gfp.h>
-#include <linux/qmi_encdec.h>
+#include "qmi_encdec.h"
 #include <linux/workqueue.h>
 
 #define QMI_COMMON_TLV_TYPE 0

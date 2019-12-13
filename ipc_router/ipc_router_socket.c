@@ -19,7 +19,7 @@
 #include <linux/poll.h>
 #include <linux/fcntl.h>
 #include <linux/gfp.h>
-#include <linux/msm_ipc.h>
+#include "msm_ipc.h"
 #include <linux/sched.h>
 #include <linux/thread_info.h>
 #include <linux/slab.h>
@@ -29,7 +29,7 @@
 #endif
 #include <linux/string.h>
 #include <linux/atomic.h>
-#include <linux/ipc_router.h>
+#include "ipc_router.h"
 
 #include <net/sock.h>
 

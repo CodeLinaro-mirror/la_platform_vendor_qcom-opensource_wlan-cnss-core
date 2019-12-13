@@ -142,20 +142,20 @@ fail5:
 fail4:
 #ifdef CONFIG_QTI_SDIO_CLIENT
 	qti_bridge_exit();
+#endif
 fail3:
 #ifdef CONFIG_QCN
 	qcn_sdio_exit();
+#endif
 fail2:
-#endif
-#endif
 #ifdef CONFIG_USB_QTI_KS_BRIDGE
 	ksb_exit();
+#endif
 fail1:
 #ifdef CONFIG_MSM_MHI
 	mhi_exit();
+#endif
 fail:
-#endif
-#endif
 	return ret;
 }
 

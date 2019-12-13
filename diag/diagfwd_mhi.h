@@ -13,7 +13,6 @@
 #ifndef DIAGFWD_MHI_H
 #define DIAGFWD_MHI_H
 
-#include <linux/msm_mhi.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/completion.h>
@@ -34,7 +33,7 @@
 #ifdef CONFIG_ARCH_QCOM
 #include <linux/ipc_logging.h>
 #endif
-#include <linux/msm_mhi.h>
+#include "msm_mhi.h"
 
 #define MHI_1			0
 #define NUM_MHI_DEV		1

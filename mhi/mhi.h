@@ -14,7 +14,7 @@
 #define _H_MHI
 
 #include "mhi_macros.h"
-#include <linux/msm_mhi.h>
+#include "msm_mhi.h"
 #include <linux/types.h>
 #include <linux/pm.h>
 #include <linux/completion.h>

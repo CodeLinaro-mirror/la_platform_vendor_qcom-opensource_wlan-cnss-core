@@ -18,7 +18,7 @@
 #include <linux/errno.h>
 #include <linux/io.h>
 #include <linux/string.h>
-#include <linux/qmi_encdec.h>
+#include "qmi_encdec.h"
 
 #include "qmi_encdec_priv.h"
 

@@ -20,9 +20,9 @@
 #include <linux/socket.h>
 #include <linux/gfp.h>
 #include <linux/platform_device.h>
-#include <linux/qmi_encdec.h>
+#include "qmi_encdec.h"
 
-#include <soc/qcom/msm_qmi_interface.h>
+#include "msm_qmi_interface.h"
 
 enum txn_type {
 	QMI_SYNC_TXN = 1,

@@ -18,8 +18,8 @@
 #include <linux/mm.h>
 #include <linux/list.h>
 #include <linux/platform_device.h>
-#include <linux/msm_ipc.h>
-#include <linux/ipc_router.h>
+#include "msm_ipc.h"
+#include "ipc_router.h"
 #include <linux/kref.h>
 
 #define IPC_ROUTER_XPRT_EVENT_DATA  1

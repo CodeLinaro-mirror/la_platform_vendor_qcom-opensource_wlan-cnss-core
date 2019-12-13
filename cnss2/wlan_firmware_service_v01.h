@@ -14,8 +14,13 @@
 #ifndef WLAN_FIRMWARE_SERVICE_V01_H
 #define WLAN_FIRMWARE_SERVICE_V01_H
 
+#ifdef CONFIG_ARCH_QCOM
 #include <linux/qmi_encdec.h>
 #include <soc/qcom/msm_qmi_interface.h>
+#else
+#include "qmi_encdec.h"
+#include "msm_qmi_interface.h"
+#endif
 
 #define WLFW_SERVICE_ID_V01 0x45
 #define WLFW_SERVICE_VERS_V01 0x01

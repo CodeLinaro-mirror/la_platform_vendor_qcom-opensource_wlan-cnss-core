@@ -17,7 +17,7 @@
 #include <linux/slab.h>
 #include <linux/etherdevice.h>
 #include <linux/debugfs.h>
-#include <net/cnss_utils.h>
+#include "cnss_utils.h"
 
 #define CNSS_MAX_CH_NUM 45
 struct cnss_unsafe_channel_list {
@@ -452,7 +452,11 @@ out:
 	return ret;
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+int cnss_utils_init(void)
+#else
 static int __init cnss_utils_init(void)
+#endif
 {
 	struct cnss_utils_priv *priv = NULL;
 
@@ -470,14 +474,20 @@ static int __init cnss_utils_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+void cnss_utils_exit(void)
+#else
 static void __exit cnss_utils_exit(void)
+#endif
 {
 	kfree(cnss_utils_priv);
 	cnss_utils_priv = NULL;
 }
 
+#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(cnss_utils_init);
 module_exit(cnss_utils_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION(DEVICE "CNSS Utilities Driver");
+#endif

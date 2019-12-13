@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/msm_mhi.h>
+#include "msm_mhi.h"
 #include <linux/workqueue.h>
 #include <linux/pm.h>
 #include <linux/fs.h>

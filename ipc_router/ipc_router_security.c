@@ -21,7 +21,7 @@
 #include <linux/gfp.h>
 #include <linux/uaccess.h>
 #include <linux/kernel.h>
-#include <linux/msm_ipc.h>
+#include "msm_ipc.h"
 #include <linux/rwsem.h>
 #include <linux/uaccess.h>
 

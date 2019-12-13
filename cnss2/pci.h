@@ -16,9 +16,11 @@
 #ifdef CONFIG_ARCH_QCOM
 #include <asm/dma-iommu.h>
 #include <linux/msm_pcie.h>
+#include <linux/msm_mhi.h>
+#else
+#include "msm_mhi.h"
 #endif
 #include <linux/iommu.h>
-#include <linux/msm_mhi.h>
 #include <linux/pci.h>
 
 #include "main.h"

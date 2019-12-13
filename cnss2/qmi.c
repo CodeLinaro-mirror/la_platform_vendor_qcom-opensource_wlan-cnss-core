@@ -13,8 +13,13 @@
 #include <linux/firmware.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#ifdef CONFIG_ARCH_QCOM
 #include <linux/qmi_encdec.h>
 #include <soc/qcom/msm_qmi_interface.h>
+#else
+#include "qmi_encdec.h"
+#include "msm_qmi_interface.h"
+#endif
 
 #include "bus.h"
 #include "debug.h"

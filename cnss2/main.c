@@ -19,8 +19,8 @@
 #include <linux/rwsem.h>
 #include <linux/suspend.h>
 #include <linux/timer.h>
-#include <soc/qcom/ramdump.h>
 #ifdef CONFIG_ARCH_QCOM
+#include <soc/qcom/ramdump.h>
 #include <soc/qcom/subsystem_notif.h>
 #endif
 
@@ -28,6 +28,7 @@
 #include "bus.h"
 #include "debug.h"
 #include "pci.h"
+#include "ramdump.h"
 
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
@@ -2242,7 +2243,11 @@ static struct platform_driver cnss_platform_driver = {
 	},
 };
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+int cnss_initialize(void)
+#else
 static int __init cnss_initialize(void)
+#endif
 {
 	int ret = 0;
 
@@ -2254,14 +2259,20 @@ static int __init cnss_initialize(void)
 	return ret;
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+void cnss_exit(void)
+#else
 static void __exit cnss_exit(void)
+#endif
 {
 	platform_driver_unregister(&cnss_platform_driver);
 	cnss_debug_deinit();
 }
 
-late_initcall(cnss_initialize);
+#ifndef CONFIG_WLAN_CNSS_CORE
+module_init(cnss_initialize);
 module_exit(cnss_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("CNSS2 Platform Driver");
+#endif

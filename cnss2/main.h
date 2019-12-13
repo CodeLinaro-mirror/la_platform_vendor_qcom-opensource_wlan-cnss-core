@@ -15,8 +15,8 @@
 
 #include <linux/etherdevice.h>
 #include <linux/pm_qos.h>
-#include <net/cnss2.h>
 #ifdef CONFIG_ARCH_QCOM
+#include <net/cnss2.h>
 #include <linux/esoc_client.h>
 #include <linux/msm-bus.h>
 #include <soc/qcom/memory_dump.h>
@@ -24,6 +24,7 @@
 #endif
 
 #include "qmi.h"
+#include "cnss2.h"
 
 #define MAX_NO_OF_MAC_ADDR		4
 #define CNSS_RDDM_TIMEOUT_MS		20000

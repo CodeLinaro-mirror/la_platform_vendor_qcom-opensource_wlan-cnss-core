@@ -24,16 +24,16 @@
 #include <linux/list.h>
 #include <linux/socket.h>
 #include <linux/gfp.h>
-#include <linux/qmi_encdec.h>
+#include "qmi_encdec.h"
 #include <linux/workqueue.h>
 #include <linux/mutex.h>
 #include <linux/hashtable.h>
-#include <linux/ipc_router.h>
+#include "ipc_router.h"
 #ifdef CONFIG_ARCH_QCOM
 #include <linux/ipc_logging.h>
 #endif
 
-#include <soc/qcom/msm_qmi_interface.h>
+#include "msm_qmi_interface.h"
 
 #include "qmi_interface_priv.h"
 
@@ -2262,12 +2262,19 @@ int qmi_svc_unregister(struct qmi_handle *handle)
 }
 EXPORT_SYMBOL(qmi_svc_unregister);
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+int qmi_interface_init(void)
+#else
 static int __init qmi_interface_init(void)
+#endif
 {
 	qmi_log_init();
 	return 0;
 }
+
+#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(qmi_interface_init);
 
 MODULE_DESCRIPTION("MSM QMI Interface");
 MODULE_LICENSE("GPL v2");
+#endif

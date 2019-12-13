@@ -19,7 +19,6 @@
 #include <linux/workqueue.h>
 #include <linux/pm_runtime.h>
 #include <linux/platform_device.h>
-#include <linux/msm_mhi.h>
 #include <linux/delay.h>
 #include <linux/vmalloc.h>
 #include <asm/current.h>
@@ -29,6 +28,8 @@
 #include "diagfwd_mhi.h"
 #include "diag_ipc_logging.h"
 #include "diag_mux.h"
+#include "diagchar.h"
+#include "msm_mhi.h"
 #include <net/sock.h>
 #include <net/netlink.h>
 

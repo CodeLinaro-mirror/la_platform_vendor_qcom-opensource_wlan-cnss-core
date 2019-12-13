@@ -19,7 +19,7 @@
 #include <linux/mm.h>
 #include <linux/list.h>
 #include <linux/pm.h>
-#include <linux/msm_ipc.h>
+#include "msm_ipc.h"
 #include <linux/device.h>
 #include <linux/kref.h>
 

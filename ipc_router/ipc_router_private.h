@@ -19,9 +19,9 @@
 #include <linux/mm.h>
 #include <linux/list.h>
 #include <linux/platform_device.h>
-#include <linux/msm_ipc.h>
-#include <linux/ipc_router.h>
-#include <linux/ipc_router_xprt.h>
+#include "msm_ipc.h"
+#include "ipc_router.h"
+#include "ipc_router_xprt.h"
 
 #include <net/sock.h>
 

@@ -98,6 +98,14 @@ ifneq ($(CONFIG_NAPIER_X86),)
      KBUILD_CPPFLAGS += -DCONFIG_NAPIER_X86
 endif
 
+ifneq ($(CONFIG_HST_IMX),)
+     KBUILD_CPPFLAGS += -DCONFIG_HST_IMX
+endif
+
+ifneq ($(CONFIG_DIAGFWD_BRIDGE_CODE),)
+     KBUILD_CPPFLAGS += -DCONFIG_DIAGFWD_BRIDGE_CODE
+endif
+
 ifneq ($(CONFIG_WLAN_CNSS_CORE),)
     KBUILD_CPPFLAGS += -DCONFIG_WLAN_CNSS_CORE
 endif
@@ -160,11 +168,8 @@ ifneq ($(CONFIG_MSM_MHI),)
 				$(MHI_DIR)/mhi_bhi.o            \
 				$(MHI_DIR)/mhi_pm.o             \
 				$(MHI_DIR)/mhi_ssr.o            \
-				$(MHI_DIR)/mhi_event.o
-
-ifneq ($(CONFIG_NAPIER_X86),)
-	MHI_OBJS += $(MHI_DIR)/mhi_fw_dump.o
-endif
+				$(MHI_DIR)/mhi_event.o		\
+				$(MHI_DIR)/mhi_fw_dump.o
 	MHI_INC := -I$(ROOTDIR)/$(MHI_DIR)
 endif
 
@@ -198,8 +203,7 @@ ifneq ($(CONFIG_MSM_DIAG_INTERFACE),)
 	DIAG_OBJS := $(DIAG_DIR)/diagchar_core.o             \
 		     $(DIAG_DIR)/diag_local.o                \
 		     $(DIAG_DIR)/diagmem.o                   \
-		     $(DIAG_DIR)/diagfwd_bridge.o            \
-		     $(DIAG_DIR)/diag_nl.o
+		     $(DIAG_DIR)/diagfwd_bridge.o
 
 ifeq ($(CONFIG_DIAG_HSIC),y)
 	DIAG_OBJS += $(DIAG_DIR)/diagfwd_hsic.o

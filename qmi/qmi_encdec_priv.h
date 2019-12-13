@@ -19,7 +19,7 @@
 #include <linux/list.h>
 #include <linux/socket.h>
 #include <linux/gfp.h>
-#include <linux/qmi_encdec.h>
+#include "qmi_encdec.h"
 
 #define QMI_ENCDEC_ENCODE_TLV(type, length, p_dst) do { \
 	*p_dst++ = type; \

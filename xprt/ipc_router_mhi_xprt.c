@@ -14,9 +14,9 @@
  * IPC ROUTER MHI XPRT module.
  */
 #include <linux/delay.h>
-#include <linux/ipc_router_xprt.h>
+#include "ipc_router_xprt.h"
 #include <linux/module.h>
-#include <linux/msm_mhi.h>
+#include "msm_mhi.h"
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
@@ -25,7 +25,7 @@
 #include <linux/spinlock.h>
 
 static int ipc_router_mhi_xprt_debug_mask;
-module_param_named(debug_mask, ipc_router_mhi_xprt_debug_mask,
+module_param_named(mhi_xprt_debug_mask, ipc_router_mhi_xprt_debug_mask,
 		   int, S_IRUGO | S_IWUSR | S_IWGRP);
 
 #define D(x...) do { \
@@ -994,7 +994,11 @@ static struct platform_driver ipc_router_mhi_xprt_driver = {
 	},
 };
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+int ipc_router_mhi_xprt_init(void)
+#else
 static int __init ipc_router_mhi_xprt_init(void)
+#endif
 {
 	int rc;
 
@@ -1007,6 +1011,8 @@ static int __init ipc_router_mhi_xprt_init(void)
 	return 0;
 }
 
+#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(ipc_router_mhi_xprt_init);
 MODULE_DESCRIPTION("IPC Router MHI XPRT");
 MODULE_LICENSE("GPL v2");
+#endif

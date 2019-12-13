@@ -23,7 +23,6 @@
 #include <linux/timer.h>
 #include <linux/sched.h>
 #include <linux/platform_device.h>
-#include <linux/msm_mhi.h>
 #ifdef CONFIG_DIAG_OVER_USB
 #include <linux/usb/usbdiag.h>
 #endif
@@ -44,6 +43,8 @@
 #include "diag_masks.h"
 #include "diagfwd_bridge.h"
 #include "diag_mux.h"
+#include "msm_mhi.h"
+#include "diagchar.h"
 
 #include <linux/coresight-stm.h>
 #include <linux/kernel.h>
@@ -158,7 +159,11 @@ static struct platform_driver diag_mhi_driver = {
 	},
 };
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+int diagchar_init(void)
+#else
 static int __init diagchar_init(void)
+#endif
 {
 	int ret = 0;
 
@@ -192,7 +197,11 @@ static int __init diagchar_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+void diagchar_exit(void)
+#else
 static void diagchar_exit(void)
+#endif
 {
 	printk(KERN_INFO "diagchar exiting ..\n");
 	diagfwd_bridge_exit();
@@ -200,5 +209,7 @@ static void diagchar_exit(void)
 	printk(KERN_INFO "done diagchar exit\n");
 }
 
+#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(diagchar_init);
 module_exit(diagchar_exit);
+#endif

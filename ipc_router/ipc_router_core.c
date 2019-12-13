@@ -33,8 +33,8 @@
 #include <soc/qcom/smem_log.h>
 #endif
 #include <linux/uaccess.h>
-#include <linux/ipc_router.h>
-#include <linux/ipc_router_xprt.h>
+#include "ipc_router.h"
+#include "ipc_router_xprt.h"
 #include <linux/kref.h>
 
 #include <asm/byteorder.h>
@@ -48,7 +48,7 @@ enum {
 };
 
 static int msm_ipc_router_debug_mask;
-module_param_named(debug_mask, msm_ipc_router_debug_mask,
+module_param_named(ipc_router_debug_mask, msm_ipc_router_debug_mask,
 		   int, S_IRUGO | S_IWUSR | S_IWGRP);
 #define MODULE_NAME "ipc_router"
 
@@ -4423,7 +4423,11 @@ static int ipc_router_core_init(void)
 	return ret;
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+int msm_ipc_router_init(void)
+#else
 static int msm_ipc_router_init(void)
+#endif
 {
 	int ret;
 
@@ -4447,6 +4451,22 @@ static int msm_ipc_router_init(void)
 	return ret;
 }
 
+#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(msm_ipc_router_init);
 MODULE_DESCRIPTION("MSM IPC Router");
 MODULE_LICENSE("GPL v2");
+#endif
+
+EXPORT_SYMBOL(clone_pkt);
+EXPORT_SYMBOL(ipc_router_peek_pkt_size);
+EXPORT_SYMBOL(release_pkt);
+EXPORT_SYMBOL(create_pkt);
+EXPORT_SYMBOL(msm_ipc_router_xprt_notify);
+EXPORT_SYMBOL(msm_ipc_router_create_port);
+EXPORT_SYMBOL(msm_ipc_router_lookup_server_name);
+EXPORT_SYMBOL(msm_ipc_router_close_port);
+EXPORT_SYMBOL(msm_ipc_router_read_msg);
+EXPORT_SYMBOL(msm_ipc_router_bind_control_port);
+EXPORT_SYMBOL(msm_ipc_router_send_msg);
+EXPORT_SYMBOL(msm_ipc_router_register_server);
+EXPORT_SYMBOL(msm_ipc_router_unregister_server);
