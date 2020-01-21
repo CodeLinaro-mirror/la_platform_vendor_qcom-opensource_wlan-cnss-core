@@ -736,7 +736,7 @@ void mhi_debug_reg_dump(struct mhi_controller *mhi_cntrl);
 
 #define MHI_VERB(fmt, ...) do { \
 		if (mhi_cntrl->klog_lvl <= MHI_MSG_LVL_VERBOSE) \
-			pr_info("[D][%s] " fmt, __func__, ##__VA_ARGS__);\
+			pr_debug("[D][%s] " fmt, __func__, ##__VA_ARGS__);\
 } while (0)
 
 #else

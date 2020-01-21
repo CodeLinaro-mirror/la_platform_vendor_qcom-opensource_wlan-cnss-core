@@ -211,8 +211,23 @@ static struct mhi_driver qcom_mhi_qrtr_driver = {
 	},
 };
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+int mhi_driver_init(void)
+{
+	return mhi_driver_register(&qcom_mhi_qrtr_driver);
+}
+
+void mhi_driver_exit(void)
+{
+	mhi_driver_unregister(&qcom_mhi_qrtr_driver);
+}
+
+#else
 module_driver(qcom_mhi_qrtr_driver, mhi_driver_register,
 	      mhi_driver_unregister);
 
 MODULE_DESCRIPTION("QTI IPC-Router MHI interface driver");
 MODULE_LICENSE("GPL v2");
+
+#endif
+

@@ -34,14 +34,14 @@
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/sysmon.h>
-#include <trace/events/trace_msm_pil_event.h>
+//#include <trace/events/trace_msm_pil_event.h>
 #include <linux/soc/qcom/smem_state.h>
 #include <linux/of_irq.h>
 #include <linux/of.h>
 #include <asm/current.h>
 #include <linux/timer.h>
 
-#include "peripheral-loader.h"
+//#include "peripheral-loader.h"
 
 #define DISABLE_SSR 0x9889deed
 /* If set to 0x9889deed, call to subsystem_restart_dev() returns immediately */
@@ -163,6 +163,8 @@ struct restart_log {
 	struct subsys_device *dev;
 	struct list_head list;
 };
+
+#define pil_ipc pr_info
 
 /**
  * struct subsys_device - subsystem device
@@ -406,7 +408,7 @@ EXPORT_SYMBOL(subsys_bus_type);
 
 static DEFINE_IDA(subsys_ida);
 
-static int enable_ramdumps;
+static int enable_ramdumps = 1;
 module_param(enable_ramdumps, int, 0644);
 
 static int enable_mini_ramdumps;
@@ -678,12 +680,12 @@ static void notify_each_subsys_device(struct subsys_device **list,
 		notif_data.no_auth = dev->desc->no_auth;
 		notif_data.pdev = pdev;
 
-		trace_pil_notif("before_send_notif", notif, dev->desc->fw_name);
+		//trace_pil_notif("before_send_notif", notif, dev->desc->fw_name);
 		setup_timeout(dev->desc, NULL, SUBSYS_TO_HLOS);
 		subsys_notif_queue_notification(dev->notify, notif,
 								&notif_data);
 		cancel_timeout(dev->desc);
-		trace_pil_notif("after_send_notif", notif, dev->desc->fw_name);
+		//trace_pil_notif("after_send_notif", notif, dev->desc->fw_name);
 		subsys_notif_uevent(dev->desc, notif);
 	}
 }
@@ -740,7 +742,7 @@ static int wait_for_err_ready(struct subsys_device *subsys)
 	 * don't return.
 	 */
 	if ((subsys->desc->generic_irq <= 0 && !subsys->desc->err_ready_irq) ||
-				enable_debug == 1 || is_timeout_disabled())
+				enable_debug == 1 /*|| is_timeout_disabled()*/)
 		return 0;
 
 	ret = wait_for_completion_timeout(&subsys->err_ready,
@@ -1975,8 +1977,12 @@ static int ssr_panic_handler(struct notifier_block *this,
 static struct notifier_block panic_nb = {
 	.notifier_call  = ssr_panic_handler,
 };
-
+	
+#ifdef CONFIG_WLAN_CNSS_CORE
+int subsys_restart_init(void)
+#else
 static int __init subsys_restart_init(void)
+#endif
 {
 	int ret;
 
@@ -2010,7 +2016,9 @@ err_bus:
 	destroy_workqueue(ssr_wq);
 	return ret;
 }
+#ifndef CONFIG_WLAN_CNSS_CORE
 arch_initcall(subsys_restart_init);
 
 MODULE_DESCRIPTION("Subsystem Restart Driver");
 MODULE_LICENSE("GPL v2");
+#endif

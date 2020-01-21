@@ -23,13 +23,15 @@
 #include <linux/pm_wakeup.h>
 
 #include <net/sock.h>
+#ifndef CONFIG_KERNEL_49
 #include <uapi/linux/sched/types.h>
-
+#endif
 #include "qrtr.h"
 
 #define QRTR_LOG_PAGE_CNT 4
 #define QRTR_INFO(ctx, x, ...)				\
-	ipc_log_string(ctx, x, ##__VA_ARGS__)
+	pr_info(x, ##__VA_ARGS__)
+	//ipc_log_string(ctx, x, ##__VA_ARGS__)
 
 #define QRTR_PROTO_VER_1 1
 #define QRTR_PROTO_VER_2 3
@@ -121,7 +123,7 @@ static inline struct qrtr_sock *qrtr_sk(struct sock *sk)
 	BUILD_BUG_ON(offsetof(struct qrtr_sock, sk) != 0);
 	return container_of(sk, struct qrtr_sock, sk);
 }
-
+#define CONFIG_QRTR_NODE_ID 1
 static unsigned int qrtr_local_nid = CONFIG_QRTR_NODE_ID;
 
 /* for node ids */
@@ -165,7 +167,11 @@ struct qrtr_node {
 	atomic_t hello_rcvd;
 
 	struct radix_tree_root qrtr_tx_flow;
+#ifdef CONFIG_KERNEL_49
+	struct __wait_queue_head resume_tx;
+#else
 	struct wait_queue_head resume_tx;
+#endif
 	struct mutex qrtr_tx_lock;	/* for qrtr_tx_flow */
 
 	struct sk_buff_head rx_queue;
@@ -301,7 +307,7 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 			}
 	}
 }
-
+#ifndef CONFIG_KERNEL_49
 static bool refcount_dec_and_rwsem_lock(refcount_t *r,
 					struct rw_semaphore *sem)
 {
@@ -373,7 +379,7 @@ static void __qrtr_node_release(struct kref *kref)
 	skb_queue_purge(&node->rx_queue);
 	kfree(node);
 }
-
+#endif
 /* Increment reference to node. */
 static struct qrtr_node *qrtr_node_acquire(struct qrtr_node *node)
 {
@@ -387,7 +393,14 @@ static void qrtr_node_release(struct qrtr_node *node)
 {
 	if (!node)
 		return;
+#ifdef CONFIG_KERNEL_49
+/*workaround here*/
+	//down_write(&qrtr_node_lock);
+//	__qrtr_node_release(&node->ref);
+#else
 	kref_put_rwsem_lock(&node->ref, __qrtr_node_release, &qrtr_node_lock);
+#endif
+
 }
 
 /**
@@ -549,7 +562,7 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 		}
 	}
 
-	hdr = skb_push(skb, sizeof(*hdr));
+	hdr = (void *)skb_push(skb, sizeof(*hdr));
 	hdr->version = cpu_to_le32(QRTR_PROTO_VER_1);
 	hdr->type = cpu_to_le32(type);
 	hdr->src_node_id = cpu_to_le32(from->sq_node);
@@ -635,9 +648,11 @@ static void qrtr_node_assign(struct qrtr_node *node, unsigned int nid)
 	up_write(&qrtr_node_lock);
 
 	snprintf(name, sizeof(name), "qrtr_%d", nid);
+#ifdef CONFIG_IPC_LOGGING
 	if (!node->ilc) {
 		node->ilc = ipc_log_context_create(QRTR_LOG_PAGE_CNT, name, 0);
 	}
+#endif
 	/* create wakeup source for only  NID = 0.
 	 * From other nodes sensor service stream samples
 	 * cause APPS suspend problems and power drain issue.
@@ -1870,9 +1885,12 @@ static int qrtr_create(struct net *net, struct socket *sock,
 static const struct nla_policy qrtr_policy[IFA_MAX + 1] = {
 	[IFA_LOCAL] = { .type = NLA_U32 },
 };
-
+#ifdef CONFIG_KERNEL_49
+static int qrtr_addr_doit(struct sk_buff *skb, struct nlmsghdr *nlh)
+#else
 static int qrtr_addr_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 			  struct netlink_ext_ack *extack)
+#endif
 {
 	struct nlattr *tb[IFA_MAX + 1];
 	struct ifaddrmsg *ifm;
@@ -1882,8 +1900,11 @@ static int qrtr_addr_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EPERM;
 
 	ASSERT_RTNL();
-
+#ifdef CONFIG_KERNEL_49
+	rc = nlmsg_parse(nlh, sizeof(*ifm), tb, IFA_MAX, qrtr_policy);
+#else
 	rc = nlmsg_parse(nlh, sizeof(*ifm), tb, IFA_MAX, qrtr_policy, extack);
+#endif
 	if (rc < 0)
 		return rc;
 
@@ -1900,8 +1921,11 @@ static const struct net_proto_family qrtr_family = {
 	.family	= AF_QIPCRTR,
 	.create	= qrtr_create,
 };
-
+#ifdef CONFIG_WLAN_CNSS_CORE
+int qrtr_proto_init(void)
+#else
 static int __init qrtr_proto_init(void)
+#endif
 {
 	int rc;
 
@@ -1919,15 +1943,23 @@ static int __init qrtr_proto_init(void)
 
 	return 0;
 }
+#ifndef CONFIG_WLAN_CNSS_CORE
 postcore_initcall(qrtr_proto_init);
+#endif
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+void qrtr_proto_fini(void)
+#else
 static void __exit qrtr_proto_fini(void)
+#endif
 {
 	rtnl_unregister(PF_QIPCRTR, RTM_NEWADDR);
 	sock_unregister(qrtr_family.family);
 	proto_unregister(&qrtr_proto);
 }
+#ifndef CONFIG_WLAN_CNSS_CORE
 module_exit(qrtr_proto_fini);
 
 MODULE_DESCRIPTION("QTI IPC-router driver");
 MODULE_LICENSE("GPL v2");
+#endif

@@ -14,7 +14,9 @@
 #include <linux/diagchar.h>
 #include <linux/kmemleak.h>
 #include <linux/delay.h>
+#ifndef CONFIG_KERNEL_49
 #include <linux/sched/signal.h>
+#endif
 #include "diagchar.h"
 #include "diagfwd.h"
 #include "diagfwd_cntl.h"
@@ -931,7 +933,7 @@ void diag_cntl_process_read_data(struct diagfwd_info *p_info, void *buf,
 		read_len += header_len + ctrl_pkt->len;
 	}
 }
-
+#ifdef CONFIG_DIAG_OVER_USB
 static int diag_compute_real_time(int idx)
 {
 	int real_time = MODE_REALTIME;
@@ -949,7 +951,11 @@ static int diag_compute_real_time(int idx)
 		 * connection.
 		 */
 		real_time = MODE_REALTIME;
-	} else if (driver->usb_connected || driver->pcie_connected) {
+	} else if (
+#ifdef CONFIG_DIAG_OVER_USB		
+	driver->usb_connected || 
+#endif
+	driver->pcie_connected) {
 		/*
 		 * If USB is connected, check individual process. If Memory
 		 * Device Mode is active, set the mode requested by Memory
@@ -969,7 +975,7 @@ static int diag_compute_real_time(int idx)
 	}
 	return real_time;
 }
-
+#endif
 static void diag_create_diag_mode_ctrl_pkt(unsigned char *dest_buf,
 					   uint8_t diag_id, int real_time)
 {

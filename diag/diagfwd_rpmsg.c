@@ -877,5 +877,20 @@ static struct rpmsg_driver diag_rpmsg_drv = {
 	.callback	= diag_rpmsg_notify_cb,
 	.remove		= diag_rpmsg_remove,
 };
-module_rpmsg_driver(diag_rpmsg_drv);
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+int diag_rpmsg_driver_init(void)
+{
+	return register_rpmsg_driver(&diag_rpmsg_drv);
+}
+
+void diag_rpmsg_driver_exit(void)
+{
+	unregister_rpmsg_driver(&diag_rpmsg_drv);
+}
+
+#else
+
+
+module_rpmsg_driver(diag_rpmsg_drv);
+#endif

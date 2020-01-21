@@ -1691,12 +1691,13 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 	dump_entry.id = MSM_DUMP_DATA_CNSS_WLAN;
 	dump_entry.addr = virt_to_phys(dump_data);
 
+#ifdef CONFIG_PCI_MSM
 	ret = msm_dump_data_register(MSM_DUMP_TABLE_APPS, &dump_entry);
 	if (ret) {
 		cnss_pr_err("Failed to setup dump table, err = %d\n", ret);
 		goto free_ramdump;
 	}
-
+#endif
 	info_v2->ramdump_dev =
 		create_ramdump_device(subsys_info->subsys_desc.name,
 				      subsys_info->subsys_desc.dev);
@@ -2159,7 +2160,11 @@ static struct platform_driver cnss_platform_driver = {
 	},
 };
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+int cnss_initialize(void)
+#else
 static int __init cnss_initialize(void)
+#endif
 {
 	int ret = 0;
 
@@ -2171,14 +2176,19 @@ static int __init cnss_initialize(void)
 	return ret;
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+void cnss_exit(void)
+#else
 static void __exit cnss_exit(void)
+#endif
 {
 	platform_driver_unregister(&cnss_platform_driver);
 	cnss_debug_deinit();
 }
-
+#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(cnss_initialize);
 module_exit(cnss_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("CNSS2 Platform Driver");
+#endif

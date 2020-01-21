@@ -39,7 +39,13 @@ extern void *diag_ipc_log;
 		}							\
 	} while (0)
 #else
-#define DIAG_LOG(log_lvl, msg, ...)
+extern uint16_t diag_debug_mask;
+#define DIAG_LOG(log_lvl, _msg, ...) do { \
+	if (log_lvl & diag_debug_mask) { \
+		pr_info("[%s] "_msg, __func__, ##__VA_ARGS__); \
+	} \
+} while (0)
+
 #endif
 
 #endif

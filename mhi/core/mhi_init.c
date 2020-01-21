@@ -1813,7 +1813,11 @@ struct mhi_device *mhi_alloc_device(struct mhi_controller *mhi_cntrl)
 	return mhi_dev;
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+int mhi_init(void)
+#else
 static int __init mhi_init(void)
+#endif
 {
 	int ret;
 
@@ -1829,8 +1833,11 @@ static int __init mhi_init(void)
 		mhi_dtr_init();
 	return ret;
 }
+
+#ifndef CONFIG_WLAN_CNSS_CORE
 postcore_initcall(mhi_init);
 
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("MHI_CORE");
 MODULE_DESCRIPTION("MHI Host Interface");
+#endif

@@ -91,6 +91,7 @@ static int has_device_tree(void)
 
 int chk_config_get_id(void)
 {
+#if 0
 	switch (socinfo_get_msm_cpu()) {
 	case MSM_CPU_8960:
 	case MSM_CPU_8960AB:
@@ -115,6 +116,8 @@ int chk_config_get_id(void)
 			return 0;
 		}
 	}
+#endif
+return 1001;
 }
 
 /*
@@ -125,7 +128,7 @@ int chk_apps_only(void)
 {
 	if (driver->use_device_tree)
 		return 1;
-
+#if 0
 	switch (socinfo_get_msm_cpu()) {
 	case MSM_CPU_8960:
 	case MSM_CPU_8960AB:
@@ -135,6 +138,8 @@ int chk_apps_only(void)
 	default:
 		return 0;
 	}
+#endif 
+	return 1;
 }
 
 /*
@@ -878,8 +883,10 @@ int diag_cmd_get_mobile_id(unsigned char *src_buf, int src_len,
 	rsp.padding[1] = 0;
 	rsp.padding[2] = 0;
 	rsp.family = 0;
+	rsp.chip_id = 1;
+#if 0
 	rsp.chip_id = (uint32_t)socinfo_get_id();
-
+#endif
 	memcpy(dest_buf, &rsp, sizeof(rsp));
 	write_len += sizeof(rsp);
 
@@ -900,7 +907,7 @@ int diag_check_common_cmd(struct diag_pkt_header_t *header)
 
 	return 0;
 }
-
+#if defined(CONFIG_DIAG_OVER_USB)
 static int diag_cmd_chk_stats(unsigned char *src_buf, int src_len,
 			      unsigned char *dest_buf, int dest_len)
 {
@@ -958,7 +965,6 @@ static int diag_cmd_chk_stats(unsigned char *src_buf, int src_len,
 
 	return write_len;
 }
-
 static int diag_cmd_disable_hdlc(unsigned char *src_buf, int src_len,
 				 unsigned char *dest_buf, int dest_len)
 {
@@ -986,7 +992,7 @@ static int diag_cmd_disable_hdlc(unsigned char *src_buf, int src_len,
 
 	return write_len;
 }
-
+#endif
 void diag_send_error_rsp(unsigned char *buf, int len,
 			int pid)
 {
@@ -1004,7 +1010,10 @@ void diag_send_error_rsp(unsigned char *buf, int len,
 int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 {
 	int i, p_mask = 0;
-	int mask_ret, peripheral = -EINVAL;
+#if defined(CONFIG_DIAG_OVER_USB)
+	int peripheral = -EINVAL;
+#endif
+	int mask_ret;
 	int write_len = 0;
 	unsigned char *temp = NULL;
 	struct diag_cmd_reg_entry_t entry;
@@ -1394,9 +1403,11 @@ static int diagfwd_mux_open(int id, int mode)
 	unsigned long flags;
 
 	switch (mode) {
+#ifdef CONFIG_DIAG_OVER_USB		
 	case DIAG_USB_MODE:
 		driver->usb_connected = 1;
 		break;
+#endif
 	case DIAG_MEMORY_DEVICE_MODE:
 		break;
 	case DIAG_PCIE_MODE:
@@ -1430,9 +1441,11 @@ static int diagfwd_mux_close(int id, int mode)
 	uint8_t i;
 
 	switch (mode) {
+#ifdef CONFIG_DIAG_OVER_USB		
 	case DIAG_USB_MODE:
 		driver->usb_connected = 0;
 		break;
+#endif
 	case DIAG_MEMORY_DEVICE_MODE:
 		break;
 	case DIAG_PCIE_MODE:

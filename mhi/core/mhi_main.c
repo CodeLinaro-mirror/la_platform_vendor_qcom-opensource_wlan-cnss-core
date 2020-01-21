@@ -32,6 +32,7 @@ int __must_check mhi_read_reg(struct mhi_controller *mhi_cntrl,
 			      u32 *out)
 {
 	u32 tmp = readl_relaxed(base + offset);
+	pr_debug("[mhi_read_reg]:d.s 0x%p off: 0x%x 0x%x\n", base, offset, tmp);
 
 	/* unexpected value, query the link status */
 	if (PCI_INVALID_READ(tmp) &&
@@ -103,6 +104,8 @@ void mhi_write_reg(struct mhi_controller *mhi_cntrl,
 		   u32 offset,
 		   u32 val)
 {
+	pr_debug("[mhi_write_reg]:d.s 0x%p off: 0x%x 0x%x\n", base, offset, val);
+
 	writel_relaxed(val, base + offset);
 }
 
@@ -684,9 +687,11 @@ static void mhi_assign_of_node(struct mhi_controller *mhi_cntrl,
 	const char *dt_name;
 	int ret;
 
-	controller = of_find_node_by_name(mhi_cntrl->of_node, "mhi_devices");
+	/*controller = of_find_node_by_name(mhi_cntrl->of_node, "mhi_devices");
 	if (!controller)
 		return;
+*/
+	controller = mhi_cntrl->of_node;
 
 	for_each_available_child_of_node(controller, node) {
 		ret = of_property_read_string(node, "mhi,chan", &dt_name);
@@ -1537,10 +1542,14 @@ irqreturn_t mhi_msi_handlr(int irq_number, void *dev)
 		&mhi_cntrl->mhi_ctxt->er_ctxt[mhi_event->er_index];
 	struct mhi_ring *ev_ring = &mhi_event->ring;
 	void *dev_rp = mhi_to_virtual(ev_ring, er_ctxt->rp);
+	//pr_debug("mhi_msi_handlr\n");
 
 	/* confirm ER has pending events to process before scheduling work */
 	if (ev_ring->rp == dev_rp)
+	{
+		//pr_debug("mhi_msi_handlr1\n");
 		return IRQ_HANDLED;
+	}
 
 	/* client managed event ring, notify pending data */
 	if (mhi_event->cl_manage) {
@@ -1549,10 +1558,13 @@ irqreturn_t mhi_msi_handlr(int irq_number, void *dev)
 
 		if (mhi_dev)
 			mhi_dev->status_cb(mhi_dev, MHI_CB_PENDING_DATA);
+		//pr_debug("mhi_msi_handlr2\n");
 
 		return IRQ_HANDLED;
 	}
-
+	
+	//pr_debug("mhi_msi_handlr priority %d\n", mhi_event->priority);
+	
 	if (IS_MHI_ER_PRIORITY_HIGH(mhi_event))
 		tasklet_hi_schedule(&mhi_event->task);
 	else
@@ -1587,6 +1599,7 @@ irqreturn_t mhi_intvec_threaded_handlr(int irq_number, void *dev)
 					       MHI_PM_SYS_ERR_DETECT);
 	}
 	write_unlock_irq(&mhi_cntrl->pm_lock);
+	//pr_debug("mhi_intvec_threaded_handlr ee %d, state %d, pm_state %d \n", mhi_cntrl->ee, state, pm_state);
 
 	/* if device in rddm don't bother processing sys error */
 	if (mhi_cntrl->ee == MHI_EE_RDDM) {
@@ -1622,6 +1635,7 @@ irqreturn_t mhi_intvec_handlr(int irq_number, void *dev)
 
 	/* wake up any events waiting for state change */
 	MHI_VERB("Enter\n");
+	//pr_debug("mhi_intvec_handlr\n");
 	wake_up_all(&mhi_cntrl->state_event);
 	MHI_VERB("Exit\n");
 
@@ -2226,7 +2240,7 @@ int mhi_get_remote_time_sync(struct mhi_device *mhi_dev,
 	local_irq_disable();
 
 	*t_host = mhi_cntrl->time_get(mhi_cntrl, mhi_cntrl->priv_data);
-	*t_dev = readq_relaxed_no_log(mhi_tsync->time_reg);
+	*t_dev = readq_relaxed(mhi_tsync->time_reg);
 
 	local_irq_enable();
 	preempt_enable();
@@ -2311,7 +2325,7 @@ int mhi_get_remote_time(struct mhi_device *mhi_dev,
 
 	tsync_node->local_time =
 		mhi_cntrl->time_get(mhi_cntrl, mhi_cntrl->priv_data);
-	writel_relaxed_no_log(tsync_node->sequence, mhi_tsync->db);
+	writel_relaxed(tsync_node->sequence, mhi_tsync->db);
 	/* write must go thru immediately */
 	wmb();
 

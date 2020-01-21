@@ -13,7 +13,9 @@
 #ifndef _CNSS_PCI_H
 #define _CNSS_PCI_H
 
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 #include <asm/dma-iommu.h>
+#endif
 #include <linux/iommu.h>
 #include <linux/mhi.h>
 #include <linux/msm_pcie.h>
@@ -71,7 +73,9 @@ struct cnss_pci_data {
 	atomic_t auto_suspended;
 	u8 drv_connected_last;
 	bool monitor_wake_intr;
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 	struct dma_iommu_mapping *smmu_mapping;
+#endif
 	bool smmu_s1_enable;
 	dma_addr_t smmu_iova_start;
 	size_t smmu_iova_len;

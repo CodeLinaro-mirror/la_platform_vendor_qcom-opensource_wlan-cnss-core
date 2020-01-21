@@ -192,18 +192,30 @@ static void __cld80211_exit(void)
 	genl_unregister_family(&cld80211_fam);
 }
 
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+int cld80211_init(void)
+#else
 static int __init cld80211_init(void)
+#endif
 {
 	return __cld80211_init();
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+void cld80211_exit(void)
+#else
 static void __exit cld80211_exit(void)
+#endif
 {
 	__cld80211_exit();
 }
 
+
+#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(cld80211_init);
 module_exit(cld80211_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("CNSS generic netlink module");
+#endif

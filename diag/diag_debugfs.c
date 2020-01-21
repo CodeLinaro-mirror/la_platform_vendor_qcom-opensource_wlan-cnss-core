@@ -401,7 +401,7 @@ static ssize_t diag_dbgfs_read_mempool(struct file *file, char __user *ubuf,
 	kfree(buf);
 	return ret;
 }
-
+#ifdef CONFIG_DIAG_OVER_USB		
 static ssize_t diag_dbgfs_read_usbinfo(struct file *file, char __user *ubuf,
 				       size_t count, loff_t *ppos)
 {
@@ -478,7 +478,7 @@ static ssize_t diag_dbgfs_read_usbinfo(struct file *file, char __user *ubuf,
 	kfree(buf);
 	return ret;
 }
-
+#endif
 static ssize_t diag_dbgfs_read_pcieinfo(struct file *file, char __user *ubuf,
 				       size_t count, loff_t *ppos)
 {
@@ -1017,11 +1017,11 @@ const struct file_operations diag_dbgfs_table_ops = {
 const struct file_operations diag_dbgfs_mempool_ops = {
 	.read = diag_dbgfs_read_mempool,
 };
-
+#ifdef CONFIG_DIAG_OVER_USB		
 const struct file_operations diag_dbgfs_usbinfo_ops = {
 	.read = diag_dbgfs_read_usbinfo,
 };
-
+#endif
 const struct file_operations diag_dbgfs_pcieinfo_ops = {
 	.read = diag_dbgfs_read_pcieinfo,
 };
@@ -1072,12 +1072,12 @@ int diag_debugfs_init(void)
 				    &diag_dbgfs_mempool_ops);
 	if (!entry)
 		goto err;
-
+#ifdef CONFIG_DIAG_OVER_USB		
 	entry = debugfs_create_file("usbinfo", 0444, diag_dbgfs_dent, 0,
 				    &diag_dbgfs_usbinfo_ops);
 	if (!entry)
 		goto err;
-
+#endif
 	entry = debugfs_create_file("pcieinfo", 0444, diag_dbgfs_dent, 0,
 				    &diag_dbgfs_pcieinfo_ops);
 	if (!entry)

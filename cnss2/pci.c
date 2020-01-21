@@ -61,6 +61,7 @@
 #endif
 
 static DEFINE_SPINLOCK(pci_link_down_lock);
+static DEFINE_SPINLOCK(pci_reg_window_lock);
 
 #define MHI_TIMEOUT_OVERWRITE_MS	(plat_priv->ctrl_params.mhi_timeout)
 
@@ -227,10 +228,13 @@ static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 		return 0;
 	}
 
+	spin_lock_bh(&pci_reg_window_lock);
 	cnss_pci_select_window(pci_priv, offset);
 
 	*val = readl_relaxed(pci_priv->bar + WINDOW_START +
 			     (offset & WINDOW_RANGE_MASK));
+	spin_unlock_bh(&pci_reg_window_lock);
+
 	return 0;
 }
 
@@ -481,6 +485,18 @@ int cnss_pci_is_device_down(struct device *dev)
 		pci_priv->pci_link_down_ind;
 }
 EXPORT_SYMBOL(cnss_pci_is_device_down);
+
+void cnss_pci_lock_reg_window(struct device *dev, unsigned long *flags)
+{
+	spin_lock_bh(&pci_reg_window_lock);
+}
+EXPORT_SYMBOL(cnss_pci_lock_reg_window);
+
+void cnss_pci_unlock_reg_window(struct device *dev, unsigned long *flags)
+{
+	spin_unlock_bh(&pci_reg_window_lock);
+}
+EXPORT_SYMBOL(cnss_pci_unlock_reg_window);
 
 int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv)
 {
@@ -771,13 +787,13 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("Failed to power on device, err = %d\n", ret);
 		goto out;
 	}
-
+#ifdef PCI_SUSPEND_RESUME
 	ret = cnss_resume_pci_link(pci_priv);
 	if (ret) {
 		cnss_pr_err("Failed to resume PCI link, err = %d\n", ret);
 		goto power_off;
 	}
-
+#endif
 	timeout = cnss_get_boot_timeout(&pci_priv->pci_dev->dev);
 
 	ret = cnss_pci_start_mhi(pci_priv);
@@ -812,8 +828,10 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 
 stop_mhi:
 	cnss_pci_stop_mhi(pci_priv);
+#ifdef PCI_SUSPEND_RESUME
 	cnss_suspend_pci_link(pci_priv);
 power_off:
+#endif
 	cnss_power_off_device(plat_priv);
 out:
 	return ret;
@@ -843,11 +861,11 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 	}
 
 	cnss_pci_stop_mhi(pci_priv);
-
+#ifdef PCI_SUSPEND_RESUME
 	ret = cnss_suspend_pci_link(pci_priv);
 	if (ret)
 		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
-
+#endif
 	cnss_power_off_device(plat_priv);
 
 	pci_priv->remap_window = 0;
@@ -1131,6 +1149,7 @@ int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 
 	return 0;
 }
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 
 static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 				       struct device *dev, unsigned long iova,
@@ -1255,7 +1274,8 @@ static void cnss_pci_deinit_smmu(struct cnss_pci_data *pci_priv)
 
 	pci_priv->smmu_mapping = NULL;
 }
-
+#endif
+#ifdef CONFIG_PCI_MSM
 static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
 {
 	unsigned long flags;
@@ -1306,7 +1326,8 @@ static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
 		cnss_pr_err("Received invalid PCI event: %d\n", notify->event);
 	}
 }
-
+#endif
+#ifdef CONFIG_PCI_MSM
 static int cnss_reg_pci_event(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -1327,7 +1348,7 @@ static int cnss_reg_pci_event(struct cnss_pci_data *pci_priv)
 
 	return ret;
 }
-
+#endif
 static void cnss_dereg_pci_event(struct cnss_pci_data *pci_priv)
 {
 	msm_pcie_deregister_event(&pci_priv->msm_pci_event);
@@ -1991,7 +2012,7 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 			       CNSS_REASON_TIMEOUT);
 }
-
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 struct dma_iommu_mapping *cnss_smmu_get_mapping(struct device *dev)
 {
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
@@ -2046,6 +2067,23 @@ int cnss_smmu_map(struct device *dev,
 	return 0;
 }
 EXPORT_SYMBOL(cnss_smmu_map);
+
+#else
+struct dma_iommu_mapping *cnss_smmu_get_mapping(struct device *dev)
+{
+	return NULL;
+}
+EXPORT_SYMBOL(cnss_smmu_get_mapping);
+
+int cnss_smmu_map(struct device *dev,
+		  phys_addr_t paddr, uint32_t *iova_addr, size_t size)	  
+{
+	return 0;
+}
+
+EXPORT_SYMBOL(cnss_smmu_map);
+
+#endif 
 
 int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info)
 {
@@ -2263,6 +2301,11 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	if (device_id == QCA6174_DEVICE_ID)
 		pci_dma_mask = PCI_DMA_MASK_32_BIT;
 
+#ifndef CONFIG_PCI_MSM
+	pci_dma_mask = PCI_DMA_MASK_32_BIT;
+#endif
+
+
 	ret = pci_set_dma_mask(pci_dev, DMA_BIT_MASK(pci_dma_mask));
 	if (ret) {
 		cnss_pr_err("Failed to set PCI DMA mask (%d), err = %d\n",
@@ -2437,6 +2480,19 @@ static void cnss_pci_dump_registers(struct cnss_pci_data *pci_priv)
 	cnss_pci_dump_ce_reg(pci_priv, CNSS_CE_10);
 }
 
+#define QCA6290_SRAM_ADDR		0x1800000
+#define QCA6290_RDDM_HDR_SIZE   	392
+#define QCA6290_FW_SEG_LOAD_ADDR	0x20000000
+
+struct paging_header {
+	u64 version;
+	u64 seg_num;
+};
+
+struct paging_header hdr;
+
+
+
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -2444,8 +2500,10 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		&plat_priv->ramdump_info_v2.dump_data;
 	struct cnss_dump_seg *dump_seg =
 		plat_priv->ramdump_info_v2.dump_data_vaddr;
+	struct cnss_dump_seg *hdr_segment;
 	struct image_info *fw_image, *rddm_image;
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+	unsigned int addr;
 	int ret, i;
 
 	if (test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state)) {
@@ -2472,8 +2530,22 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	cnss_pr_dbg("Collect FW image dump segment, nentries %d\n",
 		    fw_image->entries);
-
+	addr = QCA6290_FW_SEG_LOAD_ADDR;
+	hdr.version = 0;
+	hdr.seg_num = fw_image->entries - 1;
 	for (i = 0; i < fw_image->entries; i++) {
+		if (i == 0) {
+			hdr_segment = dump_seg++;
+			hdr_segment->address = addr;
+			hdr_segment->v_address = &hdr;
+			hdr_segment->size = sizeof(hdr);
+			hdr_segment->type = CNSS_FW_IMAGE;
+			addr += sizeof(hdr);
+			dump_data->nentries += 1;
+		}
+		dump_seg->address = addr;
+		addr += fw_image->mhi_buf[i].len;
+	
 		dump_seg->address = fw_image->mhi_buf[i].dma_addr;
 		dump_seg->v_address = fw_image->mhi_buf[i].buf;
 		dump_seg->size = fw_image->mhi_buf[i].len;
@@ -2488,12 +2560,18 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	cnss_pr_dbg("Collect RDDM image dump segment, nentries %d\n",
 		    rddm_image->entries);
-
+	addr = QCA6290_SRAM_ADDR - QCA6290_RDDM_HDR_SIZE;
 	for (i = 0; i < rddm_image->entries; i++) {
 		dump_seg->address = rddm_image->mhi_buf[i].dma_addr;
 		dump_seg->v_address = rddm_image->mhi_buf[i].buf;
 		dump_seg->size = rddm_image->mhi_buf[i].len;
 		dump_seg->type = CNSS_FW_RDDM;
+		if (i == 0) {
+			dump_seg->address = addr - PAGE_SIZE;//0x1000
+		} else {
+			dump_seg->address = addr;
+			addr += dump_seg->size;
+		}		
 		cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 			    i, dump_seg->address,
 			    dump_seg->v_address, dump_seg->size);
@@ -2607,11 +2685,12 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl, void *priv,
 		cnss_pci_update_status(pci_priv, CNSS_FW_DOWN);
 		return;
 	case MHI_CB_EE_RDDM:
+		set_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state); // tmp test fix
 		del_timer(&pci_priv->dev_rddm_timer);
 		cnss_reason = CNSS_REASON_RDDM;
 		break;
 	default:
-		cnss_pr_err("Unsupported MHI status cb reason: %d\n", reason);
+		cnss_pr_info("Unsupported MHI status cb reason: %d\n", reason);
 		return;
 	}
 
@@ -2708,7 +2787,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("Failed to get MSI for MHI\n");
 		return ret;
 	}
-
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 	if (pci_priv->smmu_s1_enable) {
 		mhi_ctrl->iova_start = pci_priv->smmu_iova_start;
 		mhi_ctrl->iova_stop = pci_priv->smmu_iova_start +
@@ -2717,7 +2796,10 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		mhi_ctrl->iova_start = memblock_start_of_DRAM();
 		mhi_ctrl->iova_stop = memblock_end_of_DRAM();
 	}
-
+#else
+	mhi_ctrl->iova_start = memblock_start_of_DRAM();//0;
+	mhi_ctrl->iova_stop = memblock_end_of_DRAM();	//(dma_addr_t)U64_MAX;
+#endif
 	mhi_ctrl->link_status = cnss_mhi_link_status;
 	mhi_ctrl->status_cb = cnss_mhi_notify_status;
 	mhi_ctrl->runtime_get = cnss_mhi_pm_runtime_get;
@@ -2731,12 +2813,12 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 
 	mhi_ctrl->seg_len = SZ_512K;
 	mhi_ctrl->fbc_download = true;
-
+#ifdef CONFIG_IPC_LOGGING
 	mhi_ctrl->log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
 						   "cnss-mhi", 0);
 	if (!mhi_ctrl->log_buf)
 		cnss_pr_err("Unable to create CNSS MHI IPC log context\n");
-
+#endif
 	ret = of_register_mhi_controller(mhi_ctrl);
 	if (ret) {
 		cnss_pr_err("Failed to register to MHI bus, err = %d\n", ret);
@@ -3015,6 +3097,7 @@ static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 
 	return -EINVAL;
 }
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 
 /* For converged dt, property 'reg' is declared in sub node,
  * won't be parsed during probe.
@@ -3098,6 +3181,7 @@ static int cnss_pci_get_smmu_cfg(struct cnss_plat_data *plat_priv)
 out:
 	return ret;
 }
+#endif
 
 static int cnss_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
@@ -3134,7 +3218,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	ret = cnss_dev_specific_power_on(plat_priv);
 	if (ret)
 		goto reset_ctx;
-
+#if defined(CONFIG_MSM_SUBSYSTEM_RESTART)
 	ret = cnss_register_subsys(plat_priv);
 	if (ret)
 		goto reset_ctx;
@@ -3142,6 +3226,9 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	ret = cnss_register_ramdump(plat_priv);
 	if (ret)
 		goto unregister_subsys;
+#endif
+
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 
 	ret = cnss_pci_get_smmu_cfg(plat_priv);
 	if (!ret) {
@@ -3151,12 +3238,14 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 			goto unregister_ramdump;
 		}
 	}
-
+#endif
+#ifdef CONFIG_PCI_MSM
 	ret = cnss_reg_pci_event(pci_priv);
 	if (ret) {
 		cnss_pr_err("Failed to register PCI event, err = %d\n", ret);
 		goto deinit_smmu;
 	}
+#endif
 
 	ret = cnss_pci_enable_bus(pci_priv);
 	if (ret)
@@ -3203,10 +3292,12 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 
 		if (EMULATION_HW)
 			break;
+#ifdef PCI_SUSPEND_RESUME
 		ret = cnss_suspend_pci_link(pci_priv);
 		if (ret)
 			cnss_pr_err("Failed to suspend PCI link, err = %d\n",
 				    ret);
+#endif
 		cnss_power_off_device(plat_priv);
 		break;
 	default:
@@ -3222,13 +3313,17 @@ disable_bus:
 	cnss_pci_disable_bus(pci_priv);
 dereg_pci_event:
 	cnss_dereg_pci_event(pci_priv);
+#ifdef CONFIG_ARM_DMA_USE_IOMMU	
 deinit_smmu:
 	if (pci_priv->smmu_mapping)
 		cnss_pci_deinit_smmu(pci_priv);
 unregister_ramdump:
 	cnss_unregister_ramdump(plat_priv);
+#endif		
+#if defined(CONFIG_MSM_SUBSYSTEM_RESTART)
 unregister_subsys:
 	cnss_unregister_subsys(plat_priv);
+#endif
 reset_ctx:
 	plat_priv->bus_priv = NULL;
 out:
@@ -3260,15 +3355,17 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 
 	cnss_pci_disable_bus(pci_priv);
 	cnss_dereg_pci_event(pci_priv);
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 	if (pci_priv->smmu_mapping)
 		cnss_pci_deinit_smmu(pci_priv);
+#endif
 	cnss_unregister_ramdump(plat_priv);
 	cnss_unregister_subsys(plat_priv);
 	plat_priv->bus_priv = NULL;
 }
 
 static const struct pci_device_id cnss_pci_id_table[] = {
-	{ QCA6174_VENDOR_ID, QCA6174_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
+	/*{ QCA6174_VENDOR_ID, QCA6174_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },*/
 	{ QCA6290_VENDOR_ID, QCA6290_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCA6390_VENDOR_ID, QCA6390_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCN7605_VENDOR_ID, QCN7605_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID},
@@ -3305,14 +3402,14 @@ int cnss_pci_init(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("Failed to find PCIe RC number, err = %d\n", ret);
 		goto out;
 	}
-
+#ifdef CONFIG_PCI_MSM
 	ret = msm_pcie_enumerate(rc_num);
 	if (ret) {
 		cnss_pr_err("Failed to enable PCIe RC%x, err = %d\n",
 			    rc_num, ret);
 		goto out;
 	}
-
+#endif
 	ret = pci_register_driver(&cnss_pci_driver);
 	if (ret) {
 		cnss_pr_err("Failed to register to PCI framework, err = %d\n",

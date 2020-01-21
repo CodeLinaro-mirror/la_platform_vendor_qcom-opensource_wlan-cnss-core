@@ -252,7 +252,7 @@ void diagmem_init(struct diagchar_dev *driver, int index)
 		return;
 	}
 	if (mempool->itemsize <= 0 || mempool->poolsize <= 0) {
-		pr_err("diag: Unable to initialize %s mempool, itemsize: %d poolsize: %d\n",
+		pr_debug("diag: Unable to initialize %s mempool, itemsize: %d poolsize: %d\n",
 		       mempool->name, mempool->itemsize,
 		       mempool->poolsize);
 		return;

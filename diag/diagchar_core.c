@@ -22,7 +22,9 @@
 #include <linux/sched.h>
 #include <linux/ratelimit.h>
 #include <linux/timer.h>
+#ifndef CONFIG_KERNEL_49
 #include <linux/sched/task.h>
+#endif
 #ifdef CONFIG_DIAG_OVER_USB
 #include <linux/usb/usbdiag.h>
 #endif
@@ -162,8 +164,8 @@ static struct mutex apps_data_mutex;
 
 #define DIAGPKT_MAX_DELAYED_RSP 0xFFFF
 
-#ifdef CONFIG_IPC_LOGGING
 uint16_t diag_debug_mask;
+#ifdef CONFIG_IPC_LOGGING
 void *diag_ipc_log;
 #endif
 
@@ -3976,8 +3978,11 @@ static ssize_t diagchar_write(struct file *file, const char __user *buf,
 		token = diag_get_remote(token);
 	else
 		token = 0;
-	if ((driver->logging_mode[token] == DIAG_USB_MODE &&
+	if (
+#ifdef CONFIG_DIAG_OVER_USB
+		(driver->logging_mode[token] == DIAG_USB_MODE &&
 		!driver->usb_connected) ||
+#endif
 		(driver->logging_mode[token] == DIAG_PCIE_MODE &&
 		!driver->pcie_connected)) {
 		if (!((pkt_type == DCI_DATA_TYPE) ||
@@ -4017,9 +4022,12 @@ static ssize_t diagchar_write(struct file *file, const char __user *buf,
 		 * stream. If USB is not connected and we are not in memory
 		 * device mode, we should not process these logs/events.
 		 */
-		if (pkt_type && ((driver->logging_mode[DIAG_LOCAL_PROC] ==
+		if (pkt_type && (
+#ifdef CONFIG_DIAG_OVER_USB
+			(driver->logging_mode[DIAG_LOCAL_PROC] ==
 			DIAG_USB_MODE &&
 			!driver->usb_connected)  ||
+#endif
 			(driver->logging_mode[DIAG_LOCAL_PROC] ==
 			DIAG_PCIE_MODE &&
 			!driver->pcie_connected)))
@@ -4234,8 +4242,9 @@ static void diag_debug_init(void)
 #else
 static void diag_debug_init(void)
 {
-
-}
+	diag_debug_mask = DIAG_DEBUG_PERIPHERALS | DIAG_DEBUG_DCI |
+			DIAG_DEBUG_USERSPACE | DIAG_DEBUG_BRIDGE;
+}	
 #endif
 
 static int diag_real_time_info_init(void)
@@ -4363,7 +4372,12 @@ static void diag_init_transport(void)
 		poolsize_usb_apps + 1 + (NUM_PERIPHERALS * 6));
 }
 #endif
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+int diagchar_init(void)
+#else
 static int __init diagchar_init(void)
+#endif
 {
 	dev_t dev;
 	int ret, i;
@@ -4509,8 +4523,11 @@ fail:
 	return ret;
 
 }
-
+#ifdef CONFIG_WLAN_CNSS_CORE
+void diagchar_exit(void)
+#else
 static void diagchar_exit(void)
+#endif
 {
 	pr_info("diagchar exiting...\n");
 	diag_mempool_exit();
@@ -4527,6 +4544,7 @@ static void diagchar_exit(void)
 	diagchar_cleanup();
 	pr_info("done diagchar exit\n");
 }
-
+#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(diagchar_init);
 module_exit(diagchar_exit);
+#endif

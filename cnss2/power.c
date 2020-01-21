@@ -17,6 +17,7 @@
 
 #include "main.h"
 #include "debug.h"
+#ifdef CHIP_MSM_POWER_CONTROL
 
 static struct cnss_vreg_cfg cnss_vreg_list[] = {
 	{"vdd-wlan-core", 1300000, 1300000, 0, 0},
@@ -499,3 +500,62 @@ int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
 
 	return cnss_power_on_device(plat_priv);
 }
+#else
+
+int cnss_get_vreg(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+void cnss_put_vreg(struct cnss_plat_data *plat_priv)
+{
+	return;
+}
+
+int cnss_vreg_on(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+int cnss_vreg_off(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+void cnss_put_pinctrl(struct cnss_plat_data *plat_priv)
+{
+	return;
+}
+
+int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
+				     bool state)
+{
+	return 0;
+}
+
+int cnss_power_on_device(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+void cnss_power_off_device(struct cnss_plat_data *plat_priv)
+{
+	return;
+}
+
+void cnss_set_pin_connect_status(struct cnss_plat_data *plat_priv)
+{
+	return;
+}
+
+int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+#endif

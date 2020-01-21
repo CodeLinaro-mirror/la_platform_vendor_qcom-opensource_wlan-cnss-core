@@ -32,6 +32,271 @@
 #include "diagfwd_mhi.h"
 #include "diag_ipc_logging.h"
 
+#include <net/sock.h>
+#include <net/netlink.h>
+
+
+/*********net link ***********/
+static struct sock *srv_sock;
+
+typedef struct sAniHdr {
+   unsigned short type;
+   unsigned short length;
+} tAniHdr;
+
+typedef struct sAniNlMsg {
+	struct nlmsghdr nlh;
+	int radio;
+	tAniHdr wmsg;
+} tAniNlHdr;
+
+
+#define MSG_SSID_WLAN       4500
+#define MSG_SSID_WLAN_LAST  4583
+#define MASK_LOW_LEVEL      0x1F
+
+struct dbglog_slot {
+	unsigned int diag_type;
+	unsigned int timestamp;
+	unsigned int length;
+	unsigned int dropped;
+	/* max ATH6KL_FWLOG_PAYLOAD_SIZE bytes */
+	uint8_t payload[0];
+} __packed;
+
+enum cnss_diag_type {
+	DIAG_TYPE_FW_EVENT,           /* send fw event- to diag */
+	DIAG_TYPE_FW_LOG,             /* send log event- to diag */
+	DIAG_TYPE_FW_DEBUG_MSG,       /* send dbg message- to diag */
+	DIAG_TYPE_INIT_REQ,           /* cnss_diag initialization- from diag */
+	DIAG_TYPE_FW_MSG,             /* fw msg command-to diag */
+	DIAG_TYPE_HOST_MSG,           /* host command-to diag */
+	DIAG_TYPE_CRASH_INJECT,       /*crash inject-from diag */
+	DIAG_TYPE_DBG_LEVEL,          /* DBG LEVEL-from diag */
+};
+
+
+int diag_local_send_done(int proc)
+{
+   /* process send done completion */
+   /* free write buffuer to pool?  */
+    DIAG_LOG(DIAG_DEBUG_BRIDGE,"diag: %s enter.\n", __func__);
+    return 0;
+}
+
+
+/* send local data */
+static int diag_local_write(void *buf, int len)
+{
+	int err = 0;
+	uint8_t retry_count = 0;
+	uint8_t max_retries = 3;
+
+	if (!buf)
+		return -EINVAL;
+
+	if (len <= 0) {
+		pr_err("diag: In %s, invalid len: %d", __func__, len);
+		return -EBADMSG;
+	}
+
+
+	do {
+		if (driver->hdlc_encode_buf_len == 0)
+			break;
+		usleep_range(10000, 10100);
+		retry_count++;
+	} while (retry_count < max_retries);
+
+	if (driver->hdlc_encode_buf_len != 0)
+		return -EAGAIN;
+
+
+        if (DIAG_MAX_HDLC_BUF_SIZE < len) {
+	        pr_err("diag: Dropping packet, HDLC encoded packet payload size crosses buffer limit. Current payload size %d\n",
+		      len);
+		return -EBADMSG;
+	}
+
+	driver->hdlc_encode_buf_len = len;
+	memcpy(driver->hdlc_encode_buf, buf, len);
+	
+	err = diagfwd_bridge_write(DIAGFWD_MDM, driver->hdlc_encode_buf,
+				   driver->hdlc_encode_buf_len);
+	if (err) {
+		pr_err_ratelimited("diag: Error writing packet to bridge DIAGFWD_MDM, err: %d\n",
+				    err);
+		driver->hdlc_encode_buf_len = 0;
+	}
+
+	return err;
+}
+
+
+int diag_local_cmd_handler(void *buf)
+{
+   int ret = 0;
+   struct dbglog_slot *slot = (struct dbglog_slot *)buf;
+   
+	switch (slot->diag_type) {
+	case DIAG_TYPE_FW_MSG: /* cmd to onfigure */
+		if (slot->length <= 0) {
+			pr_err("%s: invliad cmd len \n", __func__);
+			return -1;
+		}
+
+		printk("%s: diag_type_fw_msg cmd len is 0x%x.\n",
+			   __func__, slot->length);
+
+		ret = diag_local_write(slot->payload, slot->length); /* has done hdlc encode in user app */
+		break;
+	default:
+		pr_err("Unknown cmd[%d] error\n",
+						slot->diag_type);
+		break;
+	}
+
+   return ret;
+}
+
+
+static int nl_srv_send_bcast(struct sk_buff *skb)
+{
+	int err = -1;
+	int flags = GFP_KERNEL;
+
+	if (in_interrupt() || irqs_disabled() || in_atomic())
+		flags = GFP_ATOMIC;
+
+	NETLINK_CB(skb).portid = 0;     /* sender's pid */
+	NETLINK_CB(skb).dst_group = 0x01;    /* destination group */
+
+	if (srv_sock) {
+		err = netlink_broadcast(srv_sock, skb, 0, 0x01, flags);
+		if ((err < 0) && (err != -ESRCH)) {
+			dev_kfree_skb(skb);
+		}
+	} else {
+		dev_kfree_skb(skb);
+	}
+
+	return err;
+}
+
+static int generate_nl_msg(unsigned char *buf, size_t len)
+{
+#define WLAN_NL_CNSS_FW_MSG 29
+	struct nlmsghdr *nlh;
+	tAniNlHdr *wnl;
+	size_t len_ext = sizeof(wnl->radio) + sizeof(wnl->wmsg);
+	struct sk_buff *fw_skb = nlmsg_new(len + len_ext, GFP_KERNEL);
+
+	if (!fw_skb) {
+		pr_err("Fail to allocate\n");
+		return -1;
+	} else {
+		nlh = nlmsg_put(fw_skb, 0, 0, WLAN_NL_CNSS_FW_MSG, len + len_ext, 0);
+		if (nlh) {
+			wnl = (tAniNlHdr *)nlh;
+			wnl->radio = 0; /* To extend later */
+			wnl->wmsg.type = 0; /* To extend later */
+			wnl->wmsg.length = len;
+
+			memcpy(nlmsg_data(nlh) + len_ext, buf, len);
+			nl_srv_send_bcast(fw_skb);
+		} else {
+			kfree_skb(fw_skb);
+			pr_err("Fail to put\n");
+			return -1;
+		}
+	}
+
+	return 0;
+#undef WLAN_NL_CNSS_FW_MSG
+}
+
+void my_write_xx(int dev_id, unsigned char *data, size_t len)
+{
+	/* Check input params */
+	if (!data || len > DIAG_MAX_HDLC_BUF_SIZE)
+		return;
+
+	/* Check channel open? */
+
+	/* Check dev_id range? */
+
+	/* If channel type equal to DIAG_DATA_TYPE? */
+
+	/* transfer to user */
+	if (generate_nl_msg(data, len) != 0)
+		pr_err("Fail to send NL msg\n");
+
+	return;
+}
+#if 0
+static void mhi_enabled_notifier(void)
+{
+#define WLAN_NL_MHI_ENABLED 0xFF
+	unsigned char c = WLAN_NL_MHI_ENABLED;
+
+	/* Use one byte info - 0xFF to indicate MHI enabled */
+	my_write_xx(0, &c, sizeof(c));
+#undef WLAN_NL_MHI_ENABLED
+}
+#endif
+
+static void nl_srv_rcv(struct sk_buff *skb)
+{
+	struct nlmsghdr *nlh;
+	uint8_t *msg;
+
+	nlh = (struct nlmsghdr *)skb->data;
+	if (!nlh) {
+		pr_err("%s: Netlink header null \n", __func__);
+		return;
+	}
+
+	msg = NLMSG_DATA(nlh);
+
+	/* send */
+	diag_local_cmd_handler(msg);
+
+	return;
+}
+
+int nl_srv_create(void)
+{
+#define NETLINK_CUSTOM_FW 27
+	int retcode = 0;
+	struct netlink_kernel_cfg cfg = {
+		.groups = 0x01,
+		.input = nl_srv_rcv
+	};
+
+	srv_sock = netlink_kernel_create(&init_net, NETLINK_CUSTOM_FW,
+					    &cfg);
+
+	if (srv_sock == NULL) {
+		pr_err("netlink_kernel_create failed\n");
+		retcode = -1;
+	}
+
+	return retcode;
+#undef NETLINK_CUSTOM_FW
+}
+
+void nl_srv_destroy(void)
+{
+	if (srv_sock)
+		netlink_kernel_release(srv_sock);
+
+	srv_sock = NULL;
+}
+
+
+/***********net link ***********/
+
+
 #define SET_CH_CTXT(index, type)	(((index & 0xFF) << 8) | (type & 0xFF))
 #define GET_INFO_INDEX(val)		((val & 0xFF00) >> 8)
 #define GET_CH_TYPE(val)		((val & 0x00FF))
@@ -231,8 +496,8 @@ static int __mhi_close(struct diag_mhi_info *mhi_info, int close_flag)
 	atomic_set(&(mhi_info->read_ch.opened), 0);
 	atomic_set(&(mhi_info->write_ch.opened), 0);
 
-	cancel_work(&mhi_info->read_work);
-	cancel_work(&mhi_info->read_done_work);
+	cancel_work_sync(&mhi_info->read_work);
+	cancel_work_sync(&mhi_info->read_done_work);
 	flush_workqueue(mhi_info->mhi_wq);
 
 	if (close_flag == CLOSE_CHANNELS) {
@@ -396,6 +661,7 @@ static void mhi_read_done_work_fn(struct work_struct *work)
 		 * buffers here and do not forward them to the mux layer.
 		 */
 		if ((atomic_read(&(mhi_info->read_ch.opened)))) {
+			my_write_xx(mhi_info->dev_id, buf, len);
 			err = diag_remote_dev_read_done(mhi_info->dev_id, buf,
 						  len);
 			if (err) {
@@ -729,6 +995,10 @@ int diag_mhi_init(void)
 	struct diag_mhi_info *mhi_info = NULL;
 	char wq_name[DIAG_MHI_NAME_SZ + DIAG_MHI_STRING_SZ];
 
+	/* Create NL srv */
+	nl_srv_create();
+
+
 	for (i = 0; i < NUM_MHI_DEV; i++) {
 		mhi_info = &diag_mhi[i];
 		spin_lock_init(&mhi_info->lock);
@@ -774,6 +1044,9 @@ void diag_mhi_exit(void)
 	for (i = 0; i < NUM_MHI_DEV; i++) {
 		diag_mhi_dev_exit(i);
 	}
+
+	/* Destroy NL srv */
+	nl_srv_destroy();
 }
 
 static const struct mhi_device_id diag_mhi_match_table[] = {

@@ -229,8 +229,11 @@ static struct mhi_driver mhi_dtr_driver = {
 		.owner = THIS_MODULE,
 	}
 };
-
+#ifdef CONFIG_WLAN_CNSS_CORE
+int  mhi_dtr_init(void)
+#else
 int __init mhi_dtr_init(void)
+#endif
 {
 	return mhi_driver_register(&mhi_dtr_driver);
 }
