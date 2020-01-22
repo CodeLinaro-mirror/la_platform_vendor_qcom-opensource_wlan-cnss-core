@@ -169,7 +169,7 @@ int mhi_download_rddm_img(struct mhi_controller *mhi_cntrl, bool in_panic)
 		return __mhi_download_rddm_in_panic(mhi_cntrl);
 
 	MHI_LOG("Waiting for image download completion\n");
-
+	msleep(500);
 	/* waiting for image download completion */
 	wait_event_timeout(mhi_cntrl->state_event,
 			   mhi_read_reg_field(mhi_cntrl, base,

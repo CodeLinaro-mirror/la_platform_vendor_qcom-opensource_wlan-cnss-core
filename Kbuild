@@ -152,7 +152,9 @@ ifneq ($(CONFIG_DIAG_CHAR),)
 		     $(DIAG_DIR)/diag_dci.o \
 		     $(DIAG_DIR)/diag_masks.o \
 		     $(DIAG_DIR)/diag_debugfs.o \
-		     $(DIAG_DIR)/diag_pcie.o 
+		     $(DIAG_DIR)/diag_pcie.o \
+		     $(DIAG_DIR)/diag_local.o \
+		     $(DIAG_DIR)/diag_nl.o 
 ifeq ($(CONFIG_MHI_BUS),y)
 	DIAG_OBJS += $(DIAG_DIR)/diagfwd_mhi.o
 endif

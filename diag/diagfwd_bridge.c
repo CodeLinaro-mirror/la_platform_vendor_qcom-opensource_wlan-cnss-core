@@ -24,6 +24,7 @@
 #include "diagfwd_mhi.h"
 #include "diag_dci.h"
 #include "diag_ipc_logging.h"
+#include "diag_nl.h"
 
 #define BRIDGE_TO_MUX(x)	(x + DIAG_MUX_BRIDGE_BASE)
 
@@ -186,11 +187,15 @@ int diag_remote_dev_read_done(int id, unsigned char *buf, int len)
 
 	if (id < 0 || id >= NUM_REMOTE_DEV)
 		return -EINVAL;
+	/* send to net link */
+	send_to_diag_app(id, buf, len);
+
+	
 	ch = &bridge_info[id];
 	if (ch->type == DIAG_DATA_TYPE) {
 		err = diag_mux_write(BRIDGE_TO_MUX(id), buf, len, id);
 		if (ch->dev_ops && ch->dev_ops->queue_read)
-			ch->dev_ops->queue_read(ch->ctxt);
+			ch->dev_ops->fwd_complete(id, buf, len, ch->ctxt);//ch->dev_ops->queue_read(ch->ctxt);
 		return err;
 	}
 	/*
@@ -273,6 +278,10 @@ uint16_t diag_get_remote_device_mask(void)
 
 void diag_register_with_bridge(void)
 {
+
+	/* Create NL srv */
+	nl_srv_create();
+
 	if (IS_ENABLED(CONFIG_USB_QTI_DIAG_BRIDGE))
 		diag_register_with_hsic();
 	else if (IS_ENABLED(CONFIG_MHI_BUS))
@@ -285,4 +294,6 @@ void diag_unregister_bridge(void)
 		diag_unregister_hsic();
 	else if (IS_ENABLED(CONFIG_MHI_BUS))
 		diag_unregister_mhi();
+	/* Destroy NL srv */
+	nl_srv_destroy();
 }

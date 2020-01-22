@@ -10,6 +10,8 @@
  * GNU General Public License for more details.
  */
 #ifndef DIAG_MUX_H
+#include "diagchar.h"
+
 #define DIAG_MUX_H
 #define DIAG_USB_MODE			0
 #define DIAG_MEMORY_DEVICE_MODE		1
@@ -76,4 +78,30 @@ int diag_mux_close_all(void);
 int diag_pcie_register_ops(int proc, int ctx, struct diag_mux_ops *ops);
 int diag_usb_register_ops(int proc, int ctx, struct diag_mux_ops *ops);
 int diag_mux_switch_logging(int proc, int *new_mode, int *peripheral_mask);
+
+
+struct dbglog_slot {
+	unsigned int diag_type;
+	unsigned int timestamp;
+	unsigned int length;
+	unsigned int dropped;
+	/* max ATH6KL_FWLOG_PAYLOAD_SIZE bytes */
+	uint8_t payload[0];
+} __packed;
+
+enum cnss_diag_type {
+	DIAG_TYPE_FW_EVENT,           /* send fw event- to diag */
+	DIAG_TYPE_FW_LOG,             /* send log event- to diag */
+	DIAG_TYPE_FW_DEBUG_MSG,       /* send dbg message- to diag */
+	DIAG_TYPE_INIT_REQ,           /* cnss_diag initialization- from diag */
+	DIAG_TYPE_FW_MSG,             /* fw msg command-to diag */
+	DIAG_TYPE_HOST_MSG,           /* host command-to diag */
+	DIAG_TYPE_CRASH_INJECT,       /*crash inject-from diag */
+	DIAG_TYPE_DBG_LEVEL,          /* DBG LEVEL-from diag */
+};
+
+int diag_local_send_done(int proc);
+
+int diag_local_cmd_handler(void *buf);
+
 #endif

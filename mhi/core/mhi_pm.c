@@ -574,7 +574,7 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 
 		MHI_LOG("Trigger device into MHI_RESET\n");
 		mhi_set_mhi_state(mhi_cntrl, MHI_STATE_RESET);
-
+		msleep(1);
 		/* wait for reset to be cleared */
 		ret = wait_event_timeout(mhi_cntrl->state_event,
 					 mhi_read_reg_field(mhi_cntrl,

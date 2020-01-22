@@ -2480,17 +2480,6 @@ static void cnss_pci_dump_registers(struct cnss_pci_data *pci_priv)
 	cnss_pci_dump_ce_reg(pci_priv, CNSS_CE_10);
 }
 
-#define QCA6290_SRAM_ADDR		0x1800000
-#define QCA6290_RDDM_HDR_SIZE   	392
-#define QCA6290_FW_SEG_LOAD_ADDR	0x20000000
-
-struct paging_header {
-	u64 version;
-	u64 seg_num;
-};
-
-struct paging_header hdr;
-
 
 
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
@@ -2500,10 +2489,8 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		&plat_priv->ramdump_info_v2.dump_data;
 	struct cnss_dump_seg *dump_seg =
 		plat_priv->ramdump_info_v2.dump_data_vaddr;
-	struct cnss_dump_seg *hdr_segment;
 	struct image_info *fw_image, *rddm_image;
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
-	unsigned int addr;
 	int ret, i;
 
 	if (test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state)) {
@@ -2530,22 +2517,8 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	cnss_pr_dbg("Collect FW image dump segment, nentries %d\n",
 		    fw_image->entries);
-	addr = QCA6290_FW_SEG_LOAD_ADDR;
-	hdr.version = 0;
-	hdr.seg_num = fw_image->entries - 1;
+
 	for (i = 0; i < fw_image->entries; i++) {
-		if (i == 0) {
-			hdr_segment = dump_seg++;
-			hdr_segment->address = addr;
-			hdr_segment->v_address = &hdr;
-			hdr_segment->size = sizeof(hdr);
-			hdr_segment->type = CNSS_FW_IMAGE;
-			addr += sizeof(hdr);
-			dump_data->nentries += 1;
-		}
-		dump_seg->address = addr;
-		addr += fw_image->mhi_buf[i].len;
-	
 		dump_seg->address = fw_image->mhi_buf[i].dma_addr;
 		dump_seg->v_address = fw_image->mhi_buf[i].buf;
 		dump_seg->size = fw_image->mhi_buf[i].len;
@@ -2560,18 +2533,12 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	cnss_pr_dbg("Collect RDDM image dump segment, nentries %d\n",
 		    rddm_image->entries);
-	addr = QCA6290_SRAM_ADDR - QCA6290_RDDM_HDR_SIZE;
+
 	for (i = 0; i < rddm_image->entries; i++) {
 		dump_seg->address = rddm_image->mhi_buf[i].dma_addr;
 		dump_seg->v_address = rddm_image->mhi_buf[i].buf;
 		dump_seg->size = rddm_image->mhi_buf[i].len;
 		dump_seg->type = CNSS_FW_RDDM;
-		if (i == 0) {
-			dump_seg->address = addr - PAGE_SIZE;//0x1000
-		} else {
-			dump_seg->address = addr;
-			addr += dump_seg->size;
-		}		
 		cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 			    i, dump_seg->address,
 			    dump_seg->v_address, dump_seg->size);
