@@ -1903,12 +1903,15 @@ int mhi_set_bus_request(struct mhi_device_ctxt *mhi_dev_ctxt,
 #else
 int mhi_set_bus_request(struct mhi_device_ctxt *mhi_dev_ctxt,
                                 int index) { return 0; }
+#endif
 
+#ifdef CONFIG_HST_IMX
 void mhi_pcie_sw_soc_reset(struct mhi_device *mhi_device)
 {
 	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_device->mhi_dev_ctxt;
 
-	mhi_pcie_sw_reset(mhi_dev_ctxt);
+	if (mhi_dev_ctxt)
+		mhi_pcie_sw_reset(mhi_dev_ctxt);
 }
 EXPORT_SYMBOL(mhi_pcie_sw_soc_reset);
 #endif
@@ -2323,17 +2326,20 @@ u32 mhi_reg_read_remap(struct mhi_device_ctxt *mhi_dev_ctxt,
 		       void __iomem *io_addr,
 		       uintptr_t io_offset)
 {
+	u32 ret_val;
+
 	mhi_check_assert_wake(mhi_dev_ctxt, io_offset);
 
 	if (io_offset < MAX_UNWINDOWED_ADDRESS) {
-		return ioread32(io_addr + io_offset);
+		ret_val = ioread32(io_addr + io_offset);
 	} else {
 		mhi_reg_select_window(io_addr, io_offset);
-		return ioread32(io_addr + WINDOW_START +
+		ret_val = ioread32(io_addr + WINDOW_START +
 				(io_offset & WINDOW_RANGE_MASK));
 	}
 
 	mhi_check_deassert_wake(mhi_dev_ctxt, io_offset);
+	return ret_val;
 }
 
 void mhi_reg_write_remap(struct mhi_device_ctxt *mhi_dev_ctxt,

@@ -1805,7 +1805,7 @@ static int cnss_panic_handler(struct notifier_block *this,
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 
 	cnss_pci_dev_crash_shutdown(pci_priv);
-	cnss_pci_dev_shutdown(pci_priv);
+	cnss_pci_shutdown(pci_priv->pci_dev);
 
 	return NOTIFY_DONE;
 }

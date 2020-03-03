@@ -207,6 +207,14 @@ void mhi_set_fw_remote_mem(struct mhi_device *mhi_device, void *vaddr,
 			   size_t size);
 
 /**
+ * mhi_pcie_sw_soc_reset - take a soft reset for wlan chip when there isn't
+ * wlan enable/disbale GPIO on third platform
+ *
+ * @mhi_device: resources to be used
+*/
+void mhi_pcie_sw_soc_reset(struct mhi_device *mhi_device);
+
+/**
  * mhi_register_channel - Client must call this function to obtain a handle for
  *			  any MHI operations
  *

@@ -2642,6 +2642,23 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	plat_priv->bus_priv = NULL;
 }
 
+#ifdef CONFIG_HST_IMX
+void cnss_pci_shutdown(struct pci_dev *pci_dev)
+{
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
+	if (pci_priv) {
+		struct mhi_device *mhi_dev = &pci_priv->mhi_dev;
+		mhi_pcie_sw_soc_reset(mhi_dev);
+	}
+}
+#else
+void cnss_pci_shutdown(struct pci_dev *pci_dev)
+{
+	return;
+}
+#endif
+
+
 static const struct pci_device_id cnss_pci_id_table[] = {
 	{ QCA6174_VENDOR_ID, QCA6174_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCA6290_EMULATION_VENDOR_ID, QCA6290_EMULATION_DEVICE_ID,
@@ -2668,6 +2685,7 @@ struct pci_driver cnss_pci_driver = {
 	.id_table = cnss_pci_id_table,
 	.probe    = cnss_pci_probe,
 	.remove   = cnss_pci_remove,
+	.shutdown = cnss_pci_shutdown,
 #ifdef CONFIG_PCI_MSM
 	.driver = {
 		.pm = &cnss_pm_ops,
