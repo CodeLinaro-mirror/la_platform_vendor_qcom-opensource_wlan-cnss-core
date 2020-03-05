@@ -12,10 +12,24 @@
 
 #include <linux/export.h>
 #include <linux/rtc.h>
-
+#include <linux/version.h>
 #include "mhi.h"
 #include "mhi_bhi.h"
 #include "mhi_sys.h"
+
+#if (KERNEL_VERSION(4, 14, 0) > LINUX_VERSION_CODE)
+static int file_write(struct file *fp, const void *buf,
+		       size_t count, loff_t *pos)
+{
+	return vfs_write(fp, buf, count, pos);
+}
+#else
+static int file_write(struct file *fp, const void *buf,
+		       size_t count, loff_t *pos)
+{
+	return kernel_write(fp, buf, count, pos);
+}
+#endif
 
 static int get_time_of_the_day_in_hr_min_sec(char *tbuf, int len)
 {
@@ -69,7 +83,7 @@ static int firmware_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			file_full_path,
 			buf,
 			size);
-		status = vfs_write(fp, buf, size, &pos);
+		status = file_write(fp, buf, size, &pos);
 		if (status < 0) {
 			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 				"write file:%s error\n", file_full_path);
@@ -156,7 +170,7 @@ static int extract_fw_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			" mem: 0x%p, size: 0x%x\n",
 			buf,
 			size);
-		status = vfs_write(fp, buf, size, &pos);
+		status = file_write(fp, buf, size, &pos);
 		if (status < 0) {
 			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 				"write file:%s error\n", file_full_path);
@@ -205,7 +219,7 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 		file_full_path,
 		fw_mem->vaddr,
 		(unsigned int)(fw_mem->size));
-	status = vfs_write(fp,
+	status = file_write(fp,
 			   (const char __user *)(fw_mem->vaddr),
 			   fw_mem->size,
 			   &pos);

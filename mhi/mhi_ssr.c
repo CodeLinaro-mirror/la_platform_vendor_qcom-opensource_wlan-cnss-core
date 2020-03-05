@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, 2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,6 +13,7 @@
 #include <linux/pm_runtime.h>
 #include "mhi_sys.h"
 #include "mhi.h"
+#include "mhi_bhi.h"
 #ifdef CONFIG_ARCH_QCOM
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
@@ -115,6 +116,13 @@ void process_disable_transition(enum MHI_PM_STATE transition_state,
 		mhi_dev_ctxt->mhi_pm_state,
 		TO_MHI_STATE_STR(mhi_dev_ctxt->mhi_state),
 		transition_state);
+
+	if (transition_state == MHI_PM_SYS_ERR_PROCESS) {
+		mhi_dev_ctxt->dev_exec_env = MHI_EXEC_ENV_RDDM;
+		if (bhi_rddm(mhi_dev_ctxt, false))
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+								"fail to collect ramdump info\n");
+       }
 
 	mutex_lock(&mhi_dev_ctxt->pm_lock);
 	write_lock_irq(pm_xfer_lock);

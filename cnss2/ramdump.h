@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, 2017 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, 2017, 2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,6 +13,28 @@
 #ifndef _RAMDUMP_HEADER
 #define _RAMDUMP_HEADER
 
+#include <linux/elf.h>
+
+/* Return first section header */
+static inline struct elf_shdr *elf_sheader(struct elfhdr *hdr)
+{
+	return (struct elf_shdr *)((size_t)hdr + (size_t)hdr->e_shoff);
+}
+
+/* Return idx section header */
+static inline struct elf_shdr *elf_section(struct elfhdr *hdr, int idx)
+{
+	return &elf_sheader(hdr)[idx];
+}
+
+/* Retunr section's string table header */
+static inline char *elf_str_table(struct elfhdr *hdr)
+{
+	if (hdr->e_shstrndx == SHN_UNDEF)
+		return NULL;
+	return (char *)hdr + elf_section(hdr, hdr->e_shstrndx)->sh_offset;
+}
+
 struct device;
 
 struct ramdump_segment {
@@ -22,7 +44,7 @@ struct ramdump_segment {
 	unsigned long size;
 };
 
-#ifdef CONFIG_MSM_SUBSYSTEM_RESTART
+#ifdef CONFIG_HST_IMX
 extern void *create_ramdump_device(const char *dev_name, struct device *parent);
 extern void destroy_ramdump_device(void *dev);
 extern int do_ramdump(void *handle, struct ramdump_segment *segments,

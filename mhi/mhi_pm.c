@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, 2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -669,7 +669,11 @@ int mhi_pm_control_device(struct mhi_device *mhi_device, enum mhi_dev_ctrl ctrl)
 		write_unlock_irqrestore(&mhi_dev_ctxt->pm_xfer_lock, flags);
 		break;
 	case MHI_DEV_CTRL_RDDM:
-		return bhi_rddm(mhi_dev_ctxt, false);
+		/* for this condition ramdump triggered from MHI SYS_ERR,
+		* ramdump collection should be happened once SYS_ERR is received,
+		* so to this place, ramdump is completed. Return directly.
+		*/
+		return 0;
 	case MHI_DEV_CTRL_RDDM_KERNEL_PANIC:
 		return bhi_rddm(mhi_dev_ctxt, true);
 	case MHI_DEV_CTRL_DE_INIT:

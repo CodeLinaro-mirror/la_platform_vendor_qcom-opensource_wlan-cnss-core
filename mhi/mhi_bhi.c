@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, 2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -265,7 +265,7 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 
 	if (!in_panic) {
 		ret = bhi_rddm_graceful(mhi_dev_ctxt);
-#ifdef CONFIG_HST_IMX
+#if 0
 		if (!ret)
 			dump_fw_to_file(mhi_dev_ctxt);
 #endif

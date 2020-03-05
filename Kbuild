@@ -183,6 +183,7 @@ ifneq ($(CONFIG_CNSS2),)
 		     $(CNSS_DIR)/debug.o                          \
 		     $(CNSS_DIR)/power.o                          \
 		     $(CNSS_DIR)/qmi.o                            \
+		     $(CNSS_DIR)/ramdump.o                        \
 		     $(CNSS_DIR)/utils.o                          \
 		     $(CNSS_DIR)/wlan_firmware_service_v01.o
 ifeq ($(CONFIG_CNSS2_PCIE),y)

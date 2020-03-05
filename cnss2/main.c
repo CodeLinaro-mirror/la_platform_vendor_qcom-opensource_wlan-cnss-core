@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,6 +19,7 @@
 #include <linux/rwsem.h>
 #include <linux/suspend.h>
 #include <linux/timer.h>
+#include <linux/delay.h>
 #ifdef CONFIG_ARCH_QCOM
 #include <soc/qcom/ramdump.h>
 #include <soc/qcom/subsystem_notif.h>
@@ -1114,9 +1115,12 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_REASON_RDDM:
 		cnss_bus_collect_dump_info(plat_priv);
+		cnss_bus_dev_ramdump(plat_priv);
 		clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
-		if (rddm_panic)
+		if (rddm_panic) {
+			msleep(5000); //wait for the FW ramdump complete
 			panic("cnss: RDDM triggers kernel panic");
+			}
 		else
 			goto self_recovery;
 	case CNSS_REASON_DEFAULT:
@@ -1831,8 +1835,10 @@ void cnss_unregister_subsys(struct cnss_plat_data *plat_priv) {
  */
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 {
+	int ret = 0;
 	struct cnss_ramdump_info_v2 *info_v2;
 	struct cnss_dump_data *dump_data;
+	const char *dev_name = "wlan";
 
 	info_v2 = &plat_priv->ramdump_info_v2;
 	dump_data = &info_v2->dump_data;
@@ -1848,7 +1854,19 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 	strlcpy(dump_data->name, CNSS_DUMP_NAME,
 		sizeof(dump_data->name));
 
+	info_v2->ramdump_dev = create_ramdump_device(dev_name, &plat_priv->plat_dev->dev);
+	if (!info_v2->ramdump_dev) {
+		cnss_pr_err("Failed to create ramdump device!\n");
+		ret = -ENOMEM;
+		goto free_ramdump;
+	}
+
 	return 0;
+
+free_ramdump:
+	kfree(info_v2->dump_data_vaddr);
+	info_v2->dump_data_vaddr = NULL;
+	return ret;
 }
 
 void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
@@ -1856,6 +1874,9 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
 	struct cnss_ramdump_info_v2 *info_v2;
 
 	info_v2 = &plat_priv->ramdump_info_v2;
+
+	if (info_v2->ramdump_dev)
+		destroy_ramdump_device(info_v2->ramdump_dev);
 
 	kfree(info_v2->dump_data_vaddr);
 	info_v2->dump_data_vaddr = NULL;
