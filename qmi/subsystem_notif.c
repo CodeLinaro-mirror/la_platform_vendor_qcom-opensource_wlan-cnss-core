@@ -329,6 +329,8 @@ static void subsys_notif_reg_test_notifier(const char *subsys_name)
 			__func__, handle);
 }
 #endif
+#ifndef CONFIG_WLAN_CNSS_CORE
 
 MODULE_DESCRIPTION("Subsystem Restart Notifier");
 MODULE_LICENSE("GPL v2");
+#endif

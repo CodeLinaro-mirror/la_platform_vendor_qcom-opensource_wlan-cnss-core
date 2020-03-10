@@ -52,9 +52,10 @@
 #ifdef CONFIG_COMPAT
 #include <linux/compat.h>
 #endif
-
+#ifndef CONFIG_WLAN_CNSS_CORE
 MODULE_DESCRIPTION("Diag Char Driver");
 MODULE_LICENSE("GPL v2");
+#endif
 
 #define MIN_SIZ_ALLOW 4
 #define INIT	1
@@ -4397,7 +4398,11 @@ static int __init diagchar_init(void)
 	driver->hdlc_disabled = 0;
 	driver->dci_state = DIAG_DCI_NO_ERROR;
 	setup_timer(&drain_timer, drain_timer_func, 1234);
+#ifdef CONFIG_WLAN_CNSS_CORE
+	driver->supports_sockets = 0;
+#else
 	driver->supports_sockets = 1;
+#endif
 	driver->time_sync_enabled = 0;
 	driver->uses_time_api = 0;
 	driver->poolsize = poolsize;

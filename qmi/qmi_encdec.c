@@ -821,6 +821,7 @@ struct qmi_elem_info qmi_response_type_v01_ei[] = {
 	},
 };
 EXPORT_SYMBOL(qmi_response_type_v01_ei);
-
+#ifndef CONFIG_WLAN_CNSS_CORE
 MODULE_DESCRIPTION("QMI encoder/decoder helper");
 MODULE_LICENSE("GPL v2");
+#endif
