@@ -834,7 +834,27 @@ static struct sk_buff *qrtr_alloc_ctrl_packet(struct qrtr_ctrl_pkt **pkt)
 
 static struct qrtr_sock *qrtr_port_lookup(int port);
 static void qrtr_port_put(struct qrtr_sock *ipc);
-#if 0
+#ifdef CONFIG_KERNEL_49
+void skb_condense(struct sk_buff *skb)
+{
+        if (skb->data_len) {
+                if (skb->data_len > skb->end - skb->tail ||
+                    skb_cloned(skb))
+                        return;
+
+                /* Nice, we can free page frag(s) right now */
+                __pskb_pull_tail(skb, skb->data_len);
+        }
+        /* At this point, skb->truesize might be over estimated,
+         * because skb had a fragment, and fragments do not tell
+         * their truesize.
+         * When we pulled its content into skb->head, fragment
+         * was freed, but __pskb_pull_tail() could not possibly
+         * adjust skb->truesize, not knowing the frag truesize.
+         */
+        skb->truesize = SKB_TRUESIZE(skb_end_offset(skb));
+}
+#endif
 /* Prepare skb for forwarding by allocating enough linear memory to align and
  * add the header since qrtr transports do not support fragmented skbs
  */
@@ -852,7 +872,7 @@ static void qrtr_skb_align_linearize(struct sk_buff *skb)
 		pr_err("%s: failed:%d to allocate linear skb size:%d\n",
 		       __func__, rc, nhead);
 }
-#endif
+
 static bool qrtr_must_forward(struct qrtr_node *src,
 			      struct qrtr_node *dst, u32 type)
 {
@@ -883,7 +903,7 @@ static void qrtr_fwd_ctrl_pkt(struct sk_buff *skb)
 	struct qrtr_node *src;
 	struct qrtr_cb *cb = (struct qrtr_cb *)skb->cb;
 
-	//qrtr_skb_align_linearize(skb);
+	qrtr_skb_align_linearize(skb);
 	src = qrtr_node_lookup(cb->src_node);
 	down_read(&qrtr_node_lock);
 	list_for_each_entry(node, &qrtr_all_epts, item) {
@@ -918,7 +938,7 @@ static void qrtr_fwd_pkt(struct sk_buff *skb, struct qrtr_cb *cb)
 	struct sockaddr_qrtr to = {AF_QIPCRTR, cb->dst_node, cb->dst_port};
 	struct qrtr_node *node;
 
-	//qrtr_skb_align_linearize(skb);
+	qrtr_skb_align_linearize(skb);
 	node = qrtr_node_lookup(cb->dst_node);
 	if (!node) {
 		kfree_skb(skb);
