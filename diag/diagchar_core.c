@@ -22,7 +22,9 @@
 #include <linux/sched.h>
 #include <linux/ratelimit.h>
 #include <linux/timer.h>
-#ifndef CONFIG_KERNEL_49
+#include <linux/version.h>
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
 #include <linux/sched/task.h>
 #endif
 #ifdef CONFIG_DIAG_OVER_USB

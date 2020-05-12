@@ -21,9 +21,10 @@
 #include <linux/ipc_logging.h>
 #include <linux/uidgid.h>
 #include <linux/pm_wakeup.h>
+#include <linux/version.h>
 
 #include <net/sock.h>
-#ifndef CONFIG_KERNEL_49
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
 #include <uapi/linux/sched/types.h>
 #endif
 #include "qrtr.h"
@@ -167,7 +168,7 @@ struct qrtr_node {
 	atomic_t hello_rcvd;
 
 	struct radix_tree_root qrtr_tx_flow;
-#ifdef CONFIG_KERNEL_49
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0))
 	struct __wait_queue_head resume_tx;
 #else
 	struct wait_queue_head resume_tx;
@@ -308,7 +309,20 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 			}
 	}
 }
-#ifndef CONFIG_KERNEL_49
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0))
+static bool refcount_dec_and_rwsem_lock(atomic_t *r,
+struct rw_semaphore *sem)
+{
+	down_write(sem);
+	if (!atomic_dec_and_test(r))
+	{
+		up_write(sem);
+		return false;
+	}
+	return true;
+}
+#else
+
 static bool refcount_dec_and_rwsem_lock(refcount_t *r,
 					struct rw_semaphore *sem)
 {
@@ -323,6 +337,7 @@ static bool refcount_dec_and_rwsem_lock(refcount_t *r,
 
 	return true;
 }
+#endif
 
 static inline int kref_put_rwsem_lock(struct kref *kref,
 				      void (*release)(struct kref *kref),
@@ -380,7 +395,7 @@ static void __qrtr_node_release(struct kref *kref)
 	skb_queue_purge(&node->rx_queue);
 	kfree(node);
 }
-#endif
+
 /* Increment reference to node. */
 static struct qrtr_node *qrtr_node_acquire(struct qrtr_node *node)
 {
@@ -394,14 +409,7 @@ static void qrtr_node_release(struct qrtr_node *node)
 {
 	if (!node)
 		return;
-#ifdef CONFIG_KERNEL_49
-/*workaround here*/
-	//down_write(&qrtr_node_lock);
-//	__qrtr_node_release(&node->ref);
-#else
 	kref_put_rwsem_lock(&node->ref, __qrtr_node_release, &qrtr_node_lock);
-#endif
-
 }
 
 /**
@@ -834,7 +842,7 @@ static struct sk_buff *qrtr_alloc_ctrl_packet(struct qrtr_ctrl_pkt **pkt)
 
 static struct qrtr_sock *qrtr_port_lookup(int port);
 static void qrtr_port_put(struct qrtr_sock *ipc);
-#ifdef CONFIG_KERNEL_49
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0))
 void skb_condense(struct sk_buff *skb)
 {
         if (skb->data_len) {
@@ -1938,7 +1946,8 @@ static int qrtr_create(struct net *net, struct socket *sock,
 static const struct nla_policy qrtr_policy[IFA_MAX + 1] = {
 	[IFA_LOCAL] = { .type = NLA_U32 },
 };
-#ifdef CONFIG_KERNEL_49
+	
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0))
 static int qrtr_addr_doit(struct sk_buff *skb, struct nlmsghdr *nlh)
 #else
 static int qrtr_addr_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
@@ -1953,7 +1962,8 @@ static int qrtr_addr_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EPERM;
 
 	ASSERT_RTNL();
-#ifdef CONFIG_KERNEL_49
+	
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0))
 	rc = nlmsg_parse(nlh, sizeof(*ifm), tb, IFA_MAX, qrtr_policy);
 #else
 	rc = nlmsg_parse(nlh, sizeof(*ifm), tb, IFA_MAX, qrtr_policy, extack);

@@ -232,6 +232,7 @@ enum cnss_debug_quirks {
 	ENABLE_PCI_LINK_DOWN_PANIC,
 	FBC_BYPASS,
 	ENABLE_DAEMON_SUPPORT,
+	IGNORE_PCI_LINK_FAILURE,
 };
 
 enum cnss_bdf_type {
@@ -316,6 +317,7 @@ struct cnss_plat_data {
 	struct cnss_control_params ctrl_params;
 	u32 is_converged_dt;
 	struct device_node *dev_node;
+	u8 set_wlaon_pwr_ctrl;
 };
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
