@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/wait.h>
 #include <linux/mhi.h>
+#include <linux/version.h>
 #include "mhi_internal.h"
 
 static void mhi_special_events_pending(struct mhi_controller *mhi_cntrl);
@@ -1601,7 +1602,11 @@ int mhi_device_get_sync_atomic(struct mhi_device *mhi_dev, int timeout_us)
 	read_unlock_bh(&mhi_cntrl->pm_lock);
 
 	atomic_inc(&mhi_dev->dev_vote);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
 	pm_wakeup_hard_event(&mhi_cntrl->mhi_dev->dev);
+#else
+	pm_wakeup_event(&mhi_cntrl->mhi_dev->dev, 0);
+#endif
 	mhi_cntrl->runtime_get(mhi_cntrl, mhi_cntrl->priv_data);
 
 	/* Return if client doesn't want us to wait */
