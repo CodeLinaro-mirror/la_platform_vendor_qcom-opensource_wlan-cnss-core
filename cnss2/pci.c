@@ -141,6 +141,8 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define POWER_ON_RETRY_MAX_TIMES		3
 #define POWER_ON_RETRY_DELAY_MS			200
 
+#define LINK_TRAINING_RETRY_MAX_TIMES		3
+
 static struct cnss_pci_reg ce_src[] = {
 	{ "SRC_RING_BASE_LSB", QCA6390_CE_SRC_RING_BASE_LSB_OFFSET },
 	{ "SRC_RING_BASE_MSB", QCA6390_CE_SRC_RING_BASE_MSB_OFFSET },
@@ -374,7 +376,9 @@ static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
 #ifdef CONFIG_PCI_MSM
 	int ret = 0;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
+	int retry = 0;
 
+retry:
 	ret = msm_pcie_pm_control(link_up ? MSM_PCIE_RESUME :
 				  MSM_PCIE_SUSPEND,
 				  pci_dev->bus->number,
@@ -383,6 +387,12 @@ static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
 	if (ret) {
 		cnss_pr_err("Failed to %s PCI link with default option, err = %d\n",
 			    link_up ? "resume" : "suspend", ret);
+
+		if (link_up && retry++ < LINK_TRAINING_RETRY_MAX_TIMES) {
+			cnss_pr_dbg("Retry PCI link training #%d\n", retry);
+			goto retry;
+		}
+
 		return ret;
 	}
 #else
@@ -852,25 +862,22 @@ static int cnss_qca6174_ramdump(struct cnss_pci_data *pci_priv)
 static int cnss_pci_force_wake_get(struct cnss_pci_data *pci_priv)
 {
 	struct device *dev = &pci_priv->pci_dev->dev;
-	u32 timeout = 0;
 	int ret;
 
-	ret = cnss_pci_force_wake_request(dev);
+	ret = cnss_pci_force_wake_request_sync(dev,
+					       FORCE_WAKE_DELAY_TIMEOUT_US);
 	if (ret) {
-		cnss_pr_err("Failed to request force wake\n");
+		if (ret != -EAGAIN)
+			cnss_pr_err("Failed to request force wake\n");
 		return ret;
 	}
 
-	while (!cnss_pci_is_device_awake(dev) &&
-	       timeout <= FORCE_WAKE_DELAY_TIMEOUT_US) {
-		usleep_range(FORCE_WAKE_DELAY_MIN_US, FORCE_WAKE_DELAY_MAX_US);
-		timeout += FORCE_WAKE_DELAY_MAX_US;
-	}
-
-	if (cnss_pci_is_device_awake(dev) != true) {
-		cnss_pr_err("Timed out to request force wake\n");
-		return -ETIMEDOUT;
-	}
+	/* If device's M1 state-change event races here, it can be ignored,
+	 * as the device is expected to immediately move from M2 to M0
+	 * without entering low power state.
+	 */
+	if (cnss_pci_is_device_awake(dev) != true)
+		cnss_pr_warn("MHI not in M0, while reg still accessible\n");
 
 	return 0;
 }
@@ -1412,6 +1419,27 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 			cnss_pr_err("Failed to set SMMU fast attribute, err = %d\n",
 				    ret);
 			goto release_mapping;
+		}
+
+		if (pci_priv->iommu_geometry) {
+			struct iommu_domain_geometry geometry = {0};
+
+			/* Need revisit if iova and ipa not continuous */
+			CNSS_ASSERT(pci_priv->smmu_iova_start +
+				    pci_priv->smmu_iova_len ==
+				    pci_priv->smmu_iova_ipa_start);
+
+			geometry.aperture_start = pci_priv->smmu_iova_start;
+			geometry.aperture_end = pci_priv->smmu_iova_start +
+						pci_priv->smmu_iova_len +
+						pci_priv->smmu_iova_ipa_len;
+			ret = iommu_domain_set_attr(mapping->domain,
+						    DOMAIN_ATTR_GEOMETRY,
+						    &geometry);
+			/* Not fatal failure, fall-thru */
+			if (ret)
+				cnss_pr_err("Failed to set GEOMETRY, err = %d\n",
+					    ret);
 		}
 
 		ret = iommu_domain_set_attr(mapping->domain,
@@ -1959,6 +1987,31 @@ int cnss_pm_request_resume(struct cnss_pci_data *pci_priv)
 
 	return pm_request_resume(&pci_dev->dev);
 }
+
+int cnss_pci_force_wake_request_sync(struct device *dev, int timeout_us)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
+	struct cnss_plat_data *plat_priv;
+	struct mhi_controller *mhi_ctrl;
+
+	if (pci_priv->device_id != QCA6390_DEVICE_ID)
+		return 0;
+
+	mhi_ctrl = pci_priv->mhi_ctrl;
+	if (!mhi_ctrl)
+		return -EINVAL;
+
+	plat_priv = pci_priv->plat_priv;
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
+		return -EAGAIN;
+
+	return mhi_device_get_sync_atomic(mhi_ctrl->mhi_dev, timeout_us);
+}
+EXPORT_SYMBOL(cnss_pci_force_wake_request_sync);
 
 int cnss_pci_force_wake_request(struct device *dev)
 {
@@ -3000,6 +3053,11 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 						   "cnss-mhi", 0);
 	if (!mhi_ctrl->log_buf)
 		cnss_pr_err("Unable to create CNSS MHI IPC log context\n");
+
+	mhi_ctrl->cntrl_log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
+							 "cnss-mhi-cntrl", 0);
+	if (!mhi_ctrl->cntrl_log_buf)
+		cnss_pr_err("Unable to create CNSS MHICNTRL IPC log context\n");
 #endif
 	ret = of_register_mhi_controller(mhi_ctrl);
 	if (ret) {
@@ -3015,7 +3073,10 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
 
 	mhi_unregister_mhi_controller(mhi_ctrl);
+#ifdef CONFIG_IPC_LOGGING
 	ipc_log_context_destroy(mhi_ctrl->log_buf);
+	ipc_log_context_destroy(mhi_ctrl->cntrl_log_buf);
+#endif
 	kfree(mhi_ctrl->irq);
 }
 
@@ -3358,6 +3419,11 @@ static int cnss_pci_get_smmu_cfg(struct cnss_plat_data *plat_priv)
 		    "converged dt" : "single dt"),
 		    &pci_priv->smmu_iova_ipa_start,
 		    pci_priv->smmu_iova_ipa_len);
+
+	pci_priv->iommu_geometry =
+		of_property_read_bool(dev_node, "qcom,iommu-geometry");
+	cnss_pr_dbg("DOMAIN_ATTR_GEOMETRY: %d\n", pci_priv->iommu_geometry);
+
 	return 0;
 
 out:
@@ -3583,18 +3649,26 @@ int cnss_pci_init(struct cnss_plat_data *plat_priv)
 	int ret = 0;
 	struct device *dev = &plat_priv->plat_dev->dev;
 	u32 rc_num;
-
+#ifdef CONFIG_PCI_MSM
+	int retry = 0;
+#endif
 	ret = of_property_read_u32(dev->of_node, "qcom,wlan-rc-num", &rc_num);
 	if (ret) {
 		cnss_pr_err("Failed to find PCIe RC number, err = %d\n", ret);
 		goto out;
 	}
 #ifdef CONFIG_PCI_MSM
+retry:
 	ret = msm_pcie_enumerate(rc_num);
 	if (ret) {
 		cnss_pr_err("Failed to enable PCIe RC%x, err = %d\n",
 			    rc_num, ret);
-		goto out;
+		if (retry++ < LINK_TRAINING_RETRY_MAX_TIMES) {
+			cnss_pr_dbg("Retry PCI link training #%d\n", retry);
+			goto retry;
+		} else {
+			goto out;
+		}
 	}
 #endif
 	ret = pci_register_driver(&cnss_pci_driver);
