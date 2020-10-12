@@ -48,6 +48,7 @@
 #define CNSS_BDF_TYPE_DEFAULT		CNSS_BDF_ELF
 
 static struct cnss_plat_data *plat_env;
+static bool pm_notify_registered;
 
 static DECLARE_RWSEM(cnss_pm_sem);
 
@@ -80,6 +81,29 @@ struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev)
 {
 	return plat_env;
 }
+
+static void cnss_clear_plat_priv(struct cnss_plat_data *plat_priv)
+{
+	plat_env = NULL;
+}
+
+static int cnss_set_device_name(struct cnss_plat_data *plat_priv)
+{
+	snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
+		 "wlan");
+	return 0;
+}
+
+static int cnss_plat_env_available(void)
+{
+	return 0;
+}
+
+struct cnss_plat_data *cnss_get_plat_priv_by_rc_num(int rc_num)
+{
+	return cnss_bus_dev_to_plat_priv(NULL);
+}
+
 
 static int cnss_pm_notify(struct notifier_block *b,
 			  unsigned long event, void *p)
@@ -289,8 +313,10 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 
 	if (test_bit(QMI_BYPASS, &plat_priv->ctrl_params.quirks))
 		return 0;
+	cnss_pr_info("cnss_wlan_disable: not send mode off when PCIE global reset is used\n");
 
-	return cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
+	return 0;
+	//return cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
 
@@ -366,6 +392,24 @@ int cnss_set_fw_log_mode(struct device *dev, u8 fw_log_mode)
 }
 EXPORT_SYMBOL(cnss_set_fw_log_mode);
 
+int cnss_set_pcie_gen_speed(struct device *dev, u8 pcie_gen_speed)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (plat_priv->device_id != QCA6490_DEVICE_ID ||
+	    !plat_priv->fw_pcie_gen_switch)
+		return -ENOTSUPP;
+
+	if (pcie_gen_speed < QMI_PCIE_GEN_SPEED_1_V01 ||
+	    pcie_gen_speed > QMI_PCIE_GEN_SPEED_3_V01)
+		return -EINVAL;
+
+	cnss_pr_dbg("WLAN provided PCIE gen speed: %d\n", pcie_gen_speed);
+	plat_priv->pcie_gen_speed = pcie_gen_speed;
+	return 0;
+}
+EXPORT_SYMBOL(cnss_set_pcie_gen_speed);
+
 static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -415,6 +459,8 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 	del_timer(&plat_priv->fw_boot_timer);
 	set_bit(CNSS_FW_READY, &plat_priv->driver_state);
 	clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
+
+	cnss_wlfw_send_pcie_gen_speed_sync(plat_priv);
 
 	if (test_bit(CNSS_FW_BOOT_RECOVERY, &plat_priv->driver_state)) {
 		clear_bit(CNSS_FW_BOOT_RECOVERY, &plat_priv->driver_state);
@@ -1530,7 +1576,7 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 
 	subsys_info = &plat_priv->subsys_info;
 
-	subsys_info->subsys_desc.name = "wlan";
+	subsys_info->subsys_desc.name = plat_priv->device_name;
 	subsys_info->subsys_desc.owner = THIS_MODULE;
 	subsys_info->subsys_desc.powerup = cnss_subsys_powerup;
 	subsys_info->subsys_desc.shutdown = cnss_subsys_shutdown;
@@ -1907,7 +1953,10 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	setup_timer(&plat_priv->fw_boot_timer, cnss_bus_fw_boot_timeout_hdlr,
 		    (unsigned long)plat_priv);
 
-	register_pm_notifier(&cnss_pm_notifier);
+	if (!pm_notify_registered) {
+		register_pm_notifier(&cnss_pm_notifier);
+		pm_notify_registered = true;
+	}
 
 	ret = device_init_wakeup(&plat_priv->plat_dev->dev, true);
 	if (ret)
@@ -1930,7 +1979,10 @@ static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 	complete_all(&plat_priv->cal_complete);
 	complete_all(&plat_priv->power_up_complete);
 	device_init_wakeup(&plat_priv->plat_dev->dev, false);
-	unregister_pm_notifier(&cnss_pm_notifier);
+	if (pm_notify_registered) {
+		unregister_pm_notifier(&cnss_pm_notifier);
+		pm_notify_registered = false;
+	}
 	del_timer(&plat_priv->fw_boot_timer);
 }
 
@@ -2035,6 +2087,9 @@ static int cnss_probe(struct platform_device *plat_dev)
 		ret = -EEXIST;
 		goto out;
 	}
+	ret = cnss_plat_env_available();
+	if (ret != 0)
+		goto out;
 
 	of_id = of_match_device(cnss_of_match_table, &plat_dev->dev);
 	if (!of_id || !of_id->data) {
@@ -2061,6 +2116,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv);
 	cnss_set_plat_priv(plat_dev, plat_priv);
+	cnss_set_device_name(plat_priv);
 	platform_set_drvdata(plat_dev, plat_priv);
 	INIT_LIST_HEAD(&plat_priv->vreg_list);
 
@@ -2109,10 +2165,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto destroy_debugfs;
 
-	ret = cnss_genl_init();
-	if (ret < 0)
-		cnss_pr_err("CNSS genl init failed %d\n", ret);
-
 	cnss_pr_info("Platform driver probed successfully.\n");
 
 	return 0;
@@ -2139,7 +2191,7 @@ free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
 	platform_set_drvdata(plat_dev, NULL);
-	cnss_set_plat_priv(plat_dev, NULL);
+	cnss_clear_plat_priv(plat_priv);
 out:
 	return ret;
 }
@@ -2148,7 +2200,6 @@ static int cnss_remove(struct platform_device *plat_dev)
 {
 	struct cnss_plat_data *plat_priv = platform_get_drvdata(plat_dev);
 
-	cnss_genl_exit();
 	cnss_misc_deinit(plat_priv);
 	cnss_debugfs_destroy(plat_priv);
 	cnss_qmi_deinit(plat_priv);
@@ -2159,7 +2210,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_bus_deinit(plat_priv);
 	cnss_put_resources(plat_priv);
 	platform_set_drvdata(plat_dev, NULL);
-	plat_env = NULL;
+	cnss_clear_plat_priv(plat_priv);
 
 	return 0;
 }
@@ -2189,6 +2240,9 @@ static int __init cnss_initialize(void)
 	ret = platform_driver_register(&cnss_platform_driver);
 	if (ret)
 		cnss_debug_deinit();
+	ret = cnss_genl_init();
+	if (ret < 0)
+		cnss_pr_err("CNSS genl init failed %d\n", ret);
 
 	return ret;
 }
@@ -2201,6 +2255,7 @@ static void __exit cnss_exit(void)
 {
 	platform_driver_unregister(&cnss_platform_driver);
 	cnss_debug_deinit();
+	cnss_genl_exit();
 }
 #ifndef CONFIG_WLAN_CNSS_CORE
 module_init(cnss_initialize);

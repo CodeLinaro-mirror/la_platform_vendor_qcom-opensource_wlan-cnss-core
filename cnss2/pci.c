@@ -47,6 +47,8 @@
 #define DEFAULT_M3_FILE_NAME		"m3.bin"
 #define DEFAULT_FW_FILE_NAME		"amss.bin"
 #define FW_V2_FILE_NAME			"amss20.bin"
+#define DEFAULT_GENOA_FW_FTM_NAME	"genoaftm.bin"
+
 #define FW_V2_NUMBER			2
 
 #define WAKE_MSI_NAME			"WAKE"
@@ -137,11 +139,14 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define FORCE_WAKE_DELAY_TIMEOUT_US		60000
 
 #define QCA6390_WLAON_QFPROM_PWR_CTRL_REG	0x1F8031C
+#define QCA6390_PCIE_SCRATCH_0_SOC_PCIE_REG	0x1E04040
 
 #define POWER_ON_RETRY_MAX_TIMES		3
 #define POWER_ON_RETRY_DELAY_MS			200
 
 #define LINK_TRAINING_RETRY_MAX_TIMES		3
+
+static void cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv);
 
 static struct cnss_pci_reg ce_src[] = {
 	{ "SRC_RING_BASE_LSB", QCA6390_CE_SRC_RING_BASE_LSB_OFFSET },
@@ -1253,13 +1258,19 @@ int cnss_pci_is_drv_connected(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_pci_is_drv_connected);
 
+static struct cnss_plat_data *cnss_get_plat_priv_by_driver_ops(
+				struct cnss_wlan_driver *driver_ops)
+{
+	return cnss_bus_dev_to_plat_priv(NULL);
+}
 int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 {
 	int ret = 0;
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(NULL);
+	struct cnss_plat_data *plat_priv;
 	struct cnss_pci_data *pci_priv;
 	unsigned int timeout;
 
+	plat_priv = cnss_get_plat_priv_by_driver_ops(driver_ops);
 	if (!plat_priv) {
 		cnss_pr_err("plat_priv is NULL\n");
 		return -ENODEV;
@@ -1274,6 +1285,11 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 	if (pci_priv->driver_ops) {
 		cnss_pr_err("Driver has already registered\n");
 		return -EEXIST;
+	}
+
+	if (driver_ops->get_driver_mode) {
+		plat_priv->driver_mode = driver_ops->get_driver_mode();
+		cnss_pci_update_fw_name(pci_priv);
 	}
 
 	if (!test_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state))
@@ -1303,9 +1319,10 @@ EXPORT_SYMBOL(cnss_wlan_register_driver);
 
 void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 {
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(NULL);
+	struct cnss_plat_data *plat_priv;
 	int ret = 0;
 
+	plat_priv = cnss_get_plat_priv_by_driver_ops(driver_ops);
 	if (!plat_priv) {
 		cnss_pr_err("plat_priv is NULL\n");
 		return;
@@ -2009,7 +2026,14 @@ int cnss_pci_force_wake_request_sync(struct device *dev, int timeout_us)
 	if (test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
 		return -EAGAIN;
 
-	return mhi_device_get_sync_atomic(mhi_ctrl->mhi_dev, timeout_us);
+	if (timeout_us) {
+		/* Busy wait for timeout_us */
+		return mhi_device_get_sync_atomic(mhi_ctrl->mhi_dev,
+						  timeout_us);
+	} else {
+		/* Sleep wait for mhi_ctrl->timeout_ms */
+		return mhi_device_get_sync(mhi_ctrl->mhi_dev, MHI_VOTE_DEVICE);
+	}
 }
 EXPORT_SYMBOL(cnss_pci_force_wake_request_sync);
 
@@ -2281,16 +2305,19 @@ int cnss_smmu_map(struct device *dev,
 	}
 
 	len = roundup(size + paddr - rounddown(paddr, PAGE_SIZE), PAGE_SIZE);
-	iova = roundup(pci_priv->smmu_iova_ipa_start, PAGE_SIZE);
+	iova = roundup(pci_priv->smmu_iova_ipa_current, PAGE_SIZE);
 
-	if (iova >=
-	    (pci_priv->smmu_iova_ipa_start + pci_priv->smmu_iova_ipa_len)) {
+	if (pci_priv->iommu_geometry &&
+	    iova >= pci_priv->smmu_iova_ipa_start +
+		    pci_priv->smmu_iova_ipa_len) {
 		cnss_pr_err("No IOVA space to map, iova %lx, smmu_iova_ipa_start %pad, smmu_iova_ipa_len %zu\n",
 			    iova,
 			    &pci_priv->smmu_iova_ipa_start,
 			    pci_priv->smmu_iova_ipa_len);
 		return -ENOMEM;
 	}
+
+	cnss_pr_dbg("IOMMU map: iova %lx len %zu\n", iova, len);
 
 	ret = iommu_map(pci_priv->smmu_mapping->domain, iova,
 			rounddown(paddr, PAGE_SIZE), len,
@@ -2300,13 +2327,49 @@ int cnss_smmu_map(struct device *dev,
 		return ret;
 	}
 
-	pci_priv->smmu_iova_ipa_start = iova + len;
+	pci_priv->smmu_iova_ipa_current = iova + len;
 	*iova_addr = (uint32_t)(iova + paddr - rounddown(paddr, PAGE_SIZE));
+	cnss_pr_dbg("IOMMU map: iova_addr %lx", *iova_addr);
 
 	return 0;
 }
 EXPORT_SYMBOL(cnss_smmu_map);
 
+int cnss_smmu_unmap(struct device *dev, uint32_t iova_addr, size_t size)
+{
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
+	unsigned long iova;
+	size_t unmapped;
+	size_t len;
+
+	if (!pci_priv)
+		return -ENODEV;
+
+	iova = rounddown(iova_addr, PAGE_SIZE);
+	len = roundup(size + iova_addr - iova, PAGE_SIZE);
+
+	if (iova >= pci_priv->smmu_iova_ipa_start +
+		    pci_priv->smmu_iova_ipa_len) {
+		cnss_pr_err("Out of IOVA space to unmap, iova %lx, smmu_iova_ipa_start %pad, smmu_iova_ipa_len %zu\n",
+			    iova,
+			    &pci_priv->smmu_iova_ipa_start,
+			    pci_priv->smmu_iova_ipa_len);
+		return -ENOMEM;
+	}
+
+	cnss_pr_dbg("IOMMU unmap: iova %lx len %zu\n", iova, len);
+
+	unmapped = iommu_unmap(pci_priv->smmu_mapping->domain, iova, len);
+	if (unmapped != len) {
+		cnss_pr_err("IOMMU unmap failed, unmapped = %zu, requested = %zu\n",
+			    unmapped, len);
+		return -EINVAL;
+	}
+
+	pci_priv->smmu_iova_ipa_current = iova;
+	return 0;
+}
+EXPORT_SYMBOL(cnss_smmu_unmap);
 #else
 struct dma_iommu_mapping *cnss_smmu_get_mapping(struct device *dev)
 {
@@ -2321,6 +2384,13 @@ int cnss_smmu_map(struct device *dev,
 }
 
 EXPORT_SYMBOL(cnss_smmu_map);
+
+int cnss_smmu_unmap(struct device *dev, uint32_t iova_addr, size_t size)  
+{
+	return 0;
+}
+
+EXPORT_SYMBOL(cnss_smmu_unmap);
 
 #endif 
 
@@ -2476,12 +2546,19 @@ void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 			  u32 *msi_addr_high)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
+	u16 control;
 
+	pci_read_config_word(pci_dev, pci_dev->msi_cap + PCI_MSI_FLAGS,
+			     &control);
 	pci_read_config_dword(pci_dev, pci_dev->msi_cap + PCI_MSI_ADDRESS_LO,
 			      msi_addr_low);
-
-	pci_read_config_dword(pci_dev, pci_dev->msi_cap + PCI_MSI_ADDRESS_HI,
-			      msi_addr_high);
+	/*return msi high addr only when device support 64 BIT MSI */
+	if (control & PCI_MSI_FLAGS_64BIT)
+		pci_read_config_dword(pci_dev,
+				      pci_dev->msi_cap + PCI_MSI_ADDRESS_HI,
+				      msi_addr_high);
+	else
+		*msi_addr_high = 0;
 }
 EXPORT_SYMBOL(cnss_get_msi_address);
 
@@ -2769,6 +2846,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	if (cnss_pci_check_link_status(pci_priv))
 		return;
 
+	cnss_pci_dump_shadow_reg(pci_priv);
 	cnss_pci_dump_qdss_reg(pci_priv);
 
 	ret = mhi_download_rddm_img(pci_priv->mhi_ctrl, in_panic);
@@ -2984,7 +3062,21 @@ static void cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 			 "%s" FW_V2_FILE_NAME, cnss_get_fw_path(plat_priv));
 		mhi_ctrl->fw_image = plat_priv->firmware_name;
 	}
-
+	if (pci_priv->device_id == QCN7605_DEVICE_ID) {
+		if (plat_priv->driver_mode == CNSS_FTM) {
+			snprintf(plat_priv->firmware_name,
+				 sizeof(plat_priv->firmware_name),
+				 "%s" DEFAULT_GENOA_FW_FTM_NAME,
+				 cnss_get_fw_path(plat_priv));
+			mhi_ctrl->fw_image = plat_priv->firmware_name;
+		} else {
+			snprintf(plat_priv->firmware_name,
+				 sizeof(plat_priv->firmware_name),
+				 "%s" DEFAULT_FW_FILE_NAME,
+				 cnss_get_fw_path(plat_priv));
+			mhi_ctrl->fw_image = plat_priv->firmware_name;
+		}
+	}
 	cnss_pr_dbg("Firmware name is %s\n", mhi_ctrl->fw_image);
 }
 
@@ -3217,6 +3309,9 @@ int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 		ret = mhi_force_rddm_mode(pci_priv->mhi_ctrl);
 		break;
 	case CNSS_MHI_RDDM_DONE:
+		cnss_pr_info("force mhi reset after RDDM\n");
+		mhi_set_mhi_state(pci_priv->mhi_ctrl, MHI_STATE_RESET);
+		pci_priv->mhi_ctrl->initiate_mhi_reset = false;
 		break;
 	default:
 		cnss_pr_err("Unhandled MHI state (%d)\n", mhi_state);
@@ -3413,6 +3508,7 @@ static int cnss_pci_get_smmu_cfg(struct cnss_plat_data *plat_priv)
 	}
 
 	pci_priv->smmu_iova_ipa_start = res->start;
+	pci_priv->smmu_iova_ipa_current = res->start;
 	pci_priv->smmu_iova_ipa_len = resource_size(res);
 	cnss_pr_dbg("%s - smmu_iova_ipa_start: %pa, smmu_iova_ipa_len: %zu\n",
 		    (plat_priv->is_converged_dt ?
@@ -3634,7 +3730,7 @@ static const struct dev_pm_ops cnss_pm_ops = {
 			   cnss_pci_runtime_idle)
 };
 
-struct pci_driver cnss_pci_driver = {
+static struct pci_driver cnss_pci_driver = {
 	.name     = "cnss_pci",
 	.id_table = cnss_pci_id_table,
 	.probe    = cnss_pci_probe,

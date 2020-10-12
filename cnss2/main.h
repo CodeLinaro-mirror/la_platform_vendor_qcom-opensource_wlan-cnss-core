@@ -267,6 +267,7 @@ enum cnss_ce_index {
 
 struct cnss_plat_data {
 	struct platform_device *plat_dev;
+	enum cnss_driver_mode driver_mode;
 	void *bus_priv;
 	enum cnss_dev_bus_type bus_type;
 	struct list_head vreg_list;
@@ -318,6 +319,9 @@ struct cnss_plat_data {
 	u32 is_converged_dt;
 	struct device_node *dev_node;
 	u8 set_wlaon_pwr_ctrl;
+	bool fw_pcie_gen_switch;
+	u8 pcie_gen_speed;
+	char device_name[16];
 };
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
