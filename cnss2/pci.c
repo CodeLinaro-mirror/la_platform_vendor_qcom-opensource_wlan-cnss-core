@@ -1507,6 +1507,12 @@ int cnss_pci_force_wake_release(struct device *dev)
 	return 0;
 }
 EXPORT_SYMBOL(cnss_pci_force_wake_release);
+
+int cnss_pci_force_wake_request_sync(struct device *dev, int timeout_us)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_pci_force_wake_request_sync);
 #else
 int cnss_pci_force_wake_request(struct device *dev)
 {

@@ -294,6 +294,7 @@ extern int cnss_usb_wlan_register_driver(struct cnss_usb_wlan_driver *driver);
 extern void cnss_usb_wlan_unregister_driver(struct cnss_usb_wlan_driver *
 					    driver);
 extern int cnss_usb_is_device_down(struct device *dev);
+extern int cnss_pci_force_wake_request_sync(struct device *dev, int timeout);
 #ifdef CONFIG_SDIO_QCN
 extern int cnss_sdio_wlan_register_driver(struct cnss_sdio_wlan_driver *
 					  driver_ops);
