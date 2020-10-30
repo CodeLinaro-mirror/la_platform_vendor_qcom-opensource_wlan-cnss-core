@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -446,3 +446,64 @@ int cnss_get_msi_assignment(struct cnss_plat_data *plat_priv,
 					    user_base_data,
 					    base_vector);
 }
+
+int cnss_bus_get_iova(struct cnss_plat_data *plat_priv, u64 *addr, u64 *size)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_get_iova(plat_priv->bus_priv, addr, size);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return -EINVAL;
+	}
+}
+
+int cnss_bus_get_iova_ipa(struct cnss_plat_data *plat_priv, u64 *addr,
+			  u64 *size)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_get_iova_ipa(plat_priv->bus_priv, addr, size);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return -EINVAL;
+	}
+}
+
+int cnss_bus_fw_sram_dump_to_file(struct cnss_plat_data *plat_priv,
+		uint32_t fw_sram_start,
+		uint32_t fw_sram_end,
+		const char *fw_sram_dump_path)
+{
+	int ret = 0;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	switch (cnss_get_bus_type(plat_priv)) {
+		case CNSS_BUS_PCI:
+			ret = cnss_pci_fw_sram_dump_to_file(
+					plat_priv->bus_priv,
+					fw_sram_start,
+					fw_sram_end,
+					fw_sram_dump_path);
+			break;
+		case CNSS_BUS_USB:
+		default:
+			ret = -ENOTSUPP;
+			break;
+	}
+
+	return ret;
+}
+				

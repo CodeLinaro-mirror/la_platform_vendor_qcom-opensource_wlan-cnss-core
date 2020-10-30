@@ -47,6 +47,15 @@
 #define CNSS_QMI_TIMEOUT_DEFAULT	10000
 #define CNSS_BDF_TYPE_DEFAULT		CNSS_BDF_ELF
 
+#define FW_SRAM_DUMP_PATH			"/var/crash/fw_sram_dump.bin"
+#define FW_SRAM_START_QCA6390		0x01400000
+#define FW_SRAM_END_QCA6390			0x0171ffff
+#define FW_SRAM_START_QCA6490		0x01400000
+#define FW_SRAM_END_QCA6490			0x0177ffff
+#define FW_SRAM_START_QCN7605		0x01800000
+#define FW_SRAM_END_QCN7605			0x01ABFFFF
+
+
 static struct cnss_plat_data *plat_env;
 static bool pm_notify_registered;
 
@@ -477,7 +486,10 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 		ret = cnss_bus_call_driver_probe(plat_priv);
 	}
 
-	if (ret && test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
+	if (ret && (test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) ||
+		    (test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state) &&
+		     test_bit(IGNORE_PROBE_FAIL_SHUTDOWN,
+			      &plat_priv->ctrl_params.quirks))))
 		goto out;
 	else if (ret)
 		goto shutdown;
@@ -1196,11 +1208,61 @@ int cnss_force_fw_assert(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_force_fw_assert);
 
+int cnss_dump_fw_sram_to_file(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	uint32_t fw_sram_start;
+	uint32_t fw_sram_end;
+	int ret;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	switch(plat_priv->device_id) {
+		case QCA6490_DEVICE_ID:
+			fw_sram_start = FW_SRAM_START_QCA6490;
+			fw_sram_end = FW_SRAM_END_QCA6490;
+			break;
+		case QCA6390_DEVICE_ID:
+			fw_sram_start = FW_SRAM_START_QCA6390;
+			fw_sram_end = FW_SRAM_END_QCA6390;
+			break;
+		case QCN7605_DEVICE_ID:
+			fw_sram_start = FW_SRAM_START_QCN7605;
+			fw_sram_end = FW_SRAM_END_QCN7605;
+			break;
+		default:
+			cnss_pr_err("FW sram dump not support: device %04lx\n",
+				plat_priv->device_id);
+			return -ENOTSUPP;
+	}
+
+	cnss_pr_info("FW sram dump start %s ...\n", FW_SRAM_DUMP_PATH);
+
+	ret = cnss_bus_fw_sram_dump_to_file(plat_priv,
+			fw_sram_start,
+			fw_sram_end,
+			FW_SRAM_DUMP_PATH);
+
+	cnss_pr_info("FW sram dump end, status %d\n", ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_dump_fw_sram_to_file);
+
+
 static int cnss_wlfw_server_arrive_hdlr(struct cnss_plat_data *plat_priv,
 					void *data)
 {
 	int ret;
 	unsigned int bdf_type;
+
+	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state)) {
+		cnss_pr_info("Unloading is in progress, ignore server arrive\n");
+		return 0;
+	}
 
 	ret = cnss_wlfw_server_arrive(plat_priv, data);
 	if (ret)
