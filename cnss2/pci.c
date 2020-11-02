@@ -20,6 +20,7 @@
 #include <linux/memblock.h>
 #include <linux/completion.h>
 #include <soc/qcom/ramdump.h>
+#include <linux/version.h>
 
 #include "main.h"
 #include "bus.h"
@@ -3042,8 +3043,11 @@ int cnss_pci_fw_sram_dump_to_file(struct cnss_pci_data *pci_priv,
 
 	for (offset = fw_sram_start; offset < fw_sram_end; offset += 4) {
 		cnss_pci_reg_read(pci_priv, offset, &val);
-
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0))
 		status = kernel_write(fp, (char *)&val, sizeof(uint32_t), &pos);
+#else
+		status = kernel_write(fp, (char *)&val, sizeof(uint32_t), pos);
+#endif
 		if (status < 0) {
 			cnss_pr_err("FW sram dump write file %s failed: %d\n",
 					fw_sram_dump_path, status);
