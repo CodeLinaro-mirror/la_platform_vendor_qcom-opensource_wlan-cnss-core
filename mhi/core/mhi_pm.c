@@ -26,7 +26,6 @@
 #include "mhi_internal.h"
 
 static void mhi_special_events_pending(struct mhi_controller *mhi_cntrl);
-
 /*
  * Not all MHI states transitions are sync transitions. Linkdown, SSR, and
  * shutdown can happen anytime asynchronously. This function will transition to
@@ -571,8 +570,9 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 	struct mhi_cmd *mhi_cmd;
 	struct mhi_event_ctxt *er_ctxt;
 	struct mhi_sfr_info *sfr_info = mhi_cntrl->mhi_sfr;
-	int ret, i;
-
+	//int ret, i;
+	int i;
+	
 	MHI_CNTRL_LOG(
 		"Enter with from pm_state:%s MHI_STATE:%s to pm_state:%s\n",
 		to_mhi_pm_state_str(mhi_cntrl->pm_state),
@@ -610,17 +610,16 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 		mutex_unlock(&mhi_cntrl->pm_mutex);
 		return;
 	}
-
 	/* trigger MHI RESET so device will not access host ddr */
 	if (MHI_REG_ACCESS_VALID(prev_state)) {
-		unsigned long timeout = msecs_to_jiffies(mhi_cntrl->timeout_ms);
+		//unsigned long timeout = msecs_to_jiffies(mhi_cntrl->timeout_ms);
 
 		MHI_CNTRL_LOG("Trigger device into MHI_RESET\n");
 
 		write_lock_irq(&mhi_cntrl->pm_lock);
 		mhi_set_mhi_state(mhi_cntrl, MHI_STATE_RESET);
 		write_unlock_irq(&mhi_cntrl->pm_lock);
-
+#if 0
 		/* wait for reset to be cleared */
 		ret = wait_event_timeout(mhi_cntrl->state_event,
 				!mhi_cntrl->initiate_mhi_reset, timeout);
@@ -629,7 +628,7 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 			mutex_unlock(&mhi_cntrl->pm_mutex);
 			return;
 		}
-
+#endif
 		/*
 		 * device cleares INTVEC as part of RESET processing,
 		 * re-program it
@@ -640,7 +639,6 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 
 		mhi_cntrl->initiate_mhi_reset = false;
 	}
-
 	MHI_CNTRL_LOG(
 		"Waiting for all pending event ring processing to complete\n");
 	mhi_event = mhi_cntrl->mhi_event;
@@ -787,7 +785,7 @@ static int mhi_queue_disable_transition(struct mhi_controller *mhi_cntrl,
 	list_add_tail(&item->node, &mhi_cntrl->transition_list);
 	spin_unlock_irqrestore(&mhi_cntrl->transition_lock, flags);
 
-	schedule_work(&mhi_cntrl->st_worker);
+	queue_work(mhi_cntrl->wq, &mhi_cntrl->st_worker);
 
 	return 0;
 }
@@ -807,7 +805,7 @@ int mhi_queue_state_transition(struct mhi_controller *mhi_cntrl,
 	list_add_tail(&item->node, &mhi_cntrl->transition_list);
 	spin_unlock_irqrestore(&mhi_cntrl->transition_lock, flags);
 
-	schedule_work(&mhi_cntrl->st_worker);
+	queue_work(mhi_cntrl->wq, &mhi_cntrl->st_worker);
 
 	return 0;
 }
@@ -823,8 +821,7 @@ static void mhi_special_events_pending(struct mhi_controller *mhi_cntrl)
 
 		spin_lock_bh(&mhi_event->lock);
 		if (ev_ring->rp != mhi_to_virtual(ev_ring, er_ctxt->rp)) {
-			queue_work(mhi_cntrl->special_wq,
-				   &mhi_cntrl->special_work);
+			queue_work(mhi_cntrl->wq, &mhi_cntrl->special_work);
 			spin_unlock_bh(&mhi_event->lock);
 			break;
 		}
@@ -1701,3 +1698,239 @@ int mhi_force_rddm_mode(struct mhi_controller *mhi_cntrl)
 	return ret;
 }
 EXPORT_SYMBOL(mhi_force_rddm_mode);
+#if 0
+#define PCIE_TXVECDB (0x360)
+#define PCIE_TXVECSTATUS (0x368)
+#define PCIE_RXVECDB (0x394)
+#define PCIE_RXVECSTATUS (0x39C)
+
+#define PCIE_SOC_GLOBAL_RESET (0x3008)
+#define PCIE_SOC_GLOBAL_RESET_V (1 << 0)
+
+
+#define WLAON_WARM_SW_ENTRY (0x1f80504)
+
+#define MAX_UNWINDOWED_ADDRESS 0x80000
+
+#define WINDOW_ENABLE_BIT 0x80000000
+#define WINDOW_SHIFT 19
+#define WINDOW_VALUE_MASK 0x3F
+#define WINDOW_START MAX_UNWINDOWED_ADDRESS
+#define WINDOW_RANGE_MASK 0x7FFFF
+
+/* 4k - 32bytes */
+#define MAPPED_REF_OFF (4096 - 32 -1)
+
+#define PCIE_REMAP_1M_BAR_CTRL (0x310c)
+
+
+void mhi_check_assert_wake(struct mhi_controller *mhi_cntrl,
+			   u32 offset)
+{
+	if (offset > MAPPED_REF_OFF) {
+		read_lock_bh(&mhi_cntrl->pm_lock);
+		mhi_assert_dev_wake(mhi_cntrl, true);
+		read_unlock_bh(&mhi_cntrl->pm_lock);
+	}
+}
+void mhi_check_deassert_wake(struct mhi_controller *mhi_cntrl,
+			     u32 offset)
+{
+	if (offset > MAPPED_REF_OFF) {
+		read_lock_bh(&mhi_cntrl->pm_lock);
+		mhi_deassert_dev_wake(mhi_cntrl, false);
+		read_unlock_bh(&mhi_cntrl->pm_lock);
+	}
+}
+
+
+static inline void mhi_reg_select_window(void __iomem *base, u32 offset)
+{
+	u32 window = (offset >> WINDOW_SHIFT) & WINDOW_VALUE_MASK;
+
+	writel_relaxed(WINDOW_ENABLE_BIT | window,
+			base + PCIE_REMAP_1M_BAR_CTRL);
+}
+
+
+u32 mhi_reg_read_remap(struct mhi_controller *mhi_cntrl,
+			      void __iomem *base,
+			      u32 offset,
+			      u32 *out)
+{
+	u32 tmp;
+
+	mhi_check_assert_wake(mhi_cntrl, offset);
+
+	if (offset < MAX_UNWINDOWED_ADDRESS) {
+		tmp = readl_relaxed(base + offset);
+	} else {
+		mhi_reg_select_window(base, offset);
+		tmp = readl_relaxed(base + WINDOW_START +
+				(offset & WINDOW_RANGE_MASK));
+	}
+
+	mhi_check_deassert_wake(mhi_cntrl, offset);
+
+	/* unexpected value, query the link status */
+	if (PCI_INVALID_READ(tmp) &&
+	    mhi_cntrl->link_status(mhi_cntrl, mhi_cntrl->priv_data))
+		return -EIO;
+	
+	*out = tmp;
+	return 0;
+}
+
+
+void mhi_reg_write_remap(struct mhi_controller *mhi_cntrl,
+		   void __iomem *base,
+		   u32 offset,
+		   u32 val)
+{
+	mhi_check_assert_wake(mhi_cntrl, offset);
+
+	if (offset < MAX_UNWINDOWED_ADDRESS) {
+		writel_relaxed(val, base + offset);
+	} else {
+		mhi_reg_select_window(base, offset);
+		writel_relaxed(val, base + WINDOW_START +
+			  (offset & WINDOW_RANGE_MASK));
+	}
+
+	mhi_check_deassert_wake(mhi_cntrl, offset);
+}
+
+
+
+static inline void mhi_mdelay(u32 delay)
+{
+	if (in_interrupt() || irqs_disabled() || in_atomic())
+		mdelay(delay);
+	else
+		msleep(delay);
+}
+
+void mhi_set_wlaon_sw_entry(struct mhi_controller *mhi_cntrl)
+{
+	u32 val;
+	int ret;
+
+	ret = mhi_reg_read_remap(mhi_cntrl, mhi_cntrl->regs, WLAON_WARM_SW_ENTRY, &val);
+
+	MHI_LOG("WLAON_WARM_SW_ENTRY 0x%x\n", val);
+	
+	mhi_reg_write_remap(mhi_cntrl, mhi_cntrl->regs, WLAON_WARM_SW_ENTRY, 0);		
+
+	mhi_mdelay(10);
+
+	ret = mhi_reg_read_remap(mhi_cntrl, mhi_cntrl->regs, WLAON_WARM_SW_ENTRY, &val);
+
+	MHI_LOG("WLAON_WARM_SW_ENTRY 0x%x\n", val);
+}
+
+void mhi_set_pcie_mhictrl_reset(struct mhi_controller *mhi_cntrl)
+{
+	u32 val;
+	int ret;
+	ret = mhi_reg_read_remap(mhi_cntrl, mhi_cntrl->regs, MHISTATUS, &val);
+
+	MHI_LOG("MHISTATUS1 0x%x\n", val);
+
+	ret = mhi_reg_read_remap(mhi_cntrl, mhi_cntrl->regs, MHICTRL, &val);
+
+	MHI_LOG("MHICTRL1 0x%x\n", val);
+
+
+	/*
+	 * Observed on Hastings that after SOC_GLOBAL_RESET, MHISTATUS
+	 * has SYSERR bit set and thus need to set MHICTRL_RESET
+	 * to clear SYSERR.
+	 */
+	mhi_reg_write_remap(mhi_cntrl, mhi_cntrl->regs, MHICTRL, MHICTRL_RESET_MASK);
+
+	mhi_mdelay(10);
+  
+	ret = mhi_reg_read_remap(mhi_cntrl, mhi_cntrl->regs, MHISTATUS, &val);
+
+	MHI_LOG("MHISTATUS2 0x%x\n", val);
+
+	ret = mhi_reg_read_remap(mhi_cntrl, mhi_cntrl->regs, MHICTRL, &val);
+
+	MHI_LOG("MHICTRL2 0x%x\n", val);
+
+	
+}
+
+void mhi_set_pcie_soc_global_reset(struct mhi_controller *mhi_cntrl)
+{
+	u32 val;
+	u32 delay;
+	int ret;
+
+	ret = mhi_reg_read_remap(mhi_cntrl, mhi_cntrl->regs, PCIE_SOC_GLOBAL_RESET, &val);
+
+	val |= PCIE_SOC_GLOBAL_RESET_V;
+
+	mhi_reg_write_remap(mhi_cntrl, mhi_cntrl->regs, PCIE_SOC_GLOBAL_RESET, val);	
+
+
+	/* TODO: exact time to sleep is uncertain */
+	delay = 10;
+	mhi_mdelay(delay);
+
+	/* Need to toggle V bit back otherwise stuck in reset status */
+	val &= ~PCIE_SOC_GLOBAL_RESET_V;
+	
+	mhi_reg_write_remap(mhi_cntrl, mhi_cntrl->regs, PCIE_SOC_GLOBAL_RESET, val);	
+
+	mhi_mdelay(delay);
+}
+
+
+void mhi_reset_pcie_txvecdb(struct mhi_controller *mhi_cntrl)
+{
+	mhi_reg_write_remap(mhi_cntrl, mhi_cntrl->regs, PCIE_TXVECDB, 0);		
+}
+
+void mhi_reset_pcie_txvecstatus(struct mhi_controller *mhi_cntrl)
+{
+	mhi_reg_write_remap(mhi_cntrl, mhi_cntrl->regs, PCIE_TXVECSTATUS, 0);		
+}
+
+void mhi_reset_pcie_rxvecdb(struct mhi_controller *mhi_cntrl)
+{
+	mhi_reg_write_remap(mhi_cntrl, mhi_cntrl->regs, PCIE_RXVECDB, 0);		
+}
+
+void mhi_reset_pcie_rxvecstatus(struct mhi_controller *mhi_cntrl)
+{	
+	mhi_reg_write_remap(mhi_cntrl, mhi_cntrl->regs, PCIE_RXVECSTATUS, 0);		
+}
+
+
+void mhi_pcie_sw_reset(struct mhi_controller *mhi_cntrl)
+{
+	/*
+	 * Following are needed to unload and reload wlan driver
+	 * dynamically without the need to press S1 reset.
+	 *
+	 * txvecdb, txvecstatus, rxvecdb and rxvecstatus registers
+	 * are not cleared upon global reset. Thus reset here per
+	 * FW suggestions.
+	 *
+	 * WLAON domain is cleared to prevent Q6 from going warm
+	 * boot path and enter dead loop.
+	 *
+	 * gloabl reset is triggered to reset SoC and SoC will be
+	 * in PBL state then.
+	 */
+	mhi_reset_pcie_txvecdb(mhi_cntrl);
+	mhi_reset_pcie_txvecstatus(mhi_cntrl);
+	mhi_reset_pcie_rxvecdb(mhi_cntrl);
+	mhi_reset_pcie_rxvecstatus(mhi_cntrl);
+	mhi_set_wlaon_sw_entry(mhi_cntrl);
+	mhi_set_pcie_soc_global_reset(mhi_cntrl);
+	mhi_set_pcie_mhictrl_reset(mhi_cntrl);
+}
+
+#endif

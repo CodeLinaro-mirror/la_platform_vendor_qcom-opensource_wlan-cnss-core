@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,7 @@
 #define QCA6390_DEVICE_ID		0x1101
 #define QCN7605_VENDOR_ID               0x17CB
 #define QCN7605_DEVICE_ID               0x1102
+#define QCA6490_DEVICE_ID		0x1103
 
 #define QCN7605_USB_VENDOR_ID             0x05C6
 #define QCN7605_STANDALONE_PRODUCT_ID    0x9900
@@ -67,4 +68,11 @@ int cnss_get_msi_assignment(struct cnss_plat_data *plat_priv,
 			    int *num_vectors,
 			    u32 *user_base_data,
 			    u32 *base_vector);
+int cnss_bus_get_iova(struct cnss_plat_data *plat_priv, u64 *addr, u64 *size);
+int cnss_bus_get_iova_ipa(struct cnss_plat_data *plat_priv, u64 *addr,
+			  u64 *size);
+int cnss_bus_fw_sram_dump_to_file(struct cnss_plat_data *plat_priv,
+		uint32_t fw_sram_start,
+		uint32_t fw_sram_end,
+		const char *fw_sram_dump_path);
 #endif /* _CNSS_BUS_H */
