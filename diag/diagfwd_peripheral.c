@@ -946,8 +946,9 @@ int diagfwd_peripheral_init(void)
 
 	if (driver->supports_sockets)
 		diag_socket_init();
+#ifndef CONFIG_DIAG_OPTIMIZE	
 	diag_rpmsg_init();
-
+#endif
 	return 0;
 }
 

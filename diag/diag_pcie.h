@@ -84,7 +84,9 @@ struct diag_pcie_info {
 	struct work_struct read_work;
 	struct work_struct open_work;
 	struct work_struct close_work;
+#ifndef CONFIG_DIAG_OPTIMIZE
 	struct workqueue_struct *wq;
+#endif
 	spinlock_t lock;
 	void (*event_notifier)(struct mhi_dev_client_cb_reason *cb);
 };

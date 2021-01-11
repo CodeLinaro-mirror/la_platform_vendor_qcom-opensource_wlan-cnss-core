@@ -73,6 +73,7 @@ struct diag_mhi_info diag_mhi[NUM_MHI_DEV] = {
 			.type = TYPE_MHI_WRITE_CH,
 		}
 	},
+#ifndef CONFIG_DIAG_OPTIMIZE
 	{
 		.id = MHI_DCI_1,
 		.dev_id = DIAGFWD_MDM_DCI,
@@ -90,6 +91,7 @@ struct diag_mhi_info diag_mhi[NUM_MHI_DEV] = {
 			.type = TYPE_MHI_WRITE_CH,
 		}
 	}
+#endif
 };
 
 static int mhi_buf_tbl_add(struct diag_mhi_info *mhi_info, int type,
@@ -742,7 +744,6 @@ int diag_mhi_init(void)
 	int err = 0;
 	struct diag_mhi_info *mhi_info = NULL;
 	char wq_name[DIAG_MHI_NAME_SZ + DIAG_MHI_STRING_SZ];
-
 	for (i = 0; i < NUM_MHI_DEV; i++) {
 		mhi_info = &diag_mhi[i];
 		spin_lock_init(&mhi_info->lock);

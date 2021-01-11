@@ -478,6 +478,21 @@ int cnss_bus_get_iova_ipa(struct cnss_plat_data *plat_priv, u64 *addr,
 	}
 }
 
+bool cnss_bus_is_smmu_s1_enabled(struct cnss_plat_data *plat_priv)
+{
+	if (!plat_priv)
+		return false;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_is_smmu_s1_enabled(plat_priv->bus_priv);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return false;
+	}
+}
+
 int cnss_bus_fw_sram_dump_to_file(struct cnss_plat_data *plat_priv,
 		uint32_t fw_sram_start,
 		uint32_t fw_sram_end,

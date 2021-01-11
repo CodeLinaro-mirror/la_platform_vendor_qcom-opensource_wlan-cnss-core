@@ -1432,7 +1432,9 @@ static int diagfwd_mux_open(int id, int mode)
 		diagfwd_open(i, TYPE_DATA);
 		diagfwd_open(i, TYPE_CMD);
 	}
+#ifndef CONFIG_DIAG_OPTIMIZE
 	queue_work(driver->diag_real_time_wq, &driver->diag_real_time_work);
+#endif
 	return 0;
 }
 
@@ -1498,11 +1500,15 @@ static int diagfwd_mux_close(int id, int mode)
 				driver->hdlc_disabled;
 		}
 		mutex_unlock(&driver->hdlc_disable_mutex);
+#ifndef CONFIG_DIAG_OPTIMIZE
 		queue_work(driver->diag_wq,
 			&(driver->update_user_clients));
+#endif
 	}
+#ifndef CONFIG_DIAG_OPTIMIZE
 	queue_work(driver->diag_real_time_wq,
 		   &driver->diag_real_time_work);
+#endif
 	return 0;
 }
 
@@ -1534,6 +1540,8 @@ static void hdlc_reset_timer_start(int pid)
  * which are not in any md_session_info.
  *
  */
+ 
+#ifndef CONFIG_DIAG_OPTIMIZE	
 static void diag_timer_work_fn(struct work_struct *work)
 {
 	int i = 0;
@@ -1590,6 +1598,7 @@ static void diag_md_timer_work_fn(struct work_struct *work)
 	mutex_unlock(&driver->md_session_lock);
 	mutex_unlock(&driver->hdlc_disable_mutex);
 }
+#endif
 
 static void hdlc_reset_timer_func(unsigned long data)
 {
@@ -1597,8 +1606,10 @@ static void hdlc_reset_timer_func(unsigned long data)
 		       __func__);
 
 	if (hdlc_reset) {
+#ifndef CONFIG_DIAG_OPTIMIZE
 		queue_work(driver->diag_wq, &(driver->diag_hdlc_reset_work));
 		queue_work(driver->diag_wq, &(driver->update_user_clients));
+#endif
 	}
 	hdlc_timer_in_progress = 0;
 }
@@ -1618,9 +1629,11 @@ void diag_md_hdlc_reset_timer_func(unsigned long pid)
 	}
 	if (hdlc_reset) {
 		hdlc_reset_work->pid = pid;
+#ifndef CONFIG_DIAG_OPTIMIZE	
 		INIT_WORK(&hdlc_reset_work->work, diag_md_timer_work_fn);
 		queue_work(driver->diag_wq, &(hdlc_reset_work->work));
 		queue_work(driver->diag_wq, &(driver->update_md_clients));
+#endif
 	}
 	hdlc_timer_in_progress = 0;
 }
@@ -1965,9 +1978,10 @@ int diagfwd_init(void)
 	INIT_LIST_HEAD(&driver->cmd_reg_list);
 	driver->cmd_reg_count = 0;
 	mutex_init(&driver->cmd_reg_mutex);
+#ifndef CONFIG_DIAG_OPTIMIZE	
 	INIT_WORK(&(driver->diag_hdlc_reset_work),
 			diag_timer_work_fn);
-
+#endif
 	for (i = 0; i < NUM_PERIPHERALS; i++) {
 		driver->feature[i].separate_cmd_rsp = 0;
 		driver->feature[i].stm_support = DISABLE_STM;
@@ -2045,9 +2059,11 @@ int diagfwd_init(void)
 			goto err;
 		kmemleak_not_leak(driver->apps_rsp_buf);
 	}
+#ifndef CONFIG_DIAG_OPTIMIZE
 	driver->diag_wq = create_singlethread_workqueue("diag_wq");
 	if (!driver->diag_wq)
 		goto err;
+#endif
 	ret = diag_mux_register(DIAG_LOCAL_PROC, DIAG_LOCAL_PROC,
 				&diagfwd_mux_ops);
 	if (ret) {
@@ -2069,8 +2085,10 @@ err:
 	kfree(driver->apps_rsp_buf);
 	kfree(hdlc_decode);
 	kfree(driver->user_space_data_buf);
+#ifndef CONFIG_DIAG_OPTIMIZE
 	if (driver->diag_wq)
 		destroy_workqueue(driver->diag_wq);
+#endif
 	return -ENOMEM;
 }
 
@@ -2085,5 +2103,7 @@ void diagfwd_exit(void)
 	kfree(driver->dci_pkt_buf);
 	kfree(driver->apps_rsp_buf);
 	kfree(driver->user_space_data_buf);
+#ifndef CONFIG_DIAG_OPTIMIZE
 	destroy_workqueue(driver->diag_wq);
+#endif
 }

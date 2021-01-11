@@ -626,7 +626,9 @@ struct diagchar_dev {
 	int num_dci_client;
 	unsigned char *apps_dci_buf;
 	int dci_state;
+#ifndef CONFIG_DIAG_OPTIMIZE
 	struct workqueue_struct *diag_dci_wq;
+#endif
 	struct list_head cmd_reg_list;
 	struct list_head diag_id_list;
 	struct mutex diag_id_mutex;
@@ -684,19 +686,23 @@ struct diagchar_dev {
 	uint16_t proc_active_mask;
 	uint16_t proc_rt_vote_mask[DIAG_NUM_PROC];
 	struct mutex real_time_mutex;
+#ifndef CONFIG_DIAG_OPTIMIZE
 	struct work_struct diag_real_time_work;
 	struct workqueue_struct *diag_real_time_wq;
+#endif
 #ifdef CONFIG_DIAG_OVER_USB
 	int usb_connected;
 #endif
 	int pcie_connected;
 	int pcie_switch_pid;
+#ifndef CONFIG_DIAG_OPTIMIZE
 	struct workqueue_struct *diag_wq;
 	struct work_struct diag_drain_work;
 	struct work_struct update_user_clients;
 	struct work_struct update_md_clients;
 	struct work_struct diag_hdlc_reset_work;
 	struct workqueue_struct *diag_cntl_wq;
+#endif
 	uint8_t log_on_demand_support;
 	uint8_t *apps_req_buf;
 	uint32_t apps_req_buf_len;

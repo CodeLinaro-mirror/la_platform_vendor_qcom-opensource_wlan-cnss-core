@@ -48,8 +48,9 @@
 
 static struct timer_list dci_drain_timer;
 static int dci_timer_in_progress;
+#ifndef CONFIG_DIAG_OPTIMIZE
 static struct work_struct dci_data_drain_work;
-
+#endif
 struct diag_dci_partial_pkt_t partial_pkt;
 
 unsigned int dci_max_reg = 100;
@@ -197,7 +198,9 @@ static void create_dci_event_mask_tbl(unsigned char *tbl_buf)
 
 void dci_drain_data(unsigned long data)
 {
+#ifndef CONFIG_DIAG_OPTIMIZE
 	queue_work(driver->diag_dci_wq, &dci_data_drain_work);
+#endif
 }
 
 static void dci_check_drain_timer(void)
@@ -2881,6 +2884,7 @@ int diag_dci_init(void)
 	INIT_LIST_HEAD(&driver->dci_client_list);
 	INIT_LIST_HEAD(&driver->dci_req_list);
 
+#ifndef CONFIG_DIAG_OPTIMIZE
 	driver->diag_dci_wq = create_singlethread_workqueue("diag_dci_wq");
 	if (!driver->diag_dci_wq)
 		goto err;
@@ -2888,14 +2892,17 @@ int diag_dci_init(void)
 	INIT_WORK(&dci_data_drain_work, dci_data_drain_work_fn);
 
 	setup_timer(&dci_drain_timer, dci_drain_data, 0);
+#endif
 	return DIAG_DCI_NO_ERROR;
 err:
 	pr_err("diag: Could not initialize diag DCI buffers");
 	vfree(driver->apps_dci_buf);
 	driver->apps_dci_buf = NULL;
 
+#ifndef CONFIG_DIAG_OPTIMIZE
 	if (driver->diag_dci_wq)
 		destroy_workqueue(driver->diag_dci_wq);
+#endif
 	vfree(partial_pkt.data);
 	partial_pkt.data = NULL;
 	mutex_destroy(&driver->dci_mutex);
@@ -2923,7 +2930,9 @@ void diag_dci_exit(void)
 	mutex_destroy(&driver->dci_mutex);
 	mutex_destroy(&dci_log_mask_mutex);
 	mutex_destroy(&dci_event_mask_mutex);
+#ifndef CONFIG_DIAG_OPTIMIZE
 	destroy_workqueue(driver->diag_dci_wq);
+#endif
 }
 
 int diag_dci_clear_log_mask(int client_id)
@@ -3123,7 +3132,9 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
 	list_add_tail(&new_entry->track, &driver->dci_client_list);
 	if (driver->num_dci_client == 1)
 		diag_update_proc_vote(DIAG_PROC_DCI, VOTE_UP, reg_entry->token);
+#ifndef CONFIG_DIAG_OPTIMIZE	
 	queue_work(driver->diag_real_time_wq, &driver->diag_real_time_work);
+#endif
 	mutex_unlock(&driver->dci_mutex);
 
 	return reg_entry->client_id;
@@ -3300,8 +3311,9 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
 		real_time = diag_dci_get_cumulative_real_time(token);
 		diag_update_real_time_vote(DIAG_PROC_DCI, real_time, token);
 	}
+#ifndef CONFIG_DIAG_OPTIMIZE	
 	queue_work(driver->diag_real_time_wq, &driver->diag_real_time_work);
-
+#endif
 	return DIAG_DCI_NO_ERROR;
 }
 

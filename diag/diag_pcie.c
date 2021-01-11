@@ -36,7 +36,9 @@ struct diag_pcie_info diag_pcie[NUM_DIAG_PCIE_DEV] = {
 		.enabled = {0},
 		.mempool = POOL_TYPE_MUX_APPS,
 		.ops = NULL,
+#ifndef CONFIG_DIAG_OPTIMIZE		
 		.wq = NULL,
+#endif
 		.read_cnt = 0,
 		.write_cnt = 0,
 		.in_chan_attr = {
@@ -61,8 +63,10 @@ static void diag_pcie_event_notifier(struct mhi_dev_client_cb_reason *reason)
 		pcie_info = &diag_pcie[i];
 		if (reason->reason == MHI_DEV_TRE_AVAILABLE)
 			if (reason->ch_id == pcie_info->in_chan) {
+#ifndef CONFIG_DIAG_OPTIMIZE
 				queue_work(pcie_info->wq,
 					&pcie_info->read_work);
+#endif
 				break;
 			}
 	}
@@ -431,7 +435,9 @@ void diag_pcie_client_cb(struct mhi_dev_client_cb_data *cb_data)
 				pcie_info->out_chan);
 			if (atomic_read(&pcie_info->enabled))
 				return;
+#ifndef CONFIG_DIAG_OPTIMIZE
 			queue_work(pcie_info->wq, &pcie_info->open_work);
+#endif
 		}
 		break;
 	case MHI_STATE_DISCONNECTED:
@@ -441,7 +447,9 @@ void diag_pcie_client_cb(struct mhi_dev_client_cb_data *cb_data)
 				pcie_info->out_chan);
 			if (!atomic_read(&pcie_info->enabled))
 				return;
+#ifndef CONFIG_DIAG_OPTIMIZE
 			queue_work(pcie_info->wq, &pcie_info->close_work);
+#endif
 		}
 		break;
 	default:
@@ -485,9 +493,10 @@ static void diag_pcie_connect(struct diag_pcie_info *ch)
 	if (ch->ops && ch->ops->open)
 		if (atomic_read(&ch->diag_state))
 			ch->ops->open(ch->ctxt, DIAG_PCIE_MODE);
-
+#ifndef CONFIG_DIAG_OPTIMIZE
 	/* As soon as we open the channel, queue a read */
 	queue_work(ch->wq, &(ch->read_work));
+#endif
 }
 
 void diag_pcie_open_work_fn(struct work_struct *work)
@@ -664,16 +673,20 @@ int diag_pcie_register(int id, int ctxt, struct diag_mux_ops *ops)
 	INIT_WORK(&(ch->close_work), diag_pcie_close_work_fn);
 	strlcpy(wq_name, "DIAG_PCIE_", sizeof(wq_name));
 	strlcat(wq_name, ch->name, sizeof(wq_name));
+#ifndef CONFIG_DIAG_OPTIMIZE
 	ch->wq = create_singlethread_workqueue(wq_name);
 	if (!ch->wq)
 		return -ENOMEM;
+#endif
 	diagmem_init(driver, ch->mempool);
 	mutex_init(&ch->in_chan_lock);
 	mutex_init(&ch->out_chan_lock);
 	rc = diag_register_pcie_channels(ch);
 	if (rc < 0) {
+#ifndef CONFIG_DIAG_OPTIMIZE
 		if (ch->wq)
 			destroy_workqueue(ch->wq);
+#endif		
 		kfree(ch->in_chan_attr.read_buffer);
 		return rc;
 	}

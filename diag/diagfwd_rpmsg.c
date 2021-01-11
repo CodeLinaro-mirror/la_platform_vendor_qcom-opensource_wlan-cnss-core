@@ -746,10 +746,12 @@ int diag_rpmsg_init(void)
 		mutex_unlock(&driver->rpmsginfo_mutex[peripheral]);
 		diagfwd_channel_open(rpmsg_info->fwd_ctxt);
 		diagfwd_late_open(rpmsg_info->fwd_ctxt);
+#ifndef CONFIG_DIAG_OPTIMIZE
 		__diag_rpmsg_init(&rpmsg_data[peripheral]);
 		__diag_rpmsg_init(&rpmsg_cmd[peripheral]);
 		__diag_rpmsg_init(&rpmsg_dci[peripheral]);
 		__diag_rpmsg_init(&rpmsg_dci_cmd[peripheral]);
+#endif
 	}
 	return 0;
 }
