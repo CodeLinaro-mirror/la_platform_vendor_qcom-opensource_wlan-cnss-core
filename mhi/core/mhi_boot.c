@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -352,8 +352,10 @@ static int mhi_fw_load_amss(struct mhi_controller *mhi_cntrl,
 					      &tx_status) || tx_status,
 			   msecs_to_jiffies(mhi_cntrl->timeout_ms));
 
-	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state))
+	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state)) {
+		mhi_debug_reg_dump(mhi_cntrl);
 		return -EIO;
+	}
 
 	return (tx_status == BHIE_TXVECSTATUS_STATUS_XFER_COMPL) ? 0 : -EIO;
 }
@@ -409,8 +411,10 @@ static int mhi_fw_load_sbl(struct mhi_controller *mhi_cntrl,
 					      BHI_STATUS_MASK, BHI_STATUS_SHIFT,
 					      &tx_status) || tx_status,
 			   msecs_to_jiffies(mhi_cntrl->timeout_ms));
-	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state))
+	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state)) {
+		mhi_debug_reg_dump(mhi_cntrl);
 		goto invalid_pm_state;
+	}
 
 	if (tx_status == BHI_STATUS_ERROR) {
 		MHI_CNTRL_ERR("Image transfer failed\n");
