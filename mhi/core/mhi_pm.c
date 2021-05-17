@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -139,7 +139,7 @@ enum MHI_PM_STATE __must_check mhi_tryset_pm_state(
 				enum MHI_PM_STATE state)
 {
 	unsigned long cur_state = mhi_cntrl->pm_state;
-	int index = find_last_bit(&cur_state, 32);
+	int index = __fls(cur_state);
 
 	if (unlikely(index >= ARRAY_SIZE(mhi_state_transitions))) {
 		MHI_CRITICAL("cur_state:%s is not a valid pm_state\n",
