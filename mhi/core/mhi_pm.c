@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -139,7 +139,7 @@ enum MHI_PM_STATE __must_check mhi_tryset_pm_state(
 				enum MHI_PM_STATE state)
 {
 	unsigned long cur_state = mhi_cntrl->pm_state;
-	int index = find_last_bit(&cur_state, 32);
+	int index = __fls(cur_state);
 
 	if (unlikely(index >= ARRAY_SIZE(mhi_state_transitions))) {
 		MHI_CRITICAL("cur_state:%s is not a valid pm_state\n",
@@ -476,12 +476,15 @@ static int mhi_pm_mission_mode_transition(struct mhi_controller *mhi_cntrl)
 	write_lock_irq(&mhi_cntrl->pm_lock);
 	if (MHI_REG_ACCESS_VALID(mhi_cntrl->pm_state))
 		ee = mhi_get_exec_env(mhi_cntrl);
-	write_unlock_irq(&mhi_cntrl->pm_lock);
 
 	if (!MHI_IN_MISSION_MODE(ee)) {
 		MHI_CNTRL_ERR("Invalid EE:%s\n", TO_MHI_EXEC_STR(ee));
+		mhi_cntrl->pm_state = MHI_PM_FW_DL_ERR;
+		wake_up_all(&mhi_cntrl->state_event);
+		write_unlock_irq(&mhi_cntrl->pm_lock);
 		return -EIO;
 	}
+	write_unlock_irq(&mhi_cntrl->pm_lock);
 
 	mhi_cntrl->status_cb(mhi_cntrl, mhi_cntrl->priv_data,
 			     MHI_CB_EE_MISSION_MODE);

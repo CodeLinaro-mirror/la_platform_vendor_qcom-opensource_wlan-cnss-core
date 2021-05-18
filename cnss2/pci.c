@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,6 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+
 
 #include <linux/firmware.h>
 #include <linux/io.h>
@@ -26,6 +27,7 @@
 #include "bus.h"
 #include "debug.h"
 #include "pci.h"
+#include "reg.h"
 
 #define PCI_LINK_UP			1
 #define PCI_LINK_DOWN			0
@@ -41,6 +43,8 @@
 
 #define PCI_DMA_MASK_32_BIT		32
 #define PCI_DMA_MASK_64_BIT		64
+#define PCI_DMA_MASK_36_BIT		36
+
 
 #define MHI_NODE_NAME			"qcom,mhi"
 #define MHI_MSI_NAME			"MHI"
@@ -68,7 +72,6 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 
 #define MHI_TIMEOUT_OVERWRITE_MS	(plat_priv->ctrl_params.mhi_timeout)
 
-#define QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET	0x310C
 
 #define QCA6390_CE_SRC_RING_REG_BASE		0xA00000
 #define QCA6390_CE_DST_RING_REG_BASE		0xA01000
@@ -124,7 +127,6 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define QDSS_APB_DEC_CSR_PRESERVEETR1_OFFSET	0x78
 
 #define MAX_UNWINDOWED_ADDRESS			0x80000
-#define WINDOW_ENABLE_BIT			0x40000000
 #define WINDOW_SHIFT				19
 #define WINDOW_VALUE_MASK			0x3F
 #define WINDOW_START				MAX_UNWINDOWED_ADDRESS
@@ -140,7 +142,9 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define FORCE_WAKE_DELAY_TIMEOUT_US		60000
 
 #define QCA6390_WLAON_QFPROM_PWR_CTRL_REG	0x1F8031C
-#define QCA6390_PCIE_SCRATCH_0_SOC_PCIE_REG	0x1E04040
+#define QCA6390_PCIE_SCRATCH_2_SOC_PCIE_REG	0x01E0405C
+#define PCIE_REG_FOR_QRTR_NODE_INSTANCE_ID	\
+	QCA6390_PCIE_SCRATCH_2_SOC_PCIE_REG
 
 #define POWER_ON_RETRY_MAX_TIMES		3
 #define POWER_ON_RETRY_DELAY_MS			200
@@ -224,14 +228,18 @@ static int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
 static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 offset)
 {
 	u32 window = (offset >> WINDOW_SHIFT) & WINDOW_VALUE_MASK;
+	u32 enable = WINDOW_ENABLE_BIT;
+
+	if (pci_priv->device_id == QCN7605_DEVICE_ID)
+		enable = QCN7605_WINDOW_ENABLE_BIT;
 
 	if (window != pci_priv->remap_window) {
-		writel_relaxed(WINDOW_ENABLE_BIT | window,
-			       QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET +
+		writel_relaxed(enable | window,
+			       PCIE_REMAP_BAR_CTRL_OFFSET +
 			       pci_priv->bar);
 		pci_priv->remap_window = window;
 		cnss_pr_dbg("Config PCIe remap window register to 0x%x\n",
-			    WINDOW_ENABLE_BIT | window);
+			    enable | window);
 	}
 }
 
@@ -258,6 +266,29 @@ static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 	spin_unlock_bh(&pci_reg_window_lock);
 
 	return 0;
+}
+
+static void cnss_pci_get_jtag_id(struct cnss_pci_data *pci_priv)
+{
+	u32 jtag_id, reg;
+
+	switch (pci_priv->device_id) {
+	case QCA6390_DEVICE_ID:
+		reg = QCA6390_PCIE_JTAG_ID_REG;
+		break;
+	case QCN7605_DEVICE_ID:
+		reg = QCN7605_PCIE_JTAG_ID_REG;
+		break;
+	default:
+		cnss_pr_dbg("device 0x%x not support JTAG ID\n",
+			    pci_priv->device_id);
+		return;
+	}
+
+	if (cnss_pci_reg_read(pci_priv, reg, &jtag_id))
+		cnss_pr_err("Failed to get device JTAG ID");
+	else
+		cnss_pr_dbg("Get device JTAG ID 0x%x", jtag_id);
 }
 
 static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
@@ -778,6 +809,190 @@ static void cnss_pci_collect_dump(struct cnss_pci_data *pci_priv)
 {
 }
 #endif
+
+/**
+ * cnss_pci_dump_qcn7605_sram_mem - Dump WLAN FW bootloader debug log
+ * @pci_priv: PCI device private data structure of cnss platform driver
+ *
+ * Dump Primary bootloader debug log data.
+ *
+ * Return: None
+ */
+static void cnss_pci_dump_qcn7605_sram_mem(struct cnss_pci_data *pci_priv)
+{
+	int i;
+	u32 mem_addr, val, pbl_stage, err_code;
+
+	cnss_pci_reg_read(pci_priv, QCN7605_TCSR_PBL_LOGGING_REG, &pbl_stage);
+	cnss_pci_reg_read(pci_priv, QCN7605_PCIE_ERRCODE, &err_code);
+	cnss_pr_dbg("TCSR_PBL_LOGGING: 0x%08x, PCIE_ERR_CODE: 0x%08x\n",
+		    pbl_stage, err_code);
+
+	cnss_pr_dbg("Dumping PBL log data\n");
+	/* cnss_pci_reg_read provides 32bit register values */
+	for (i = 0; i < QCA6390_DEBUG_PBL_LOG_SRAM_MAX_SIZE; i += sizeof(val)) {
+		mem_addr = QCA6390_DEBUG_PBL_LOG_SRAM_START + i;
+		if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
+			break;
+		cnss_pr_dbg("SRAM[0x%x] = 0x%x\n", mem_addr, val);
+	}
+}
+
+/**
+ * cnss_pci_dump_qca6390_sram_mem - Dump WLAN FW bootloader debug log
+ * @pci_priv: PCI device private data structure of cnss platform driver
+ *
+ * Dump Primary and secondary bootloader debug log data. For SBL check the
+ * log struct address and size for validity.
+ *
+ * Return: None
+ */
+static void cnss_pci_dump_qca6390_sram_mem(struct cnss_pci_data *pci_priv)
+{
+	int i;
+	u32 mem_addr, val, pbl_stage, sbl_log_start, sbl_log_size;
+	u32 pbl_wlan_boot_cfg, pbl_bootstrap_status;
+
+	cnss_pci_reg_read(pci_priv, QCA6390_TCSR_PBL_LOGGING_REG, &pbl_stage);
+	cnss_pci_reg_read(pci_priv, QCA6390_PCIE_BHI_ERRDBG2_REG,
+			  &sbl_log_start);
+	cnss_pci_reg_read(pci_priv, QCA6390_PCIE_BHI_ERRDBG3_REG,
+			  &sbl_log_size);
+	cnss_pci_reg_read(pci_priv, QCA6390_PBL_WLAN_BOOT_CFG,
+			  &pbl_wlan_boot_cfg);
+	cnss_pci_reg_read(pci_priv, QCA6390_PBL_BOOTSTRAP_STATUS,
+			  &pbl_bootstrap_status);
+	cnss_pr_dbg("TCSR_PBL_LOGGING: 0x%08x PCIE_BHI_ERRDBG: Start: 0x%08x Size:0x%08x\n",
+		    pbl_stage, sbl_log_start, sbl_log_size);
+	cnss_pr_dbg("PBL_WLAN_BOOT_CFG: 0x%08x PBL_BOOTSTRAP_STATUS: 0x%08x\n",
+		    pbl_wlan_boot_cfg, pbl_bootstrap_status);
+
+	cnss_pr_dbg("Dumping PBL log data\n");
+	/* cnss_pci_reg_read provides 32bit register values */
+	for (i = 0; i < QCA6390_DEBUG_PBL_LOG_SRAM_MAX_SIZE; i += sizeof(val)) {
+		mem_addr = QCA6390_DEBUG_PBL_LOG_SRAM_START + i;
+		if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
+			break;
+		cnss_pr_dbg("SRAM[0x%x] = 0x%x\n", mem_addr, val);
+	}
+
+	sbl_log_size = (sbl_log_size > QCA6390_DEBUG_SBL_LOG_SRAM_MAX_SIZE ?
+			QCA6390_DEBUG_SBL_LOG_SRAM_MAX_SIZE : sbl_log_size);
+
+	if (sbl_log_start < QCA6390_V2_SBL_DATA_START ||
+	    sbl_log_start > QCA6390_V2_SBL_DATA_END ||
+	    (sbl_log_start + sbl_log_size) > QCA6390_V2_SBL_DATA_END)
+		goto out;
+
+	cnss_pr_dbg("Dumping SBL log data\n");
+	for (i = 0; i < sbl_log_size; i += sizeof(val)) {
+		mem_addr = sbl_log_start + i;
+		if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
+			break;
+		cnss_pr_dbg("SRAM[0x%x] = 0x%x\n", mem_addr, val);
+	}
+	return;
+out:
+	cnss_pr_err("Invalid SBL log data\n");
+}
+
+/**
+ * cnss_pci_dump_qca6490_sram_mem - Dump WLAN FW bootloader debug log
+ * @pci_priv: PCI device private data structure of cnss platform driver
+ *
+ * Dump Primary and secondary bootloader debug log data. For SBL check the
+ * log struct address and size for validity.
+ *
+ * Return: None
+ */
+static void cnss_pci_dump_qca6490_sram_mem(struct cnss_pci_data *pci_priv)
+{
+	int i;
+	u32 mem_addr, val, pbl_stage, sbl_log_start, sbl_log_size;
+	u32 pbl_wlan_boot_cfg, pbl_bootstrap_status;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	cnss_pci_reg_read(pci_priv, QCA6490_TCSR_PBL_LOGGING_REG, &pbl_stage);
+	cnss_pci_reg_read(pci_priv, QCA6490_PCIE_BHI_ERRDBG2_REG,
+			  &sbl_log_start);
+	cnss_pci_reg_read(pci_priv, QCA6490_PCIE_BHI_ERRDBG3_REG,
+			  &sbl_log_size);
+	cnss_pci_reg_read(pci_priv, QCA6490_PBL_WLAN_BOOT_CFG,
+			  &pbl_wlan_boot_cfg);
+	cnss_pci_reg_read(pci_priv, QCA6490_PBL_BOOTSTRAP_STATUS,
+			  &pbl_bootstrap_status);
+	cnss_pr_dbg("TCSR_PBL_LOGGING: 0x%08x PCIE_BHI_ERRDBG: Start: 0x%08x Size:0x%08x",
+		    pbl_stage, sbl_log_start, sbl_log_size);
+	cnss_pr_dbg("PBL_WLAN_BOOT_CFG: 0x%08x PBL_BOOTSTRAP_STATUS: 0x%08x",
+		    pbl_wlan_boot_cfg, pbl_bootstrap_status);
+
+	cnss_pr_dbg("Dumping PBL log data");
+	/* cnss_pci_reg_read provides 32bit register values */
+	for (i = 0; i < QCA6490_DEBUG_PBL_LOG_SRAM_MAX_SIZE; i += sizeof(val)) {
+		mem_addr = QCA6490_DEBUG_PBL_LOG_SRAM_START + i;
+		if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
+			break;
+		cnss_pr_dbg("SRAM[0x%x] = 0x%x\n", mem_addr, val);
+	}
+
+	sbl_log_size = (sbl_log_size > QCA6490_DEBUG_SBL_LOG_SRAM_MAX_SIZE ?
+			QCA6490_DEBUG_SBL_LOG_SRAM_MAX_SIZE : sbl_log_size);
+	if (plat_priv->device_version.major_version == FW_V2_NUMBER) {
+		if (sbl_log_start < QCA6490_V2_SBL_DATA_START ||
+		    sbl_log_start > QCA6490_V2_SBL_DATA_END ||
+		    (sbl_log_start + sbl_log_size) > QCA6490_V2_SBL_DATA_END)
+			goto out;
+	} else {
+		if (sbl_log_start < QCA6490_V1_SBL_DATA_START ||
+		    sbl_log_start > QCA6490_V1_SBL_DATA_END ||
+		    (sbl_log_start + sbl_log_size) > QCA6490_V1_SBL_DATA_END)
+			goto out;
+	}
+
+	cnss_pr_dbg("Dumping SBL log data");
+	for (i = 0; i < sbl_log_size; i += sizeof(val)) {
+		mem_addr = sbl_log_start + i;
+		if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
+			break;
+		cnss_pr_dbg("SRAM[0x%x] = 0x%x\n", mem_addr, val);
+	}
+	return;
+out:
+	cnss_pr_err("Invalid SBL log data");
+}
+
+/**
+ * cnss_pci_dump_bl_sram_mem - Dump WLAN FW bootloader debug log
+ * @pci_priv: PCI device private data structure of cnss platform driver
+ *
+ * Dump Primary and secondary bootloader debug log data. For SBL check the
+ * log struct address and size for validity.
+ *
+ * Supported on QCA6390, QCA6490, QCN7605
+ *
+ * Return: None
+ */
+static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
+{
+	if (cnss_pci_check_link_status(pci_priv))
+		return;
+
+	switch (pci_priv->device_id) {
+	case QCA6390_DEVICE_ID:
+		cnss_pci_dump_qca6390_sram_mem(pci_priv);
+		break;
+	case QCN7605_DEVICE_ID:
+		cnss_pci_dump_qcn7605_sram_mem(pci_priv);
+		break;
+	case QCA6490_DEVICE_ID:
+		cnss_pci_dump_qca6490_sram_mem(pci_priv);
+		break;
+	default:
+		cnss_pr_err("Unknown device id found: 0x%x\n",
+			    pci_priv->device_id);
+		break;
+	}
+}
 
 static int cnss_qca6174_powerup(struct cnss_pci_data *pci_priv)
 {
@@ -1308,6 +1523,7 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 					  msecs_to_jiffies(timeout) << 2);
 	if (!ret) {
 		cnss_pr_err("Timeout waiting for calibration to complete\n");
+		cnss_pci_dump_bl_sram_mem(pci_priv);
 		ret = -EAGAIN;
 		goto out;
 	}
@@ -2322,6 +2538,14 @@ int cnss_pci_get_iova_ipa(struct cnss_pci_data *pci_priv, u64 *addr, u64 *size)
 	return 0;
 }
 
+bool cnss_pci_is_smmu_s1_enabled(struct cnss_pci_data *pci_priv)
+{
+	if (pci_priv)
+		return pci_priv->smmu_s1_enable;
+
+	return false;
+}
+
 #ifdef CONFIG_ARM_DMA_USE_IOMMU
 struct dma_iommu_mapping *cnss_smmu_get_mapping(struct device *dev)
 {
@@ -2665,7 +2889,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 		pci_dma_mask = PCI_DMA_MASK_32_BIT;
 
 #ifdef CONFIG_ARM_LPAE
-	pci_dma_mask = PCI_DMA_MASK_64_BIT;
+	pci_dma_mask = PCI_DMA_MASK_36_BIT;
 #else
 	pci_dma_mask = PCI_DMA_MASK_32_BIT;
 #endif
@@ -2896,6 +3120,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	cnss_pci_dump_shadow_reg(pci_priv);
 	cnss_pci_dump_qdss_reg(pci_priv);
+	cnss_pci_dump_bl_sram_mem(pci_priv);
 
 	ret = mhi_download_rddm_img(pci_priv->mhi_ctrl, in_panic);
 	if (ret) {
@@ -2909,37 +3134,41 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	rddm_image = pci_priv->mhi_ctrl->rddm_image;
 	dump_data->nentries = 0;
 
-	cnss_pr_dbg("Collect FW image dump segment, nentries %d\n",
-		    fw_image->entries);
+	if (fw_image) {
+		cnss_pr_dbg("Collect FW image dump segment, nentries %d\n",
+			    fw_image->entries);
 
-	for (i = 0; i < fw_image->entries; i++) {
-		dump_seg->address = fw_image->mhi_buf[i].dma_addr;
-		dump_seg->v_address = fw_image->mhi_buf[i].buf;
-		dump_seg->size = fw_image->mhi_buf[i].len;
-		dump_seg->type = CNSS_FW_IMAGE;
-		cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
-			    i, dump_seg->address,
-			    dump_seg->v_address, dump_seg->size);
-		dump_seg++;
+		for (i = 0; i < fw_image->entries; i++) {
+			dump_seg->address = fw_image->mhi_buf[i].dma_addr;
+			dump_seg->v_address = fw_image->mhi_buf[i].buf;
+			dump_seg->size = fw_image->mhi_buf[i].len;
+			dump_seg->type = CNSS_FW_IMAGE;
+			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+				    i, dump_seg->address,
+				    dump_seg->v_address, dump_seg->size);
+			dump_seg++;
+		}
+
+		dump_data->nentries += fw_image->entries;
 	}
 
-	dump_data->nentries += fw_image->entries;
+	if (rddm_image) {
+		cnss_pr_dbg("Collect RDDM image dump segment, nentries %d\n",
+			    rddm_image->entries);
 
-	cnss_pr_dbg("Collect RDDM image dump segment, nentries %d\n",
-		    rddm_image->entries);
+		for (i = 0; i < rddm_image->entries; i++) {
+			dump_seg->address = rddm_image->mhi_buf[i].dma_addr;
+			dump_seg->v_address = rddm_image->mhi_buf[i].buf;
+			dump_seg->size = rddm_image->mhi_buf[i].len;
+			dump_seg->type = CNSS_FW_RDDM;
+			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+				    i, dump_seg->address,
+				    dump_seg->v_address, dump_seg->size);
+			dump_seg++;
+		}
 
-	for (i = 0; i < rddm_image->entries; i++) {
-		dump_seg->address = rddm_image->mhi_buf[i].dma_addr;
-		dump_seg->v_address = rddm_image->mhi_buf[i].buf;
-		dump_seg->size = rddm_image->mhi_buf[i].len;
-		dump_seg->type = CNSS_FW_RDDM;
-		cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
-			    i, dump_seg->address,
-			    dump_seg->v_address, dump_seg->size);
-		dump_seg++;
+		dump_data->nentries += rddm_image->entries;
 	}
-
-	dump_data->nentries += rddm_image->entries;
 
 	cnss_pr_dbg("Collect remote heap dump segment\n");
 
@@ -3459,10 +3688,11 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 		goto out;
 
 	ret = cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_POWER_ON);
-	if (ret)
-		goto out;
+	if (ret == -ETIMEDOUT) {
+		mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+		cnss_pci_dump_bl_sram_mem(pci_priv);
+	}
 
-	return 0;
 
 out:
 	return ret;
@@ -3742,6 +3972,8 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		}
 		/* Update fw name according to different chip subtype */
 		cnss_pci_update_fw_name(pci_priv);
+
+		cnss_pci_get_jtag_id(pci_priv);
 
 		if (EMULATION_HW)
 			break;

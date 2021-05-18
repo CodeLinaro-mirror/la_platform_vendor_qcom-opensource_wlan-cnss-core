@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -213,7 +213,9 @@ do {								\
 
 static void drain_timer_func(unsigned long data)
 {
+#ifndef CONFIG_DIAG_OPTIMIZE
 	queue_work(driver->diag_wq, &(driver->diag_drain_work));
+#endif
 }
 
 static void diag_drain_apps_data(struct diag_apps_data_t *data)
@@ -244,7 +246,7 @@ static void diag_drain_apps_data(struct diag_apps_data_t *data)
 		spin_unlock_irqrestore(&driver->diagmem_lock, flags);
 	}
 }
-
+#ifndef CONFIG_DIAG_OPTIMIZE	
 void diag_update_user_client_work_fn(struct work_struct *work)
 {
 	diag_update_userspace_clients(HDLC_SUPPORT_TYPE);
@@ -254,7 +256,7 @@ static void diag_update_md_client_work_fn(struct work_struct *work)
 {
 	diag_update_md_clients(HDLC_SUPPORT_TYPE);
 }
-
+#endif
 void diag_drain_work_fn(struct work_struct *work)
 {
 	uint8_t hdlc_disabled = 0;
@@ -1971,13 +1973,15 @@ static int diag_switch_logging(struct diag_logging_mode_param_t *param)
 				driver->pcie_switch_pid = current->tgid;
 			}
 			if (new_mode == DIAG_PCIE_MODE) {
-				driver->transport_set = DIAG_ROUTE_TO_PCIE;
+				driver->transport_set = 
+						DIAG_ROUTE_TO_PCIE;
 				diagmem_setsize(POOL_TYPE_MUX_APPS,
 					itemsize_pcie_apps,
 					(poolsize_pcie_apps + 1 +
 						(NUM_PERIPHERALS * 6)));
 			} else if (new_mode == DIAG_USB_MODE) {
-				driver->transport_set = DIAG_ROUTE_TO_USB;
+				driver->transport_set = 
+						DIAG_ROUTE_TO_USB;
 				diagmem_setsize(POOL_TYPE_MUX_APPS,
 					itemsize_usb_apps,
 					(poolsize_usb_apps + 1 +
@@ -2003,8 +2007,10 @@ static int diag_switch_logging(struct diag_logging_mode_param_t *param)
 				new_mode == DIAG_MULTI_MODE) &&
 				(curr_mode == DIAG_USB_MODE ||
 				curr_mode == DIAG_PCIE_MODE))) {
+#ifndef CONFIG_DIAG_OPTIMIZE
 				queue_work(driver->diag_real_time_wq,
 					&driver->diag_real_time_work);
+#endif
 			}
 		}
 		peripheral_mask =
@@ -2151,7 +2157,9 @@ static int diag_ioctl_vote_real_time(unsigned long ioarg)
 		diag_update_real_time_vote(vote.proc, real_time,
 					   temp_proc);
 	}
+#ifndef CONFIG_DIAG_OPTIMIZE
 	queue_work(driver->diag_real_time_wq, &driver->diag_real_time_work);
+#endif
 	return 0;
 }
 
@@ -3941,7 +3949,9 @@ end:
 	 */
 	if (copy_dci_data) {
 		diag_ws_on_copy_complete(DIAG_WS_DCI);
+#ifndef CONFIG_DIAG_OPTIMIZE
 		flush_workqueue(driver->diag_dci_wq);
+#endif
 	}
 	return ret;
 }
@@ -4263,11 +4273,13 @@ static int diag_real_time_info_init(void)
 	}
 	driver->real_time_update_busy = 0;
 	driver->proc_active_mask = 0;
+#ifndef CONFIG_DIAG_OPTIMIZE
 	driver->diag_real_time_wq = create_singlethread_workqueue(
 							"diag_real_time_wq");
 	if (!driver->diag_real_time_wq)
 		return -ENOMEM;
 	INIT_WORK(&(driver->diag_real_time_work), diag_real_time_work_fn);
+#endif
 	mutex_init(&driver->real_time_mutex);
 	return 0;
 }
@@ -4350,7 +4362,7 @@ static void diag_init_transport(void)
 	 * The number of buffers encompasses Diag data generated on
 	 * the Apss processor + 1 for the responses generated
 	 * exclusively on the Apps processor + data from data channels
-	 *(4 channels periperipheral) + data from command channels (2)
+	 *(4 channels per peripheral) + data from command channels (2)
 	 */
 	diagmem_setsize(POOL_TYPE_MUX_APPS, itemsize_pcie_apps,
 		poolsize_pcie_apps + 1 + (NUM_PERIPHERALS * 6));
@@ -4369,7 +4381,7 @@ static void diag_init_transport(void)
 	 * The number of buffers encompasses Diag data generated on
 	 * the Apss processor + 1 for the responses generated
 	 * exclusively on the Apps processor + data from data channels
-	 *(4 channels periperipheral) + data from command channels (2)
+	 *(4 channels per peripheral) + data from command channels (2)
 	 */
 	diagmem_setsize(POOL_TYPE_MUX_APPS, itemsize_usb_apps,
 		poolsize_usb_apps + 1 + (NUM_PERIPHERALS * 6));
@@ -4444,11 +4456,13 @@ static int __init diagchar_init(void)
 		driver->diag_id_sent[i] = 0;
 	}
 	init_waitqueue_head(&driver->wait_q);
+#ifndef CONFIG_DIAG_OPTIMIZE	
 	INIT_WORK(&(driver->diag_drain_work), diag_drain_work_fn);
 	INIT_WORK(&(driver->update_user_clients),
 			diag_update_user_client_work_fn);
 	INIT_WORK(&(driver->update_md_clients),
 			diag_update_md_client_work_fn);
+#endif
 	diag_ws_init();
 	diag_stats_init();
 	diag_debug_init();
