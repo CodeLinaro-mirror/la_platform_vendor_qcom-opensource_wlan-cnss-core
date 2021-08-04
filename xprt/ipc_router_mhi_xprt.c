@@ -37,6 +37,7 @@ if (ipc_router_mhi_xprt_debug_mask) \
 #define XPRT_NAME_LEN 32
 #define IPC_ROUTER_MHI_XPRT_MAX_PKT_SIZE 0x1000
 #define IPC_ROUTER_MHI_XPRT_NUM_TRBS 10
+#define MAX_CHECK_NUM 100
 
 /**
  * ipc_router_mhi_addr_map - Struct for virtual address to IPC Router
@@ -602,7 +603,7 @@ static void mhi_xprt_sft_close_done(struct msm_ipc_router_xprt *xprt)
 static void mhi_xprt_enable_event(struct ipc_router_mhi_xprt_work *xprt_work)
 {
 	struct ipc_router_mhi_xprt *mhi_xprtp = xprt_work->mhi_xprtp;
-	int rc;
+	int rc, check_num = 0;
 	bool notify = false;
 
 	if (xprt_work->chan_id == mhi_xprtp->ch_hndl.out_chan_id) {
@@ -641,6 +642,15 @@ static void mhi_xprt_enable_event(struct ipc_router_mhi_xprt_work *xprt_work)
 
 	if (xprt_work->chan_id != mhi_xprtp->ch_hndl.in_chan_id)
 		return;
+
+	while (mhi_xprtp && !mhi_xprtp->xprt.priv && check_num < MAX_CHECK_NUM) {
+		usleep_range(400, 500);
+		check_num++;
+	}
+	if (!mhi_xprtp->xprt.priv && check_num == MAX_CHECK_NUM) {
+		IPC_RTR_ERR("%s Failed to open xprt.\n", __func__);
+		return;
+	}
 
 	rc = mhi_xprt_queue_in_buffers(mhi_xprtp, mhi_xprtp->ch_hndl.num_trbs);
 	if (rc > 0)
