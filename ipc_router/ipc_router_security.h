@@ -18,10 +18,9 @@
 #include <linux/errno.h>
 
 #ifdef CONFIG_IPC_ROUTER_SECURITY
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 #include <linux/android_aid.h>
 #endif
-
 /**
  * check_permisions() - Check whether the process has permissions to
  *                      create an interface handle with IPC Router
@@ -74,6 +73,7 @@ int msm_ipc_check_send_permissions(void *data);
  * @return: 0 if successful, < 0 for error.
  */
 int msm_ipc_router_security_init(void);
+void msm_ipc_remove_default_rule(void);
 
 /**
  * wait_for_irsc_completion() - Wait for IPC Router Security Configuration

@@ -24,25 +24,45 @@
 #include <linux/list.h>
 #include <linux/socket.h>
 #include <linux/gfp.h>
-#include "qmi_encdec.h"
 #include <linux/workqueue.h>
 #include <linux/mutex.h>
 #include <linux/hashtable.h>
+#ifdef CONFIG_NAPIER_X86
 #include "ipc_router.h"
-#ifdef CONFIG_ARCH_QCOM
+#include "qmi_encdec.h"
+#include "msm_qmi_interface.h"
+#else
+#include <linux/qmi_encdec.h>
+#include <linux/ipc_router.h>
 #include <linux/ipc_logging.h>
+
+#include <soc/qcom/msm_qmi_interface.h>
 #endif
 
-#include "msm_qmi_interface.h"
-
 #include "qmi_interface_priv.h"
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+#include "unified_wlan_cnsscore.h"
+#endif
 
 #define BUILD_INSTANCE_ID(vers, ins) (((vers) & 0xFF) | (((ins) & 0xFF) << 8))
 #define LOOKUP_MASK 0xFFFFFFFF
 #define MAX_WQ_NAME_LEN 20
 #define QMI_REQ_RESP_LOG_PAGES 3
 #define QMI_IND_LOG_PAGES 2
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_NAPIER_X86
+#define QMI_REQ_RESP_LOG(buf...) \
+do { \
+	if (qmi_req_resp_log_ctx) { \
+	} \
+} while (0)
+
+#define QMI_IND_LOG(buf...) \
+do { \
+	if (qmi_ind_log_ctx) { \
+	} \
+} while (0)
+#else
 #define QMI_REQ_RESP_LOG(buf...) \
 do { \
 	if (qmi_req_resp_log_ctx) { \
@@ -55,18 +75,6 @@ do { \
 	if (qmi_ind_log_ctx) { \
 		ipc_log_string(qmi_ind_log_ctx, buf); \
 	} \
-} while (0)
-#else
-#define QMI_REQ_RESP_LOG(buf...) \
-do { \
-        if (qmi_req_resp_log_ctx) { \
-        } \
-} while (0) \
-
-#define QMI_IND_LOG(buf...) \
-do { \
-        if (qmi_ind_log_ctx) { \
-        } \
 } while (0)
 #endif
 
@@ -150,6 +158,7 @@ static DEFINE_MUTEX(qmi_svc_event_notifier_lock);
 static struct msm_ipc_port *qmi_svc_event_notifier_port;
 static struct workqueue_struct *qmi_svc_event_notifier_wq;
 static void qmi_svc_event_notifier_init(void);
+static void qmi_svc_event_notifier_deinit(void);
 static void qmi_svc_event_worker(struct work_struct *work);
 static struct svc_event_nb *find_svc_event_nb(uint32_t service_id,
 					      uint32_t instance_id);
@@ -206,14 +215,12 @@ static void qmi_log(struct qmi_handle *handle,
 	 * <Message Length>			:
 	 * <Service ID>				:
 	 */
-	if (qmi_req_resp_log_ctx &&
-		((cntl_flag == QMI_REQUEST_CONTROL_FLAG) ||
+	if (((cntl_flag == QMI_REQUEST_CONTROL_FLAG) ||
 		(cntl_flag == QMI_RESPONSE_CONTROL_FLAG))) {
 		QMI_REQ_RESP_LOG("%s %s CF:%x TI:%x MI:%x ML:%x SvcId: %x",
 		(handle->handle_type == QMI_CLIENT_HANDLE ? "QCCI" : "QCSI"),
 		ops_type, cntl_flag, txn_id, msg_id, msg_len, service_id);
-	} else if (qmi_ind_log_ctx &&
-		(cntl_flag == QMI_INDICATION_CONTROL_FLAG)) {
+	} else if ((cntl_flag == QMI_INDICATION_CONTROL_FLAG)) {
 		QMI_IND_LOG("%s %s CF:%x TI:%x MI:%x ML:%x SvcId: %x",
 		(handle->handle_type == QMI_CLIENT_HANDLE ? "QCCI" : "QCSI"),
 		ops_type, cntl_flag, txn_id, msg_id, msg_len, service_id);
@@ -1065,7 +1072,7 @@ int qmi_send_req_wait(struct qmi_handle *handle,
 
 	mutex_lock(&handle->handle_lock);
 	if (!txn_handle->resp_received) {
-		pr_err("%s: Response Wait Error %d\n", __func__, rc);
+		pr_warning("%s: Response Wait Error %d\n", __func__, rc);
 		if (handle->handle_reset)
 			rc = -ENETRESET;
 		if (rc >= 0)
@@ -2057,7 +2064,17 @@ int qmi_svc_event_notifier_unregister(uint32_t service_id,
 	spin_lock_irqsave(&temp->nb_lock, flags);
 	ret = raw_notifier_chain_unregister(&temp->svc_event_rcvr_list, nb);
 	spin_unlock_irqrestore(&temp->nb_lock, flags);
+
 	mutex_unlock(&svc_event_nb_list_lock);
+	mutex_lock(&qmi_svc_event_notifier_lock);
+	if (qmi_svc_event_notifier_port && qmi_svc_event_notifier_wq)
+		qmi_svc_event_notifier_deinit();
+	mutex_unlock(&qmi_svc_event_notifier_lock);
+
+	mutex_lock(&svc_event_nb_list_lock);
+	list_del(&temp->list);
+	mutex_unlock(&svc_event_nb_list_lock);
+	kfree(temp);
 
 	return ret;
 }
@@ -2146,14 +2163,26 @@ static void qmi_svc_event_notifier_init(void)
 	return;
 }
 
+static void qmi_svc_event_notifier_deinit(void)
+{
+	if (qmi_svc_event_notifier_wq) {
+		destroy_workqueue(qmi_svc_event_notifier_wq);
+	}
+
+	if (qmi_svc_event_notifier_port){
+		msm_ipc_router_close_port(qmi_svc_event_notifier_port);
+	}
+	return;
+}
+
 /**
  * qmi_log_init() - Init function for IPC Logging
  *
  * Initialize log contexts for QMI request/response/indications.
  */
-void qmi_log_init(void)
+static void qmi_log_init(void)
 {
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 	qmi_req_resp_log_ctx =
 		ipc_log_context_create(QMI_REQ_RESP_LOG_PAGES,
 			"kqmi_req_resp", 0);
@@ -2165,6 +2194,18 @@ void qmi_log_init(void)
 	if (!qmi_ind_log_ctx)
 		pr_err("%s: Unable to create QMI IPC %s",
 				"logging for Indications", __func__);
+#endif
+}
+
+/**
+ * qmi_log_deinit() - deinit function for IPC Logging
+ *
+ * Deinitialize log contexts for QMI request/response/indications.
+ */
+static void qmi_log_deinit(void)
+{
+#ifdef CONFIG_NAPIER_X86
+	return;
 #endif
 }
 
@@ -2272,9 +2313,19 @@ static int __init qmi_interface_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+void qmi_interface_deinit(void)
+#else
+static void __exit qmi_interface_deinit(void)
+#endif
+{
+	qmi_log_deinit();
+	return;
+}
+
 #ifndef CONFIG_WLAN_CNSS_CORE
 module_init(qmi_interface_init);
-
+module_exit(qmi_interface_deinit);
 MODULE_DESCRIPTION("MSM QMI Interface");
 MODULE_LICENSE("GPL v2");
 #endif

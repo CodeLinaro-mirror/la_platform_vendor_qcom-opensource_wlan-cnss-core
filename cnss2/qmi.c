@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,37 +12,53 @@
 
 #include <linux/firmware.h>
 #include <linux/module.h>
-#include <linux/platform_device.h>
-#ifdef CONFIG_ARCH_QCOM
-#include <linux/qmi_encdec.h>
-#include <soc/qcom/msm_qmi_interface.h>
-#else
+#ifdef CONFIG_NAPIER_X86
 #include "qmi_encdec.h"
 #include "msm_qmi_interface.h"
+#else
+#include <linux/qmi_encdec.h>
+#include <soc/qcom/msm_qmi_interface.h>
 #endif
 
 #include "bus.h"
 #include "debug.h"
 #include "main.h"
+#include "debug.h"
 #include "qmi.h"
+#include "msm_mhi.h"
 
 #define WLFW_SERVICE_INS_ID_V01		1
 #define WLFW_CLIENT_ID			0x4b4e454c
 #define MAX_BDF_FILE_NAME		32
+#define CHIP_ID_GF_MASK			0x10
+#define GF_BDF_FILE_NAME_PREFIX		"bdwlang"
 #define BDF_FILE_NAME_PREFIX		"bdwlan"
+#define GF_DEFAULT_ELF_BDF_FILE_NAME	"bdwlang.elf"
 #define DEFAULT_ELF_BDF_FILE_NAME	"bdwlan.elf"
+#define GF_ELF_BDF_FILE_NAME_PREFIX	"bdwlang.e"
 #define ELF_BDF_FILE_NAME_PREFIX	"bdwlan.e"
+#define GF_BIN_BDF_FILE_NAME_PREFIX	"bdwlang.b"
 #define BIN_BDF_FILE_NAME_PREFIX	"bdwlan.b"
+#define GF_DEFAULT_BIN_BDF_FILE_NAME	"bdwlang.bin"
 #define DEFAULT_BIN_BDF_FILE_NAME       "bdwlan.bin"
+#define REGDB_FILE_NAME			"regdb.bin"
+
 
 #ifdef CONFIG_CNSS2_DEBUG
+#ifdef CONFIG_PCIE_EMULATION
+static unsigned int qmi_timeout = 1000000;
+#else
 static unsigned int qmi_timeout = 10000;
+#endif
 module_param(qmi_timeout, uint, 0600);
 MODULE_PARM_DESC(qmi_timeout, "Timeout for QMI message in milliseconds");
 
 #define QMI_WLFW_TIMEOUT_MS		qmi_timeout
 #else
-#define QMI_WLFW_TIMEOUT_MS		10000
+#ifdef CONFIG_PCIE_EMULATION
+#define QMI_WLFW_TIMEOUT_MS		1000000
+#else
+#endif
 #endif
 
 static bool daemon_support;
@@ -54,11 +70,6 @@ static bool bdf_bypass;
 module_param(bdf_bypass, bool, 0600);
 MODULE_PARM_DESC(bdf_bypass, "If BDF is not found, send dummy BDF to FW");
 #endif
-
-enum cnss_bdf_type {
-	CNSS_BDF_BIN,
-	CNSS_BDF_ELF,
-};
 
 static char *cnss_qmi_mode_to_str(enum wlfw_driver_mode_enum_v01 mode)
 {
@@ -195,6 +206,10 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	req.cal_done = plat_priv->cal_done;
 	cnss_pr_dbg("Calibration done is %d\n", plat_priv->cal_done);
 
+	req.nm_modem_valid = 1;
+	req.nm_modem |= WLFW_HOST_CAP_INTERNAL_SLEEPCLOCK_MASK;
+	cnss_pr_dbg("nm_modem is %d\n", req.nm_modem);
+
 	req_desc.max_msg_len = WLFW_HOST_CAP_REQ_MSG_V01_MAX_MSG_LEN;
 	req_desc.msg_id = QMI_WLFW_HOST_CAP_REQ_V01;
 	req_desc.ei_array = wlfw_host_cap_req_msg_v01_ei;
@@ -290,7 +305,7 @@ static int cnss_qmi_initiate_cal_update_ind_hdlr(
 					 void *msg, unsigned int msg_len)
 {
 	struct msg_desc ind_desc;
-	struct wlfw_initiate_cal_update_ind_msg_v01 ind_msg = {0};
+	struct wlfw_initiate_cal_update_ind_msg_v01 ind_msg;
 	struct cnss_cal_data *data;
 	int ret = 0;
 
@@ -323,6 +338,7 @@ qmi_fail:
 	kfree(data);
 out:
 	return ret;
+
 }
 
 static int cnss_qmi_initiate_cal_download_ind_hdlr(
@@ -778,7 +794,8 @@ out:
 	return ret;
 }
 
-int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv)
+int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
+					 u32 bdf_type)
 {
 	struct wlfw_bdf_download_req_msg_v01 *req;
 	struct wlfw_bdf_download_resp_msg_v01 resp;
@@ -788,10 +805,9 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv)
 	const u8 *temp;
 	unsigned int remaining;
 	int ret = 0;
-	enum cnss_bdf_type bdf_type = CNSS_BDF_ELF;
 
-	cnss_pr_dbg("Sending BDF download message, state: 0x%lx\n",
-		    plat_priv->driver_state);
+	cnss_pr_dbg("Sending BDF download message, state: 0x%lx, type: %d\n",
+		    plat_priv->driver_state, bdf_type);
 
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req) {
@@ -807,33 +823,76 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv)
 	    plat_priv->device_id == QCN7605_SDIO_DEVICE_ID)
 		bdf_type = CNSS_BDF_BIN;
 
-	if (plat_priv->board_info.board_id == 0xFF) {
-		if (bdf_type == CNSS_BDF_BIN)
-			snprintf(filename, sizeof(filename),
-				 DEFAULT_BIN_BDF_FILE_NAME);
-		else
-			snprintf(filename, sizeof(filename),
-				 DEFAULT_ELF_BDF_FILE_NAME);
-	} else if (plat_priv->board_info.board_id < 0xFF) {
-		if (bdf_type == CNSS_BDF_BIN)
-			snprintf(filename, sizeof(filename),
-				 BIN_BDF_FILE_NAME_PREFIX "%02x",
-				 plat_priv->board_info.board_id);
-		else
-			snprintf(filename, sizeof(filename),
-				 ELF_BDF_FILE_NAME_PREFIX "%02x",
-				 plat_priv->board_info.board_id);
-	} else {
-		if (bdf_type == CNSS_BDF_BIN)
-			snprintf(filename, sizeof(filename),
-				 BDF_FILE_NAME_PREFIX "%02x.b%02x",
-				 plat_priv->board_info.board_id >> 8 & 0xFF,
-				 plat_priv->board_info.board_id & 0xFF);
-		else
-			snprintf(filename, sizeof(filename),
-				 BDF_FILE_NAME_PREFIX "%02x.e%02x",
-				 plat_priv->board_info.board_id >> 8 & 0xFF,
-				 plat_priv->board_info.board_id & 0xFF);
+	switch (bdf_type) {
+	case CNSS_BDF_ELF:
+		if (plat_priv->board_info.board_id == 0xFF) {
+			if (plat_priv->chip_info.chip_id & CHIP_ID_GF_MASK)
+				snprintf(filename, sizeof(filename),
+					 GF_DEFAULT_ELF_BDF_FILE_NAME);
+			else
+				snprintf(filename, sizeof(filename),
+					 DEFAULT_ELF_BDF_FILE_NAME);
+		} else if (plat_priv->board_info.board_id < 0xFF) {
+			if (plat_priv->chip_info.chip_id & CHIP_ID_GF_MASK)
+				snprintf(filename, sizeof(filename),
+					 GF_ELF_BDF_FILE_NAME_PREFIX "%02x",
+					 plat_priv->board_info.board_id);
+
+			else
+				snprintf(filename, sizeof(filename),
+					 ELF_BDF_FILE_NAME_PREFIX "%02x",
+					 plat_priv->board_info.board_id);
+		} else {
+			if (plat_priv->chip_info.chip_id & CHIP_ID_GF_MASK)
+				snprintf(filename, sizeof(filename),
+					 GF_BDF_FILE_NAME_PREFIX "%02x.e%02x",
+					 plat_priv->board_info.board_id >> 8 & 0xFF,
+					 plat_priv->board_info.board_id & 0xFF);
+			else
+				snprintf(filename, sizeof(filename),
+					 BDF_FILE_NAME_PREFIX "%02x.e%02x",
+					 plat_priv->board_info.board_id >> 8 & 0xFF,
+					 plat_priv->board_info.board_id & 0xFF);
+		}
+		break;
+	case CNSS_BDF_BIN:
+		if (plat_priv->board_info.board_id == 0xFF) {
+			if (plat_priv->chip_info.chip_id & CHIP_ID_GF_MASK)
+				snprintf(filename, sizeof(filename),
+					 GF_DEFAULT_BIN_BDF_FILE_NAME);
+			else
+				snprintf(filename, sizeof(filename),
+					 DEFAULT_BIN_BDF_FILE_NAME);
+		} else if (plat_priv->board_info.board_id < 0xFF) {
+			if (plat_priv->chip_info.chip_id & CHIP_ID_GF_MASK)
+				snprintf(filename, sizeof(filename),
+					 GF_BIN_BDF_FILE_NAME_PREFIX "%02x",
+					 plat_priv->board_info.board_id);
+			else
+				snprintf(filename, sizeof(filename),
+					 BIN_BDF_FILE_NAME_PREFIX "%02x",
+					 plat_priv->board_info.board_id);
+		} else {
+			if (plat_priv->chip_info.chip_id & CHIP_ID_GF_MASK)
+				snprintf(filename, sizeof(filename),
+					 GF_BDF_FILE_NAME_PREFIX "%02x.b%02x",
+					 plat_priv->board_info.board_id >> 8 & 0xFF,
+					 plat_priv->board_info.board_id & 0xFF);
+			else
+				snprintf(filename, sizeof(filename),
+					 BDF_FILE_NAME_PREFIX "%02x.b%02x",
+					 plat_priv->board_info.board_id >> 8 & 0xFF,
+					 plat_priv->board_info.board_id & 0xFF);
+		}
+		break;
+	case CNSS_BDF_REGDB:
+		snprintf(filename, sizeof(filename), REGDB_FILE_NAME);
+		break;
+	default:
+		cnss_pr_err("Invalid BDF type: %d\n",
+			    bdf_type);
+		ret = -EINVAL;
+		goto err_req_fw;
 	}
 
 	if (bdf_bypass) {
@@ -843,7 +902,14 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv)
 		goto bypass_bdf;
 	}
 
-	ret = request_firmware(&fw_entry, filename, &plat_priv->plat_dev->dev);
+#ifdef CONFIG_NAPIER_X86
+	if (bdf_type == CNSS_BDF_REGDB)
+		ret = request_firmware_direct(&fw_entry, filename, NULL);
+	else
+		ret = request_firmware(&fw_entry, filename, NULL);
+#else
+	ret = request_firmware(&fw_entry, filename, &plat_priv->plat_dev->dev)
+#endif
 	if (ret) {
 		cnss_pr_err("Failed to load BDF: %s\n", filename);
 		goto err_req_fw;
@@ -913,7 +979,7 @@ err_send:
 err_req_fw:
 	kfree(req);
 out:
-	if (ret)
+	if (ret && bdf_type != CNSS_BDF_REGDB)
 		CNSS_ASSERT(0);
 	return ret;
 }
@@ -994,6 +1060,11 @@ int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 		cnss_pr_dbg("Recovery is in progress, ignore mode off request.\n");
 		return 0;
 	}
+
+#ifdef	CONFIG_MSM_MHI
+	if (mode == QMI_WLFW_OFF_V01)
+		mhi_enable_irq();
+#endif
 
 	memset(&req, 0, sizeof(req));
 	memset(&resp, 0, sizeof(resp));

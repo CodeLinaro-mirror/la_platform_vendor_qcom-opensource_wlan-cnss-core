@@ -12,21 +12,22 @@
 
 #ifndef _CNSS_DEBUG_H
 #define _CNSS_DEBUG_H
-#ifdef CONFIG_ARCH_QCOM
+
+#ifndef CONFIG_NAPIER_X86
 #include <linux/ipc_logging.h>
 #endif
 #include <linux/printk.h>
 
 extern void *cnss_ipc_log_context;
 
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 #define cnss_ipc_log_string(_x...) do {					\
 		if (cnss_ipc_log_context)				\
 			ipc_log_string(cnss_ipc_log_context, _x);	\
 	} while (0)
 #else
 #define cnss_ipc_log_string(_x...) do {					\
-        } while (0)
+	} while (0)
 #endif
 
 #define cnss_pr_err(_fmt, ...) do {					\
@@ -48,7 +49,7 @@ extern void *cnss_ipc_log_context;
 	} while (0)
 
 #define cnss_pr_dbg(_fmt, ...) do {					\
-		pr_err("cnss: " _fmt, ##__VA_ARGS__);			\
+		pr_info("cnss: " _fmt, ##__VA_ARGS__);			\
 		cnss_ipc_log_string("DBG: " pr_fmt(_fmt),		\
 				    ##__VA_ARGS__);			\
 	} while (0)

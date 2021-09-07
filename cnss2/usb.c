@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,7 +14,6 @@
 #include "bus.h"
 #include "debug.h"
 #include "usb.h"
-#include "linux/delay.h"
 
 void cnss_usb_fw_boot_timeout_hdlr(struct cnss_usb_data *usb_priv)
 {
@@ -73,12 +72,6 @@ int cnss_usb_wlan_register_driver(struct cnss_usb_wlan_driver *driver_ops)
 	if (!plat_priv) {
 		cnss_pr_err("plat_priv is NULL\n");
 		return -ENODEV;
-	}
-
-	if (plat_priv->bus_type != CNSS_BUS_USB) {
-		cnss_pr_err("Wrong bus type. Expected bus_type %d\n",
-			    plat_priv->bus_type);
-		return -EFAULT;
 	}
 
 	usb_priv = plat_priv->bus_priv;
@@ -161,6 +154,7 @@ int cnss_usb_unregister_driver_hdlr(struct cnss_usb_data *usb_priv)
 	cnss_usb_dev_shutdown(usb_priv);
 	usb_priv->driver_ops = NULL;
 	usb_priv->plat_priv = NULL;
+	cnss_wlfw_wlan_mode_send_sync(plat_priv, QMI_WLFW_OFF_V01);
 	return 0;
 }
 
@@ -199,14 +193,16 @@ int cnss_usb_dev_shutdown(struct cnss_usb_data *usb_priv)
 int cnss_usb_call_driver_probe(struct cnss_usb_data *usb_priv)
 {
 	int ret = 0;
+#ifndef CONFIG_USB_EMULATION
 	struct cnss_plat_data *plat_priv = usb_priv->plat_priv;
-
+#endif
 	if (!usb_priv->driver_ops) {
 		cnss_pr_err("driver_ops is NULL\n");
 		ret = -EINVAL;
 		goto out;
 	}
 
+#ifndef CONFIG_USB_EMULATION
 	if (test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state) ||
 	    test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
 		ret = usb_priv->driver_ops->probe(usb_priv->usb_intf,
@@ -219,6 +215,14 @@ int cnss_usb_call_driver_probe(struct cnss_usb_data *usb_priv)
 		clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
 		set_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
 	}
+#else
+        cnss_pr_dbg("calling driver_ops->probe %s %d",__func__,__LINE__);
+        ret = usb_priv->driver_ops->probe(usb_priv->usb_intf, usb_priv->usb_device_id);
+	if (ret) {
+		cnss_pr_err("Failed to probe host driver, err = %d\n", ret);
+		goto out;
+	}
+#endif
 
 	return 0;
 
@@ -228,6 +232,7 @@ out:
 
 int cnss_usb_call_driver_remove(struct cnss_usb_data *usb_priv)
 {
+#ifndef CONFIG_USB_EMULATION
 	struct cnss_plat_data *plat_priv = usb_priv->plat_priv;
 
 	if (test_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state) ||
@@ -236,12 +241,13 @@ int cnss_usb_call_driver_remove(struct cnss_usb_data *usb_priv)
 		cnss_pr_dbg("Skip driver remove\n");
 		return 0;
 	}
-
+#endif
 	if (!usb_priv->driver_ops) {
 		cnss_pr_err("driver_ops is NULL\n");
 		return -EINVAL;
 	}
 
+#ifndef CONFIG_USB_EMULATION
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
 	    test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state)) {
 		cnss_pr_dbg("Recovery set after driver probed.Call shutdown\n");
@@ -251,6 +257,9 @@ int cnss_usb_call_driver_remove(struct cnss_usb_data *usb_priv)
 		usb_priv->driver_ops->remove(usb_priv->usb_intf);
 		clear_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
 	}
+#else
+	usb_priv->driver_ops->remove(usb_priv->usb_intf);
+#endif
 	return 0;
 }
 
@@ -310,7 +319,6 @@ static int cnss_usb_probe(struct usb_interface *interface,
 		ret = -ENODEV;
 		goto unregister_ramdump;
 	}
-
 	return 0;
 
 unregister_ramdump:
@@ -381,11 +389,6 @@ static int cnss_usb_resume(struct usb_interface *interface)
 	return ret;
 }
 
-static int cnss_usb_reset_resume(struct usb_interface *interface)
-{
-	return 0;
-}
-
 static struct usb_device_id cnss_usb_id_table[] = {
 	{ USB_DEVICE_INTERFACE_NUMBER(QCN7605_USB_VENDOR_ID,
 				      QCN7605_COMPOSITE_PRODUCT_ID,
@@ -409,7 +412,7 @@ static struct usb_driver cnss_usb_driver = {
 	.disconnect = cnss_usb_remove,
 	.suspend    = cnss_usb_suspend,
 	.resume     = cnss_usb_resume,
-	.reset_resume = cnss_usb_reset_resume,
+	.reset_resume = cnss_usb_resume,
 	.supports_autosuspend = true,
 };
 
@@ -441,6 +444,7 @@ out:
 
 void cnss_usb_deinit(struct cnss_plat_data *plat_priv)
 {
+	cnss_pr_dbg("%s %d!\n", __func__, __LINE__);
 	kfree(plat_priv->bus_priv);
 	usb_deregister(&cnss_usb_driver);
 }

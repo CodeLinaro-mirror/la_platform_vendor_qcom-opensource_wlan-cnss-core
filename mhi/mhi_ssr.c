@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, 2020 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,10 +11,13 @@
  */
 
 #include <linux/pm_runtime.h>
+#ifdef CONFIG_NAPIER_X86
 #include "mhi_sys.h"
 #include "mhi.h"
-#include "mhi_bhi.h"
-#ifdef CONFIG_ARCH_QCOM
+
+#else
+#include <mhi_sys.h>
+#include <mhi.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <linux/esoc_client.h>
@@ -117,13 +120,6 @@ void process_disable_transition(enum MHI_PM_STATE transition_state,
 		TO_MHI_STATE_STR(mhi_dev_ctxt->mhi_state),
 		transition_state);
 
-	if (transition_state == MHI_PM_SYS_ERR_PROCESS) {
-		mhi_dev_ctxt->dev_exec_env = MHI_EXEC_ENV_RDDM;
-		if (bhi_rddm(mhi_dev_ctxt, false))
-			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
-								"fail to collect ramdump info\n");
-       }
-
 	mutex_lock(&mhi_dev_ctxt->pm_lock);
 	write_lock_irq(pm_xfer_lock);
 	prev_state = mhi_dev_ctxt->mhi_pm_state;
@@ -173,14 +169,14 @@ void process_disable_transition(enum MHI_PM_STATE transition_state,
 	chan_cfg = mhi_dev_ctxt->mhi_chan_cfg;
 	bb_ring = mhi_dev_ctxt->chan_bb_list;
 
-	/*
-	 * WR: There are two channels for diag, MHI_CLIENT_DIAG_OUT &
-	 * MHI_CLIENT_DIAG_IN. While notify MHI_CB_MHI_SHUTDOWN to diag,
-	 * channel MHI_CLIENT_DIAG_OUT will free all buf including using
-	 * by MHI_CLIENT_DIAG_IN, while some dma buf using by
-	 * MHI_CLIENT_DIAG_IN has not been unmapped at this point.
-	 * so reset channel MHI_CLIENT_DIAG_IN before shutdown.
-	 */
+	 /*
+	  * WR: There are two channels for diag, MHI_CLIENT_DIAG_OUT &
+	  * MHI_CLIENT_DIAG_IN. While notify MHI_CB_MHI_SHUTDOWN to diag,
+	  * channel MHI_CLIENT_DIAG_OUT will free all buf including using
+	  * by MHI_CLIENT_DIAG_IN, while some dma buf using by
+	  * MHI_CLIENT_DIAG_IN has not been unmapped at this point.
+	  * so reset channel MHI_CLIENT_DIAG_IN before shutdown.
+	  */
 	mutex_lock(&chan_cfg[MHI_CLIENT_DIAG_IN].chan_lock);
 	if (MHI_CHAN_STATE_ENABLED == ch_ring[MHI_CLIENT_DIAG_IN].ch_state)
 		reset_bb_ctxt(mhi_dev_ctxt, &bb_ring[MHI_CLIENT_DIAG_IN]);
@@ -354,5 +350,9 @@ void mhi_sys_err_worker(struct work_struct *work)
 		mhi_dev_ctxt->mhi_pm_state,
 		TO_MHI_STATE_STR(mhi_dev_ctxt->mhi_state));
 
+#if defined(CONFIG_CNSS_QCA6490) || defined(CONFIG_CNSS_QCA6390)
+	mhi_dev_ctxt->status_cb(MHI_CB_RDDM, mhi_dev_ctxt->priv_data);
+#else
 	process_disable_transition(MHI_PM_SYS_ERR_PROCESS, mhi_dev_ctxt);
+#endif
 }

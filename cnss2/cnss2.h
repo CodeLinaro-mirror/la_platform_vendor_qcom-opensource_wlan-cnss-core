@@ -16,16 +16,13 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-
 #ifndef _NET_CNSS2_H
 #define _NET_CNSS2_H
 
 #include <linux/pci.h>
 #include <linux/usb.h>
 #include <linux/mmc/sdio_func.h>
-#ifdef CONFIG_SDIO_QCN
-#include <linux/qcn_sdio_al.h>
-#endif
+#include "qcn_sdio_al.h"
 
 #define CNSS_MAX_FILE_NAME		20
 #define CNSS_MAX_TIMESTAMP_LEN		32
@@ -86,6 +83,25 @@ struct cnss_wlan_runtime_ops {
 	int (*runtime_resume)(struct pci_dev *pdev);
 };
 
+enum cnss_driver_status {
+	CNSS_UNINITIALIZED,
+	CNSS_INITIALIZED,
+	CNSS_LOAD_UNLOAD,
+	CNSS_RECOVERY,
+	CNSS_FW_DOWN,
+	CNSS_HANG_EVENT,
+};
+
+struct cnss_hang_event {
+	void *hang_event_data;
+	u16 hang_event_data_len;
+};
+
+struct cnss_uevent_data {
+	enum cnss_driver_status status;
+	void *data;
+};
+
 struct cnss_wlan_driver {
 	char *name;
 	int  (*probe)(struct pci_dev *pdev, const struct pci_device_id *id);
@@ -102,6 +118,8 @@ struct cnss_wlan_driver {
 	int  (*resume_noirq)(struct pci_dev *pdev);
 	void (*modem_status)(struct pci_dev *, int state);
 	void (*update_status)(struct pci_dev *pdev, uint32_t status);
+	int  (*update_event)(struct pci_dev *pdev,
+			     struct cnss_uevent_data *uevent);
 	struct cnss_wlan_runtime_ops *runtime_ops;
 	const struct pci_device_id *id_table;
 };
@@ -122,7 +140,6 @@ struct cnss_usb_wlan_driver {
 	const struct usb_device_id *id_table;
 };
 
-#ifdef CONFIG_SDIO_QCN
 struct cnss_sdio_wlan_driver {
 	const char *name;
 	const struct sdio_device_id *id_table;
@@ -134,15 +151,6 @@ struct cnss_sdio_wlan_driver {
 	int (*suspend)(struct device *);
 	int (*resume)(struct device *);
 	void (*update_status)(struct sdio_func *, uint32_t status);
-};
-#endif
-
-enum cnss_driver_status {
-	CNSS_UNINITIALIZED,
-	CNSS_INITIALIZED,
-	CNSS_LOAD_UNLOAD,
-	CNSS_RECOVERY,
-	CNSS_FW_DOWN,
 };
 
 struct cnss_ce_tgt_pipe_cfg {
@@ -185,6 +193,7 @@ struct cnss_wlan_enable_cfg {
 	struct cnss_shadow_reg_v2_cfg *shadow_reg_v2_cfg;
 	bool rri_over_ddr_cfg_valid;
 	struct cnss_rri_over_ddr_cfg rri_over_ddr_cfg;
+	bool send_msi_ce;
 };
 
 enum cnss_driver_mode {
@@ -208,40 +217,15 @@ enum cnss_recovery_reason {
 extern int cnss_wlan_register_driver(struct cnss_wlan_driver *driver);
 extern void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver);
 extern void cnss_device_crashed(struct device *dev);
-#ifdef CONFIG_PCI_MSM
-extern int cnss_pci_prevent_l1(struct device *dev);
-extern void cnss_pci_allow_l1(struct device *dev);
 extern int cnss_pci_link_down(struct device *dev);
-extern int cnss_wlan_pm_control(struct device *dev, bool vote);
-#else /* CONFIG_PCI_MSM */
-static inline int cnss_pci_prevent_l1(struct device *dev)
-{
-	return 0;
-}
-static inline void cnss_pci_allow_l1(struct device *dev)
-{
-}
-static inline int cnss_pci_link_down(struct device *dev)
-{
-	return 0;
-}
-static inline int cnss_wlan_pm_control(struct device *dev, bool vote)
-{
-	return 0;
-}
-#endif /* CONFIG_PCI_MSM */
 extern int cnss_pci_is_device_down(struct device *dev);
 extern void cnss_schedule_recovery(struct device *dev,
 				   enum cnss_recovery_reason reason);
 extern int cnss_self_recovery(struct device *dev,
 			      enum cnss_recovery_reason reason);
 extern int cnss_force_fw_assert(struct device *dev);
+extern int cnss_dump_fw_sram_to_file(struct device *dev);
 extern int cnss_force_collect_rddm(struct device *dev);
-extern int cnss_qmi_send_get(struct device *dev);
-extern int cnss_qmi_send_put(struct device *dev);
-extern int cnss_qmi_send(struct device *dev, int type, void *cmd,
-			 int cmd_len, void *cb_ctx,
-			 int (*cb)(void *ctx, void *event, int event_len));
 extern void *cnss_get_virt_ramdump_mem(struct device *dev, unsigned long *size);
 extern int cnss_get_fw_files_for_target(struct device *dev,
 					struct cnss_fw_files *pfw_files,
@@ -251,19 +235,25 @@ extern int cnss_get_platform_cap(struct device *dev,
 extern struct dma_iommu_mapping *cnss_smmu_get_mapping(struct device *dev);
 extern int cnss_smmu_map(struct device *dev,
 			 phys_addr_t paddr, uint32_t *iova_addr, size_t size);
+extern struct iommu_domain *cnss_smmu_get_domain(struct device *dev);
 extern int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info);
+extern void cnss_set_driver_status(enum cnss_driver_status driver_status);
 extern int cnss_request_bus_bandwidth(struct device *dev, int bandwidth);
+extern int cnss_set_wlan_unsafe_channel(u16 *unsafe_ch_list, u16 ch_count);
+extern int cnss_get_wlan_unsafe_channel(u16 *unsafe_ch_list, u16 *ch_count,
+					u16 buf_len);
+extern int cnss_wlan_set_dfs_nol(const void *info, u16 info_len);
+extern int cnss_wlan_get_dfs_nol(void *info, u16 info_len);
 extern int cnss_power_up(struct device *dev);
 extern int cnss_power_down(struct device *dev);
 extern int cnss_idle_restart(struct device *dev);
 extern int cnss_idle_shutdown(struct device *dev);
+extern u8 *cnss_common_get_wlan_mac_address(struct device *dev, uint32_t *num);
 extern void cnss_request_pm_qos(struct device *dev, u32 qos_val);
 extern void cnss_remove_pm_qos(struct device *dev);
 extern void cnss_lock_pm_sem(struct device *dev);
 extern void cnss_release_pm_sem(struct device *dev);
-extern void cnss_pci_lock_reg_window(struct device *dev, unsigned long *flags);
-extern void cnss_pci_unlock_reg_window(struct device *dev,
-				       unsigned long *flags);
+extern int cnss_wlan_pm_control(struct device *dev, bool vote);
 extern int cnss_auto_suspend(struct device *dev);
 extern int cnss_auto_resume(struct device *dev);
 extern int cnss_pci_is_drv_connected(struct device *dev);
@@ -294,8 +284,6 @@ extern int cnss_usb_wlan_register_driver(struct cnss_usb_wlan_driver *driver);
 extern void cnss_usb_wlan_unregister_driver(struct cnss_usb_wlan_driver *
 					    driver);
 extern int cnss_usb_is_device_down(struct device *dev);
-extern int cnss_pci_force_wake_request_sync(struct device *dev, int timeout);
-#ifdef CONFIG_SDIO_QCN
 extern int cnss_sdio_wlan_register_driver(struct cnss_sdio_wlan_driver *
 					  driver_ops);
 extern void cnss_sdio_wlan_unregister_driver(struct cnss_sdio_wlan_driver *
@@ -306,31 +294,21 @@ extern struct sdio_al_channel_handle *cnss_sdio_wlan_register_sdio_al_channel(
 				    struct sdio_al_channel_data *channel_data);
 extern void cnss_sdio_wlan_unregister_sdio_al_channel(
 	     struct sdio_al_channel_handle *ch_handle);
-#else
-extern inline int cnss_sdio_wlan_register_driver(void *driver_ops)
-{
-	return 0;
-}
 
-extern inline void cnss_sdio_wlan_unregister_driver(void *driver_ops)
-{
+extern void cnss_pci_lock_reg_window(struct device *dev, unsigned long *flags);
+extern void cnss_pci_unlock_reg_window(struct device *dev, unsigned long *flags);
 
-}
+extern int cnss_qmi_send(struct device *dev, int type, void *cmd,
+						int cmd_len, void *cb_ctx,
+						int (*cb)(void *ctx, void *event, int event_len));
 
-extern inline void *cnss_sdio_wlan_get_sdio_al_client_handle(void *func)
-{
-	return NULL;
-}
+extern int cnss_qmi_send_get(struct device *dev);
+extern int cnss_qmi_send_put(struct device *dev);
 
-extern inline void *cnss_sdio_wlan_register_sdio_al_channel(void *channel_data)
-{
-	return NULL;
-}
-
-extern inline void cnss_sdio_wlan_unregister_sdio_al_channel(void *ch_handle)
-{
-
-}
-#endif
-
+extern int cnss_pci_prevent_l1(struct device *dev);
+extern void cnss_pci_allow_l1(struct device *dev);
+extern void *cnss_dma_alloc_coherent(struct device *dev, size_t size,
+			      dma_addr_t *dma_handle, gfp_t flag);
+extern void cnss_dma_free_coherent(struct device *dev, size_t size,
+			    void *vaddr, dma_addr_t dma_handle);
 #endif /* _NET_CNSS2_H */

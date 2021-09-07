@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -41,6 +41,7 @@ enum cnss_dev_bus_type cnss_get_bus_type(unsigned long device_id)
 	case QCA6290_EMULATION_DEVICE_ID:
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 		return CNSS_BUS_PCI;
 	case QCN7605_COMPOSITE_DEVICE_ID:
@@ -54,6 +55,16 @@ enum cnss_dev_bus_type cnss_get_bus_type(unsigned long device_id)
 		cnss_pr_err("Unknown device_id: 0x%lx\n", device_id);
 		return CNSS_BUS_NONE;
 	}
+}
+
+bool cnss_bus_req_mem_ind_valid(struct cnss_plat_data *plat_priv)
+{
+	enum cnss_dev_bus_type bus_type = cnss_get_bus_type(plat_priv->device_id);
+	
+	if (bus_type == CNSS_BUS_USB || bus_type == CNSS_BUS_SDIO)
+		return false;
+	else
+		return true;
 }
 
 void *cnss_bus_dev_to_bus_priv(struct device *dev)
@@ -174,8 +185,6 @@ int cnss_bus_get_wake_irq(struct cnss_plat_data *plat_priv)
 	case CNSS_BUS_PCI:
 		return cnss_pci_get_wake_msi(plat_priv->bus_priv);
 	default:
-		cnss_pr_err("Unsupported bus type: %d\n",
-			    plat_priv->bus_type);
 		return -EINVAL;
 	}
 }
@@ -195,10 +204,17 @@ int cnss_bus_force_fw_assert_hdlr(struct cnss_plat_data *plat_priv)
 	}
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *t)
+#else
 void cnss_bus_fw_boot_timeout_hdlr(unsigned long data)
+#endif
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+	struct cnss_plat_data *plat_priv = from_timer(plat_priv, t, fw_boot_timer);
+#else
 	struct cnss_plat_data *plat_priv = (struct cnss_plat_data *)data;
-
+#endif
 	if (!plat_priv)
 		return;
 
@@ -305,7 +321,7 @@ int cnss_bus_dev_shutdown(struct cnss_plat_data *plat_priv)
 	case CNSS_BUS_PCI:
 		return cnss_pci_dev_shutdown(plat_priv->bus_priv);
 	case CNSS_BUS_USB:
-		return 0;
+		return cnss_usb_dev_shutdown(plat_priv->bus_priv);
 	case CNSS_BUS_SDIO:
 		return cnss_sdio_dev_shutdown(plat_priv->bus_priv);
 	default:
@@ -330,6 +346,7 @@ int cnss_bus_dev_crash_shutdown(struct cnss_plat_data *plat_priv)
 	}
 }
 
+#ifndef CONFIG_NAPIER_X86
 int cnss_bus_dev_ramdump(struct cnss_plat_data *plat_priv)
 {
 	if (!plat_priv)
@@ -344,6 +361,7 @@ int cnss_bus_dev_ramdump(struct cnss_plat_data *plat_priv)
 		return -EINVAL;
 	}
 }
+#endif
 
 int cnss_bus_register_driver_hdlr(struct cnss_plat_data *plat_priv, void *data)
 {
@@ -414,4 +432,34 @@ int cnss_bus_recovery_update_status(struct cnss_plat_data *plat_priv)
 			    plat_priv->bus_type);
 		return -EINVAL;
 	}
+}
+
+int cnss_bus_fw_sram_dump_to_file(struct cnss_plat_data *plat_priv,
+		uint32_t fw_sram_start,
+		uint32_t fw_sram_end,
+		const char *fw_sram_dump_path)
+{
+	int ret = 0;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	switch (cnss_get_bus_type(plat_priv->device_id)) {
+		case CNSS_BUS_PCI:
+			ret = cnss_pci_fw_sram_dump_to_file(
+					plat_priv->bus_priv,
+					fw_sram_start,
+					fw_sram_end,
+					fw_sram_dump_path);
+			break;
+		case CNSS_BUS_SDIO:
+		case CNSS_BUS_USB:
+		default:
+			ret = -ENOTSUPP;
+			break;
+	}
+
+	return ret;
 }

@@ -18,7 +18,7 @@
 
 #include "mhi_sys.h"
 
-enum MHI_DEBUG_LEVEL mhi_msg_lvl = MHI_MSG_DBG;
+enum MHI_DEBUG_LEVEL mhi_msg_lvl = MHI_MSG_ERROR;
 
 #ifdef CONFIG_MSM_MHI_DEBUG
 enum MHI_DEBUG_LEVEL mhi_ipc_log_lvl = MHI_MSG_VERBOSE;
@@ -315,7 +315,6 @@ int mhi_init_debugfs(struct mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_dev_ctxt->chan_info = kmalloc(MHI_LOG_SIZE, GFP_KERNEL);
 	if (mhi_dev_ctxt->chan_info == NULL)
 		goto clean_ev_stats;
-
 	return 0;
 
 clean_ev_stats:

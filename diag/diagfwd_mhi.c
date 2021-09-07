@@ -19,6 +19,7 @@
 #include <linux/workqueue.h>
 #include <linux/pm_runtime.h>
 #include <linux/platform_device.h>
+#include "msm_mhi.h"
 #include <linux/delay.h>
 #include <linux/vmalloc.h>
 #include <asm/current.h>
@@ -27,96 +28,8 @@
 #include "diagfwd_bridge.h"
 #include "diagfwd_mhi.h"
 #include "diag_ipc_logging.h"
-#include "diag_mux.h"
-#include "diagchar.h"
-#include "msm_mhi.h"
-#include <net/sock.h>
-#include <net/netlink.h>
-
-/*********net link ***********/
-static struct sock *srv_sock;
-
-typedef struct sAniHdr {
-   unsigned short type;
-   unsigned short length;
-} tAniHdr;
-
-typedef struct sAniNlMsg {
-	struct nlmsghdr nlh;
-	int radio;
-	tAniHdr wmsg;
-} tAniNlHdr;
-
-static int nl_srv_send_bcast(struct sk_buff *skb)
-{
-	int err = -1;
-	int flags = GFP_KERNEL;
-
-	if (in_interrupt() || irqs_disabled() || in_atomic())
-		flags = GFP_ATOMIC;
-
-	NETLINK_CB(skb).portid = 0;     /* sender's pid */
-	NETLINK_CB(skb).dst_group = 0x01;    /* destination group */
-
-	if (srv_sock) {
-		err = netlink_broadcast(srv_sock, skb, 0, 0x01, flags);
-		if ((err < 0) && (err != -ESRCH)) {
-			dev_kfree_skb(skb);
-		}
-	} else {
-		dev_kfree_skb(skb);
-	}
-
-	return err;
-}
-
-static int generate_nl_msg(unsigned char *buf, size_t len)
-{
-#define WLAN_NL_CNSS_FW_MSG 29
-	struct nlmsghdr *nlh;
-	tAniNlHdr *wnl;
-	size_t len_ext = sizeof(wnl->radio) + sizeof(wnl->wmsg);
-	struct sk_buff *fw_skb = nlmsg_new(len + len_ext, GFP_KERNEL);
-
-	if (!fw_skb) {
-		pr_err("Fail to allocate\n");
-		return -1;
-	} else {
-		nlh = nlmsg_put(fw_skb, 0, 0, WLAN_NL_CNSS_FW_MSG, len + len_ext, 0);
-		if (nlh) {
-			wnl = (tAniNlHdr *)nlh;
-			wnl->radio = 0; /* To extend later */
-			wnl->wmsg.type = 0; /* To extend later */
-			wnl->wmsg.length = len;
-
-			memcpy(nlmsg_data(nlh) + len_ext, buf, len);
-			nl_srv_send_bcast(fw_skb);
-		} else {
-			kfree_skb(fw_skb);
-			pr_err("Fail to put\n");
-			return -1;
-		}
-	}
-
-	return 0;
-#undef WLAN_NL_CNSS_FW_MSG
-}
-
-void my_write_xx(int dev_id, unsigned char *data, size_t len)
-{
-	/* Check input params */
-	if (!data || len > DIAG_MAX_HDLC_BUF_SIZE)
-		return;
-
-	/* Check channel open? */
-	/* Check dev_id range? */
-	/* If channel type equal to DIAG_DATA_TYPE? */
-	/* transfer to user */
-	if (generate_nl_msg(data, len) != 0)
-		pr_err("Fail to send NL msg\n");
-
-	return;
-}
+#include "diag_nl.h"
+#include <linux/kmemleak.h>
 
 static void mhi_enabled_notifier(void)
 {
@@ -124,58 +37,9 @@ static void mhi_enabled_notifier(void)
 	unsigned char c = WLAN_NL_MHI_ENABLED;
 
 	/* Use one byte info - 0xFF to indicate MHI enabled */
-	my_write_xx(0, &c, sizeof(c));
+	send_to_diag_app(0, &c, sizeof(c));
 #undef WLAN_NL_MHI_ENABLED
 }
-
-static void nl_srv_rcv(struct sk_buff *skb)
-{
-	struct nlmsghdr *nlh;
-	uint8_t *msg;
-
-	nlh = (struct nlmsghdr *)skb->data;
-	if (!nlh) {
-		pr_err("%s: Netlink header null \n", __func__);
-		return;
-	}
-
-	msg = NLMSG_DATA(nlh);
-
-	/* send */
-	diag_local_cmd_handler(msg);
-
-	return;
-}
-
-int nl_srv_create(void)
-{
-#define NETLINK_CUSTOM_FW 27
-	int retcode = 0;
-	struct netlink_kernel_cfg cfg = {
-		.groups = 0x01,
-		.input = nl_srv_rcv
-	};
-
-	srv_sock = netlink_kernel_create(&init_net, NETLINK_CUSTOM_FW,
-					    &cfg);
-
-	if (srv_sock == NULL) {
-		pr_err("netlink_kernel_create failed\n");
-		retcode = -1;
-	}
-
-	return retcode;
-#undef NETLINK_CUSTOM_FW
-}
-
-void nl_srv_destroy(void)
-{
-	if (srv_sock)
-		netlink_kernel_release(srv_sock);
-
-	srv_sock = NULL;
-}
-/***********net link ***********/
 
 #define SET_CH_CTXT(index, type)	(((index & 0xFF) << 8) | (type & 0xFF))
 #define GET_INFO_INDEX(val)		((val & 0xFF00) >> 8)
@@ -187,6 +51,8 @@ void nl_srv_destroy(void)
 #define CLOSE_CHANNELS			1
 
 #define DIAG_MHI_STRING_SZ		11
+
+#define MHI_DIAG_MAX_SIZE	0X800
 
 struct diag_mhi_info diag_mhi[NUM_MHI_DEV] = {
 	{
@@ -524,17 +390,12 @@ static void mhi_read_done_work_fn(struct work_struct *work)
 		buf = result.buf_addr;
 		if (!buf)
 			break;
-		DIAG_LOG(DIAG_DEBUG_BRIDGE,
-			 "read from mhi port %d buf %pK\n",
-			 mhi_info->id, buf);
 		/*
 		 * The read buffers can come after the MHI channels are closed.
 		 * If the channels are closed at the time of read, discard the
 		 * buffers here and do not forward them to the mux layer.
 		 */
 		if ((atomic_read(&(mhi_info->read_ch.opened)))) {
-			/* send to net link */
-			my_write_xx(mhi_info->dev_id, buf, result.bytes_xferd);
 			err = diag_remote_dev_read_done(mhi_info->dev_id, buf,
 						  result.bytes_xferd);
 			if (err)
@@ -734,6 +595,7 @@ static void mhi_notifier(struct mhi_cb_info *cb_info)
 		__mhi_open(&diag_mhi[index], CHANNELS_OPENED);
 		queue_work(diag_mhi[index].mhi_wq,
 			   &(diag_mhi[index].open_work));
+
 		/*Notify upper app that MHI channel ready*/
 		mhi_enabled_notifier();
 		break;
@@ -813,6 +675,7 @@ static int diag_mhi_register_ch(int id, struct diag_mhi_ch_t *ch)
 	ch->client_info.dev = &driver->pdev->dev;
 	ch->client_info.node_name = "qcom,mhi";
 	ch->client_info.user_data = (void *)(uintptr_t)ctxt;
+	ch->client_info.max_payload = MHI_DIAG_MAX_SIZE;
 	return mhi_register_channel(&ch->hdl, &ch->client_info);
 }
 
@@ -836,9 +699,6 @@ int diag_mhi_init()
 	int err = 0;
 	struct diag_mhi_info *mhi_info = NULL;
 	char wq_name[DIAG_MHI_NAME_SZ + DIAG_MHI_STRING_SZ];
-
-	/* Create NL srv */
-	nl_srv_create();
 
 	for (i = 0; i < NUM_MHI_DEV; i++) {
 		mhi_info = &diag_mhi[i];
@@ -889,8 +749,4 @@ void diag_mhi_exit()
 	for (i = 0; i < NUM_MHI_DEV; i++) {
 		diag_mhi_dev_exit(i);
 	}
-
-	/* Destroy NL srv */
-	nl_srv_destroy();
 }
-

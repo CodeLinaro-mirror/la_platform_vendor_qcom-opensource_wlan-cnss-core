@@ -22,6 +22,7 @@
 #include <linux/of.h>
 #include <linux/completion.h>
 #include <linux/platform_device.h>
+#include <linux/version.h>
 
 static int mhi_init_sync(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
@@ -136,6 +137,42 @@ static int mhi_cmd_ring_init(struct mhi_cmd_ctxt *cmd_ctxt,
 	return 0;
 }
 
+static void deinit_mhi_dev_mem(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	int i;
+
+	for (i = 0; i < mhi_dev_ctxt->mmio_info.nr_event_rings; ++i) {
+		struct mhi_event_ctxt *dev_ev_ctxt = NULL;
+		struct mhi_ring *ev_ctxt = NULL;
+
+		dev_ev_ctxt = &mhi_dev_ctxt->dev_space.ring_ctxt.ec_list[i];
+		ev_ctxt = &mhi_dev_ctxt->mhi_local_event_ctxt[i];
+
+		if(!ev_ctxt->base)
+			continue;
+#ifdef CONFIG_NAPIER_X86
+		cnss_dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
+		cnss_dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
+				  ev_ctxt->len,
+				  ev_ctxt->base,
+				  dev_ev_ctxt->mhi_event_ring_base_addr);
+		ev_ctxt->base = NULL;
+	}
+	if (mhi_dev_ctxt->dev_space.dev_mem_start) {
+#ifdef CONFIG_NAPIER_X86
+		cnss_dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
+		cnss_dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
+			   mhi_dev_ctxt->dev_space.dev_mem_len,
+			   mhi_dev_ctxt->dev_space.dev_mem_start,
+			   mhi_dev_ctxt->dev_space.dma_dev_mem_start);
+		mhi_dev_ctxt->dev_space.dev_mem_start = NULL;
+	}
+}
+
 int init_mhi_dev_mem(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	size_t mhi_mem_index = 0, ring_len;
@@ -147,7 +184,11 @@ int init_mhi_dev_mem(struct mhi_device_ctxt *mhi_dev_ctxt)
 					calculate_mhi_space(mhi_dev_ctxt);
 
 	mhi_dev_ctxt->dev_space.dev_mem_start =
-		dma_alloc_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#ifdef CONFIG_NAPIER_X86
+		cnss_dma_alloc_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
+		cnss_dma_alloc_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
 				    mhi_dev_ctxt->dev_space.dev_mem_len,
 				   &mhi_dev_ctxt->dev_space.dma_dev_mem_start,
 				    GFP_KERNEL);
@@ -212,8 +253,12 @@ int init_mhi_dev_mem(struct mhi_device_ctxt *mhi_dev_ctxt)
 
 		ring_len = sizeof(union mhi_event_pkt) *
 					mhi_dev_ctxt->ev_ring_props[i].nr_desc;
-		ring_addr = dma_alloc_coherent(
+		ring_addr = cnss_dma_alloc_coherent(
+#ifdef CONFIG_NAPIER_X86
+				&mhi_dev_ctxt->pcie_device->dev,
+#else
 				&mhi_dev_ctxt->plat_dev->dev,
+#endif
 				ring_len, &ring_dma_addr, GFP_KERNEL);
 		if (!ring_addr)
 			goto err_ev_alloc;
@@ -235,16 +280,43 @@ err_ev_alloc:
 		dev_ev_ctxt = &mhi_dev_ctxt->dev_space.ring_ctxt.ec_list[i];
 		ev_ctxt = &mhi_dev_ctxt->mhi_local_event_ctxt[i];
 
-		dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#ifdef CONFIG_NAPIER_X86
+		cnss_dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
+		cnss_dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
 				  ev_ctxt->len,
 				  ev_ctxt->base,
 				  dev_ev_ctxt->mhi_event_ring_base_addr);
+		ev_ctxt->base = NULL;
 	}
-	dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#ifdef CONFIG_NAPIER_X86
+	cnss_dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
+	cnss_dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
 			   mhi_dev_ctxt->dev_space.dev_mem_len,
 			   mhi_dev_ctxt->dev_space.dev_mem_start,
 			   mhi_dev_ctxt->dev_space.dma_dev_mem_start);
+	mhi_dev_ctxt->dev_space.dev_mem_start = NULL;
+
 	return -EFAULT;
+}
+
+static void mhi_deinit_events(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	if (mhi_dev_ctxt->mhi_ev_wq.m0_event) {
+		kfree(mhi_dev_ctxt->mhi_ev_wq.m0_event);
+		mhi_dev_ctxt->mhi_ev_wq.m0_event = NULL;
+	}
+	if (mhi_dev_ctxt->mhi_ev_wq.m3_event) {
+		kfree(mhi_dev_ctxt->mhi_ev_wq.m3_event);
+		mhi_dev_ctxt->mhi_ev_wq.m3_event = NULL;
+	}
+	if (mhi_dev_ctxt->mhi_ev_wq.bhi_event) {
+		kfree(mhi_dev_ctxt->mhi_ev_wq.bhi_event);
+		mhi_dev_ctxt->mhi_ev_wq.bhi_event = NULL;
+	}
 }
 
 static int mhi_init_events(struct mhi_device_ctxt *mhi_dev_ctxt)
@@ -281,10 +353,21 @@ static int mhi_init_events(struct mhi_device_ctxt *mhi_dev_ctxt)
 	return 0;
 error_bhi_event:
 	kfree(mhi_dev_ctxt->mhi_ev_wq.m3_event);
+	mhi_dev_ctxt->mhi_ev_wq.m3_event = NULL;
 error_m0_event:
 	kfree(mhi_dev_ctxt->mhi_ev_wq.m0_event);
+	mhi_dev_ctxt->mhi_ev_wq.m0_event = NULL;
 error_state_change_event_handle:
 	return -ENOMEM;
+}
+
+static void mhi_destroy_all_thread_queues_lock(
+		struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	if (mhi_dev_ctxt->state_change_work_item_list.q_lock) {
+		kfree(mhi_dev_ctxt->state_change_work_item_list.q_lock);
+		mhi_dev_ctxt->state_change_work_item_list.q_lock = NULL;
+	}
 }
 
 static int mhi_init_state_change_thread_work_queue(
@@ -315,9 +398,36 @@ static int mhi_init_state_change_thread_work_queue(
 	return 0;
 }
 
+static void mhi_deinit_wakelock(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	wakeup_source_unregister(mhi_dev_ctxt->w_lock);
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 static void mhi_init_wakelock(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
-	wakeup_source_init(&mhi_dev_ctxt->w_lock, "mhi_wakeup_source");
+	mhi_dev_ctxt->w_lock = wakeup_source_register(NULL, "mhi_wakeup_source");
+}
+#else
+static void mhi_init_wakelock(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	mhi_dev_ctxt->w_lock = wakeup_source_register("mhi_wakeup_source");
+}
+#endif
+
+
+void mhi_deinit_device_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	if(!mhi_dev_ctxt)
+		return;
+	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Entered\n");
+	mhi_deinit_wakelock(mhi_dev_ctxt);
+	mhi_deinit_all_thread_queues(mhi_dev_ctxt);
+	mhi_deinit_events(mhi_dev_ctxt);
+	deinit_mhi_dev_mem(mhi_dev_ctxt);
+	delete_local_ev_ctxt(mhi_dev_ctxt);
+	mhi_destroy_event_cfg(mhi_dev_ctxt);
+	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Exit\n");
 }
 
 /**
@@ -380,17 +490,26 @@ int mhi_init_device_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt)
 
 error_during_thread_init:
 	kfree(mhi_dev_ctxt->mhi_ev_wq.m0_event);
+	mhi_dev_ctxt->mhi_ev_wq.m0_event = NULL;
 	kfree(mhi_dev_ctxt->mhi_ev_wq.m3_event);
+	mhi_dev_ctxt->mhi_ev_wq.m3_event = NULL;
 	kfree(mhi_dev_ctxt->mhi_ev_wq.bhi_event);
+	mhi_dev_ctxt->mhi_ev_wq.bhi_event = NULL;
 error_wq_init:
-	dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#ifdef CONFIG_NAPIER_X86
+	cnss_dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
+	cnss_dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
 		   mhi_dev_ctxt->dev_space.dev_mem_len,
 		   mhi_dev_ctxt->dev_space.dev_mem_start,
 		   mhi_dev_ctxt->dev_space.dma_dev_mem_start);
+	mhi_dev_ctxt->dev_space.dev_mem_start = NULL;
 error_during_dev_mem_init:
 error_during_local_ev_ctxt:
 error_during_sync:
 	kfree(mhi_dev_ctxt->ev_ring_props);
+	mhi_dev_ctxt->ev_ring_props = NULL;
 error_during_props:
 	return r;
 }
@@ -455,6 +574,12 @@ int mhi_init_chan_ctxt(struct mhi_chan_ctxt *cc_list,
 	return 0;
 }
 
+void mhi_deinit_all_thread_queues(
+		struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	mhi_destroy_all_thread_queues_lock(mhi_dev_ctxt);
+}
+
 int mhi_reset_all_thread_queues(
 		struct mhi_device_ctxt *mhi_dev_ctxt)
 {
@@ -468,9 +593,22 @@ int mhi_reset_all_thread_queues(
 	return ret_val;
 }
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
 int mhi_reg_notifiers(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
-#ifdef CONFIG_ARCH_QCOM
+	cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+				  "mhi:online",
+				  mhi_hp_online, NULL);
+
+	cpuhp_setup_state_nocalls(CPUHP_AP_OFFLINE,
+				  "mhi:dead",
+				  NULL, mhi_hp_offline);
+
+	return 0;
+}
+#else
+int mhi_reg_notifiers(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
 	u32 ret_val;
 
 	if (NULL == mhi_dev_ctxt)
@@ -478,7 +616,5 @@ int mhi_reg_notifiers(struct mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_dev_ctxt->mhi_cpu_notifier.notifier_call = mhi_cpu_notifier_cb;
 	ret_val = register_cpu_notifier(&mhi_dev_ctxt->mhi_cpu_notifier);
 	return ret_val;
-#else
-	return 0;
-#endif
 }
+#endif

@@ -18,25 +18,26 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 
-static const char * const mhi_states_transition_str[STATE_TRANSITION_MAX] = {
-	[STATE_TRANSITION_RESET] = "RESET",
-	[STATE_TRANSITION_READY] = "READY",
-	[STATE_TRANSITION_M0] = "M0",
-	[STATE_TRANSITION_M1] = "M1",
-	[STATE_TRANSITION_M2] = "M2",
-	[STATE_TRANSITION_M3] = "M3",
-	[STATE_TRANSITION_BHI] = "BHI",
-	[STATE_TRANSITION_SBL] = "SBL",
-	[STATE_TRANSITION_AMSS] = "AMSS",
-	[STATE_TRANSITION_LINK_DOWN] = "LINK_DOWN",
-	[STATE_TRANSITION_WAKE] = "WAKE",
-	[STATE_TRANSITION_BHIE] = "BHIE",
-	[STATE_TRANSITION_RDDM] = "RDDM",
-	[STATE_TRANSITION_SYS_ERR] = "SYS_ERR",
-};
-
 const char *state_transition_str(enum STATE_TRANSITION state)
 {
+	static const char * const
+		mhi_states_transition_str[STATE_TRANSITION_MAX] = {
+		[STATE_TRANSITION_RESET] = "RESET",
+		[STATE_TRANSITION_READY] = "READY",
+		[STATE_TRANSITION_M0] = "M0",
+		[STATE_TRANSITION_M1] = "M1",
+		[STATE_TRANSITION_M2] = "M2",
+		[STATE_TRANSITION_M3] = "M3",
+		[STATE_TRANSITION_BHI] = "BHI",
+		[STATE_TRANSITION_SBL] = "SBL",
+		[STATE_TRANSITION_AMSS] = "AMSS",
+		[STATE_TRANSITION_LINK_DOWN] = "LINK_DOWN",
+		[STATE_TRANSITION_WAKE] = "WAKE",
+		[STATE_TRANSITION_BHIE] = "BHIE",
+		[STATE_TRANSITION_RDDM] = "RDDM",
+		[STATE_TRANSITION_SYS_ERR] = "SYS_ERR",
+	};
+
 	return (state < STATE_TRANSITION_MAX) ?
 		mhi_states_transition_str[state] : "Invalid";
 }
@@ -147,7 +148,7 @@ void mhi_set_wlaon_sw_entry(struct mhi_device_ctxt *mhi_dev_ctxt)
 			    mhi_dev_ctxt->mmio_info.mmio_addr,
 			    WLAON_WARM_SW_ENTRY, 0);
 
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_CNSS_QCA6390
 	mhi_mdelay(10);
 #endif
 
@@ -157,7 +158,7 @@ void mhi_set_wlaon_sw_entry(struct mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "WLAON_WARM_SW_ENTRY 0x%x\n", val);
 }
 
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_CNSS_QCA6390
 void mhi_set_pcie_mhictrl_reset(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	u32 val;
@@ -257,7 +258,8 @@ void mhi_reset_pcie_rxvecstatus(struct mhi_device_ctxt *mhi_dev_ctxt)
  * L3: LD_ERR_FATAL_DETECT <--> LD_ERR_FATAL_DETECT
  *     LD_ERR_FATAL_DETECT -> SHUTDOWN_PROCESS
  */
-static const struct mhi_pm_transitions const mhi_state_transitions[] = {
+// dongliu modify at 20210904    static const struct mhi_pm_transitions const mhi_state_transitions[] = {
+static const struct mhi_pm_transitions mhi_state_transitions[] = {
 	/* L0 States */
 	{
 		MHI_PM_DISABLE,
@@ -798,14 +800,14 @@ void process_stt_work_item(
 		mhi_dev_ctxt->dev_exec_env = MHI_EXEC_ENV_SBL;
 		write_unlock_irq(&mhi_dev_ctxt->pm_xfer_lock);
 		enable_clients(mhi_dev_ctxt, mhi_dev_ctxt->dev_exec_env);
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_CNSS_QCA6390
 		wake_up(mhi_dev_ctxt->mhi_ev_wq.bhi_event);
 #endif
 		break;
 	case STATE_TRANSITION_AMSS:
 		r = process_amss_transition(mhi_dev_ctxt, cur_work_item);
 		break;
-#ifndef CONFIG_HST_IMX
+#ifndef CONFIG_CNSS_QCA6390
 	case STATE_TRANSITION_BHIE:
 		write_lock_irq(&mhi_dev_ctxt->pm_xfer_lock);
 		mhi_dev_ctxt->dev_exec_env = MHI_EXEC_ENV_BHIE;

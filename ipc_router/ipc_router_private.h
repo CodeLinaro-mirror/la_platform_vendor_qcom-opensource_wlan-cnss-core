@@ -19,9 +19,15 @@
 #include <linux/mm.h>
 #include <linux/list.h>
 #include <linux/platform_device.h>
+#ifdef CONFIG_NAPIER_X86
 #include "msm_ipc.h"
 #include "ipc_router.h"
 #include "ipc_router_xprt.h"
+#else
+#include <linux/msm_ipc.h>
+#include <linux/ipc_router.h>
+#include <linux/ipc_router_xprt.h>
+#endif
 
 #include <net/sock.h>
 

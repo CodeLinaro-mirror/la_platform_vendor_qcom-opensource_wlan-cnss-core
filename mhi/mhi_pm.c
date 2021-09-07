@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, 2020 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,8 +9,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
-
+#ifdef CONFIG_NAPIER_X86
 #include "msm_mhi.h"
+#else
+#include <linux/msm_mhi.h>
+#endif
 #include <linux/workqueue.h>
 #include <linux/pm.h>
 #include <linux/fs.h>
@@ -184,14 +187,14 @@ static int mhi_pm_initiate_m0(struct mhi_device_ctxt *mhi_dev_ctxt)
 	if (!r || mhi_dev_ctxt->mhi_pm_state == MHI_PM_LD_ERR_FATAL_DETECT) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 			"Failed to get M0 event, timeout or LD\n");
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_CNSS_QCA6390
 		/* Patch from MSM as gerrit#2559252 */
 		/*
 		 * It's possible device already in error state and we didn't
 		 * process it due to low power mode, force a check
 		 */
 		{
-				enum MHI_PM_STATE new_state;
+				enum MHI_PM_STATE new_state = MHI_PM_DISABLE;
 				unsigned long flags;
 				enum MHI_STATE state = MHI_STATE_LIMIT;
 
@@ -308,7 +311,7 @@ int mhi_pci_resume(struct device *dev)
 	return r;
 }
 
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_NAPIER_X86
 void mhi_pcie_sw_reset(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	/*
@@ -331,7 +334,9 @@ void mhi_pcie_sw_reset(struct mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_reset_pcie_rxvecstatus(mhi_dev_ctxt);
 	mhi_set_wlaon_sw_entry(mhi_dev_ctxt);
 	mhi_set_pcie_soc_global_reset(mhi_dev_ctxt);
+#ifdef CONFIG_CNSS_QCA6390
 	mhi_set_pcie_mhictrl_reset(mhi_dev_ctxt);
+#endif
 }
 #endif
 
@@ -341,6 +346,7 @@ static int mhi_pm_slave_mode_power_on(struct mhi_device_ctxt *mhi_dev_ctxt)
 	u32 timeout = mhi_dev_ctxt->poll_reset_timeout_ms;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "Entered\n");
+
 	mutex_lock(&mhi_dev_ctxt->pm_lock);
 	write_lock_irq(&mhi_dev_ctxt->pm_xfer_lock);
 	mhi_dev_ctxt->mhi_pm_state = MHI_PM_POR;
@@ -409,7 +415,7 @@ static void mhi_pm_slave_mode_power_off(struct mhi_device_ctxt *mhi_dev_ctxt)
 	}
 	process_disable_transition(MHI_PM_SHUTDOWN_PROCESS, mhi_dev_ctxt);
 
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_NAPIER_X86
 	mhi_pcie_sw_reset(mhi_dev_ctxt);
 #endif
 }
@@ -514,8 +520,7 @@ int mhi_turn_off_pcie_link(struct mhi_device_ctxt *mhi_dev_ctxt, bool graceful)
 				"Failed to set pcie power state to D3hot ret:%d\n",
 				r);
 	}
-
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 	r = msm_pcie_pm_control(MSM_PCIE_SUSPEND,
 				pcie_dev->bus->number,
 				pcie_dev,
@@ -553,7 +558,7 @@ int mhi_turn_on_pcie_link(struct mhi_device_ctxt *mhi_dev_ctxt)
 		mhi_log(mhi_dev_ctxt, MHI_MSG_CRITICAL,
 			"Could not set bus frequency ret: %d\n", r);
 
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 	r = msm_pcie_pm_control(MSM_PCIE_RESUME, pcie_dev->bus->number,
 				pcie_dev, NULL, 0);
 	if (r) {
@@ -562,7 +567,6 @@ int mhi_turn_on_pcie_link(struct mhi_device_ctxt *mhi_dev_ctxt)
 		goto exit;
 	}
 #endif
-
 	r = pci_set_power_state(pcie_dev, PCI_D0);
 	if (r) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
@@ -587,7 +591,7 @@ exit:
 	return r;
 }
 
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 void mhi_link_state_cb(struct msm_pcie_notify *notify)
 {
 	struct mhi_device_ctxt *mhi_dev_ctxt = NULL;
@@ -611,8 +615,8 @@ void mhi_link_state_cb(struct msm_pcie_notify *notify)
 	case MSM_PCIE_EVENT_WAKEUP:
 		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 			"Received MSM_PCIE_EVENT_WAKE\n");
-		__pm_stay_awake(&mhi_dev_ctxt->w_lock);
-		__pm_relax(&mhi_dev_ctxt->w_lock);
+		__pm_stay_awake(mhi_dev_ctxt->w_lock);
+		__pm_relax(mhi_dev_ctxt->w_lock);
 
 		if (mhi_dev_ctxt->flags.mhi_initialized) {
 			mhi_dev_ctxt->runtime_get(mhi_dev_ctxt);
@@ -626,7 +630,6 @@ void mhi_link_state_cb(struct msm_pcie_notify *notify)
 	}
 }
 #endif
-
 int mhi_pm_control_device(struct mhi_device *mhi_device, enum mhi_dev_ctrl ctrl)
 {
 	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_device->mhi_dev_ctxt;
@@ -640,6 +643,7 @@ int mhi_pm_control_device(struct mhi_device *mhi_device, enum mhi_dev_ctrl ctrl)
 
 	switch (ctrl) {
 	case MHI_DEV_CTRL_INIT:
+		mhi_pcie_sw_reset(mhi_dev_ctxt);
 		return bhi_probe(mhi_dev_ctxt);
 	case MHI_DEV_CTRL_POWER_ON:
 		return mhi_pm_slave_mode_power_on(mhi_dev_ctxt);
@@ -651,7 +655,8 @@ int mhi_pm_control_device(struct mhi_device *mhi_device, enum mhi_dev_ctrl ctrl)
 		mhi_pm_slave_mode_power_off(mhi_dev_ctxt);
 		break;
 	case MHI_DEV_CTRL_TRIGGER_RDDM:
-#ifdef CONFIG_HST_IMX
+
+#ifdef CONFIG_CNSS_QCA6390
 		/* Patch from MSM gerrit#2559251, blinkly awake, should no side effect */
 		mhi_dev_ctxt->runtime_get(mhi_dev_ctxt);
 		mhi_dev_ctxt->runtime_put(mhi_dev_ctxt);
@@ -669,11 +674,7 @@ int mhi_pm_control_device(struct mhi_device *mhi_device, enum mhi_dev_ctrl ctrl)
 		write_unlock_irqrestore(&mhi_dev_ctxt->pm_xfer_lock, flags);
 		break;
 	case MHI_DEV_CTRL_RDDM:
-		/* for this condition ramdump triggered from MHI SYS_ERR,
-		* ramdump collection should be happened once SYS_ERR is received,
-		* so to this place, ramdump is completed. Return directly.
-		*/
-		return 0;
+		return bhi_rddm(mhi_dev_ctxt, false);
 	case MHI_DEV_CTRL_RDDM_KERNEL_PANIC:
 		return bhi_rddm(mhi_dev_ctxt, true);
 	case MHI_DEV_CTRL_DE_INIT:

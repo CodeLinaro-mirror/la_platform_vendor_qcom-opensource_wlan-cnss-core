@@ -483,11 +483,10 @@ static void __exit cnss_utils_exit(void)
 	kfree(cnss_utils_priv);
 	cnss_utils_priv = NULL;
 }
-
 #ifndef CONFIG_WLAN_CNSS_CORE
 module_init(cnss_utils_init);
 module_exit(cnss_utils_exit);
 
 MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION(DEVICE "CNSS Utilities Driver");
+MODULE_DESCRIPTION("CNSS Utilities Driver");
 #endif

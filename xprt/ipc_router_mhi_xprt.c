@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,9 +14,14 @@
  * IPC ROUTER MHI XPRT module.
  */
 #include <linux/delay.h>
-#include "ipc_router_xprt.h"
 #include <linux/module.h>
+#ifdef CONFIG_NAPIER_X86
+#include "ipc_router_xprt.h"
 #include "msm_mhi.h"
+#else
+#include <linux/ipc_router_xprt.h>
+#include <linux/msm_mhi.h>
+#endif
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
@@ -24,10 +29,15 @@
 #include <linux/types.h>
 #include <linux/spinlock.h>
 
+static struct ipc_router_mhi_xprt *mhi_xprtp;
 static int ipc_router_mhi_xprt_debug_mask;
-module_param_named(mhi_xprt_debug_mask, ipc_router_mhi_xprt_debug_mask,
+#ifdef CONFIG_WLAN_CNSS_CORE
+module_param_named(debug_mask_mhi_xprt, ipc_router_mhi_xprt_debug_mask,
 		   int, S_IRUGO | S_IWUSR | S_IWGRP);
-
+#else
+module_param_named(debug_mask, ipc_router_mhi_xprt_debug_mask,
+		   int, S_IRUGO | S_IWUSR | S_IWGRP);
+#endif
 #define D(x...) do { \
 if (ipc_router_mhi_xprt_debug_mask) \
 	pr_info(x); \
@@ -37,6 +47,9 @@ if (ipc_router_mhi_xprt_debug_mask) \
 #define XPRT_NAME_LEN 32
 #define IPC_ROUTER_MHI_XPRT_MAX_PKT_SIZE 0x1000
 #define IPC_ROUTER_MHI_XPRT_NUM_TRBS 10
+
+#define IPC_OUT_CHN_MAX_PAYLOAD_SIZE 0x1000
+#define IPC_IN_CHN_MAX_PAYLOAD_SIZE 0x1000
 
 /**
  * ipc_router_mhi_addr_map - Struct for virtual address to IPC Router
@@ -502,6 +515,7 @@ static void mhi_xprt_read_data(struct work_struct *work)
 		}
 		data_addr = result.buf_addr;
 		data_sz = result.bytes_xferd;
+
 		/* Create a new rr_packet, if first fragment */
 		if (!mhi_xprtp->ch_hndl.bytes_to_rx) {
 			mhi_xprtp->in_pkt = create_pkt(NULL);
@@ -512,6 +526,7 @@ static void mhi_xprt_read_data(struct work_struct *work)
 			}
 			D("%s: Allocated rr_packet\n", __func__);
 		}
+
 		skb_data = ipc_router_mhi_xprt_find_addr_map(
 					&mhi_xprtp->rx_addr_map_list,
 					&mhi_xprtp->rx_addr_map_list_lock,
@@ -519,7 +534,6 @@ static void mhi_xprt_read_data(struct work_struct *work)
 
 		if (!skb_data)
 			continue;
-
 		mutex_lock(&mhi_xprtp->ch_hndl.in_skbq_lock);
 		skb_queue_walk(&mhi_xprtp->ch_hndl.in_skbq, skb) {
 			if (skb->data == skb_data) {
@@ -536,10 +550,9 @@ static void mhi_xprt_read_data(struct work_struct *work)
 				ipc_router_peek_pkt_size(skb_data) - data_sz;
 		else
 			mhi_xprtp->ch_hndl.bytes_to_rx -= data_sz;
-
 		/* Packet is completely read, so notify to router */
 		if (!mhi_xprtp->ch_hndl.bytes_to_rx) {
-			printk("%s: Packet size read %d\n",
+			D("%s: Packet size read %d\n",
 			  __func__, mhi_xprtp->in_pkt->length);
 			msm_ipc_router_xprt_notify(&mhi_xprtp->xprt,
 						IPC_ROUTER_XPRT_EVENT_DATA,
@@ -550,9 +563,7 @@ static void mhi_xprt_read_data(struct work_struct *work)
 
 		while (mhi_xprt_queue_in_buffers(mhi_xprtp, 1) != 1 &&
 		       mhi_xprtp->ch_hndl.in_chan_enabled)
-		{
 			msleep(100);
-		}
 	}
 }
 
@@ -761,6 +772,47 @@ static void ipc_router_mhi_xprt_cb(struct mhi_cb_info *cb_info)
 }
 
 /**
+* ipc_router_mhi_driver_deregister() - deregister for MHI channels
+*
+* @mhi_xprtp: pointer to IPC router mhi xprt structure.
+*
+* @return: 0 on success, standard Linux error codes on error.
+*
+* This function is called on deinit.
+*/
+static int ipc_router_mhi_driver_deregister(
+		struct ipc_router_mhi_xprt *mhi_xprtp, struct device *dev)
+{
+	int rc;
+	if (!mhi_is_device_ready(dev, "qcom,mhi"))
+		return -EINVAL;
+
+	rc = mhi_deregister_channel(mhi_xprtp->ch_hndl.in_handle);
+	if (!rc)
+		rc = mhi_deregister_channel(mhi_xprtp->ch_hndl.out_handle);
+	return rc;
+}
+/**
+ * ipc_router_mhi_config_deinit() - deinit MHI xprt configs
+ *
+ * @mhi_xprt_config: pointer to MHI xprt configurations.
+ *
+ * This function is called to deinitialize the MHI XPRT
+ */
+static void ipc_router_mhi_config_deinit(
+			struct ipc_router_mhi_xprt *mhi_xprtp,
+			struct device *dev)
+{
+	mutex_lock(&mhi_xprtp->ch_hndl.state_lock);
+	mhi_xprtp->ch_hndl.out_chan_enabled = false;
+	mhi_xprtp->ch_hndl.in_chan_enabled = false;
+	mutex_unlock(&mhi_xprtp->ch_hndl.state_lock);
+	flush_workqueue(mhi_xprtp->wq);
+	kfree(mhi_xprtp);
+	mhi_xprtp = NULL;
+}
+
+/**
  * ipc_router_mhi_driver_register() - register for MHI channels
  *
  * @mhi_xprtp: pointer to IPC router mhi xprt structure.
@@ -784,6 +836,7 @@ static int ipc_router_mhi_driver_register(
 	mhi_info->dev = dev;
 	mhi_info->node_name = node_name;
 	mhi_info->user_data = mhi_xprtp;
+	mhi_info->max_payload = IPC_OUT_CHN_MAX_PAYLOAD_SIZE;
 	rc = mhi_register_channel(&mhi_xprtp->ch_hndl.out_handle, mhi_info);
 	if (rc) {
 		IPC_RTR_ERR("%s: Error %d registering out_chan for %s\n",
@@ -796,6 +849,7 @@ static int ipc_router_mhi_driver_register(
 	mhi_info->dev = dev;
 	mhi_info->node_name = node_name;
 	mhi_info->user_data = mhi_xprtp;
+	mhi_info->max_payload = IPC_IN_CHN_MAX_PAYLOAD_SIZE;
 	rc = mhi_register_channel(&mhi_xprtp->ch_hndl.in_handle, mhi_info);
 	if (rc) {
 		mhi_deregister_channel(mhi_xprtp->ch_hndl.out_handle);
@@ -820,7 +874,6 @@ static int ipc_router_mhi_config_init(
 			struct ipc_router_mhi_xprt_config *mhi_xprt_config,
 			struct device *dev)
 {
-	struct ipc_router_mhi_xprt *mhi_xprtp;
 	char wq_name[XPRT_NAME_LEN];
 	int rc;
 
@@ -878,15 +931,81 @@ static int ipc_router_mhi_config_init(
 	spin_lock_init(&mhi_xprtp->rx_addr_map_list_lock);
 
 	rc = ipc_router_mhi_driver_register(mhi_xprtp, dev);
-	if (rc < 0) {
-		IPC_RTR_ERR("%s: mhi registration failed\n", __func__);
-		destroy_workqueue(mhi_xprtp->wq);
-		kfree(mhi_xprtp);
-	};
-
 	return rc;
 }
 
+#ifdef CONFIG_NAPIER_X86
+/**
+ * mhi_xprt_update_config() - update mhi port configure
+ *
+ * @mhi_xprt_config: pointer to MHI XPRT configurations
+ *
+ * @return: 0 on success, -ENODEV on failure.
+ */
+static int mhi_xprt_update_config(struct ipc_router_mhi_xprt_config *mhi_xprt_config)
+{
+	uint32_t out_chan_id;
+	uint32_t in_chan_id;
+	const char remote_ss[] = "external-wlan";
+	uint32_t link_id;
+	uint32_t version;
+
+#ifndef CONFIG_CNSS_QCA6390
+	out_chan_id = 16;
+	mhi_xprt_config->out_chan_id = out_chan_id;
+
+	in_chan_id = 17;
+	mhi_xprt_config->in_chan_id = in_chan_id;
+#else
+	out_chan_id = 20;
+	mhi_xprt_config->out_chan_id = out_chan_id;
+
+	in_chan_id = 21;
+	mhi_xprt_config->in_chan_id = in_chan_id;
+#endif
+
+	link_id = 1;
+	mhi_xprt_config->link_id = link_id;
+
+	version = 3;
+	mhi_xprt_config->xprt_version = version;
+
+	scnprintf(mhi_xprt_config->xprt_name, XPRT_NAME_LEN,
+		  "IPCRTR_MHI%x:%x_%s",
+		  out_chan_id, in_chan_id, remote_ss);
+
+	return 0;
+}
+
+/**
+ * ipc_router_mhi_xprt_probe() - Probe an MHI xprt
+ *
+ * @return: 0 on success, standard Linux error codes on error.
+ *
+ * This function is called when the underlying device tree driver registers
+ * a platform device, mapped to an MHI transport.
+ */
+static int ipc_router_mhi_xprt_probe(void)
+{
+	int rc;
+	struct ipc_router_mhi_xprt_config mhi_xprt_config;
+
+	rc = mhi_xprt_update_config(&mhi_xprt_config);
+	if (rc) {
+		IPC_RTR_ERR("%s: failed to parse device tree\n",
+			    __func__);
+		return rc;
+	}
+
+	rc = ipc_router_mhi_config_init(&mhi_xprt_config, NULL);
+	if (rc) {
+		IPC_RTR_ERR("%s: init failed\n", __func__);
+		return rc;
+	}
+	return rc;
+}
+
+#else
 /**
  * parse_devicetree() - parse device tree binding
  *
@@ -956,10 +1075,8 @@ error:
  */
 static int ipc_router_mhi_xprt_probe(struct platform_device *pdev)
 {
-	int rc = -ENODEV;
+	int rc;
 	struct ipc_router_mhi_xprt_config mhi_xprt_config;
-
-	printk("%s--Enter--\n",__func__);
 
 	if (pdev && pdev->dev.of_node) {
 		rc = parse_devicetree(pdev->dev.of_node, &mhi_xprt_config);
@@ -975,8 +1092,6 @@ static int ipc_router_mhi_xprt_probe(struct platform_device *pdev)
 			return rc;
 		}
 	}
-
-	printk("%s--Exit--\n",__func__);
 	return rc;
 }
 
@@ -993,6 +1108,7 @@ static struct platform_driver ipc_router_mhi_xprt_driver = {
 		.of_match_table = ipc_router_mhi_xprt_match_table,
 	},
 };
+#endif
 
 #ifdef CONFIG_WLAN_CNSS_CORE
 int ipc_router_mhi_xprt_init(void)
@@ -1001,8 +1117,11 @@ static int __init ipc_router_mhi_xprt_init(void)
 #endif
 {
 	int rc;
-
+#ifdef CONFIG_NAPIER_X86
+	rc = ipc_router_mhi_xprt_probe();
+#else
 	rc = platform_driver_register(&ipc_router_mhi_xprt_driver);
+#endif
 	if (rc) {
 		IPC_RTR_ERR("%s: ipc_router_mhi_xprt_driver reg. failed %d\n",
 			__func__, rc);
@@ -1011,8 +1130,27 @@ static int __init ipc_router_mhi_xprt_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+void ipc_router_mhi_xprt_deinit(void)
+#else
+static void __exit ipc_router_mhi_xprt_deinit(void)
+#endif
+{
+#ifdef CONFIG_NAPIER_X86
+	int rc;
+	rc = ipc_router_mhi_driver_deregister(mhi_xprtp, NULL);
+	if (rc)
+		IPC_RTR_ERR("%s: ipc_router_mhi_xprt_driver dereg. failed %d\n",
+			__func__, rc);
+	ipc_router_mhi_config_deinit(mhi_xprtp, NULL);
+	IPC_RTR_ERR("%s: mhi_xprt driver removed %d\n",__func__, rc);
+#endif
+	return;
+}
+
 #ifndef CONFIG_WLAN_CNSS_CORE
 module_init(ipc_router_mhi_xprt_init);
+module_exit(ipc_router_mhi_xprt_deinit);
 MODULE_DESCRIPTION("IPC Router MHI XPRT");
 MODULE_LICENSE("GPL v2");
 #endif

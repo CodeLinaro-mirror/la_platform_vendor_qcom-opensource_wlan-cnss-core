@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,8 @@
 #define QCA6290_EMULATION_DEVICE_ID	0xABCD
 #define QCA6390_VENDOR_ID		0x17CB
 #define QCA6390_DEVICE_ID		0x1101
+#define QCA6490_VENDOR_ID		0x17CB
+#define QCA6490_DEVICE_ID		0x1103
 #define QCN7605_VENDOR_ID		0x17CB
 #define QCN7605_DEVICE_ID		0x1102
 #define QCN7605_SDIO_VENDOR_ID		0x70
@@ -53,7 +55,11 @@ int cnss_bus_load_m3(struct cnss_plat_data *plat_priv);
 int cnss_bus_alloc_fw_mem(struct cnss_plat_data *plat_priv);
 int cnss_bus_get_wake_irq(struct cnss_plat_data *plat_priv);
 int cnss_bus_force_fw_assert_hdlr(struct cnss_plat_data *plat_priv);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *t);
+#else
 void cnss_bus_fw_boot_timeout_hdlr(unsigned long data);
+#endif
 void cnss_bus_collect_dump_info(struct cnss_plat_data *plat_priv);
 int cnss_bus_call_driver_probe(struct cnss_plat_data *plat_priv);
 int cnss_bus_call_driver_remove(struct cnss_plat_data *plat_priv);
@@ -66,4 +72,9 @@ int cnss_bus_unregister_driver_hdlr(struct cnss_plat_data *plat_priv);
 int cnss_bus_call_driver_modem_status(struct cnss_plat_data *plat_priv,
 				      int modem_current_status);
 int cnss_bus_recovery_update_status(struct cnss_plat_data *plat_priv);
+bool cnss_bus_req_mem_ind_valid(struct cnss_plat_data *plat_priv);
+int cnss_bus_fw_sram_dump_to_file(struct cnss_plat_data *plat_priv,
+		uint32_t fw_sram_start,
+		uint32_t fw_sram_end,
+		const char *fw_sram_dump_path);
 #endif /* _CNSS_BUS_H */

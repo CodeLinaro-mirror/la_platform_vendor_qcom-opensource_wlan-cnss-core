@@ -15,7 +15,7 @@
 #include <linux/gpio.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 #include <linux/msm-bus.h>
 #endif
 #include <linux/delay.h>
@@ -24,6 +24,7 @@
 #include <linux/interrupt.h>
 #include <linux/slab.h>
 #include <linux/err.h>
+#include <linux/version.h>
 
 #define CREATE_TRACE_POINTS
 #include "mhi_trace.h"
@@ -35,16 +36,24 @@
 #include "mhi_bhi.h"
 
 struct mhi_device_driver *mhi_device_drv;
+#ifdef CONFIG_NAPIER_X86
+struct mhi_device_ctxt *mhi_dev_ctxt;
 
-#ifdef CONFIG_HST_IMX
-char hst_fw_img[] = "amss.bin";
+char napier_fw_img[] = "amss.bin";
 #endif
 
 static int mhi_pci_probe(struct pci_dev *pcie_device,
 		const struct pci_device_id *mhi_device_id);
+#ifndef CONFIG_NAPIER_X86
 static int __exit mhi_plat_remove(struct platform_device *pdev);
+#endif
 
-static const struct pci_device_id mhi_pcie_device_id[] = {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+#define DEFINE_PCI_DEVICE_TABLE(_table) \
+	const struct pci_device_id _table[]
+#endif
+
+static DEFINE_PCI_DEVICE_TABLE(mhi_pcie_device_id) = {
 	{ MHI_PCIE_VENDOR_ID, MHI_PCIE_DEVICE_ID_9x35,
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
 	{ MHI_PCIE_VENDOR_ID, MHI_PCIE_DEVICE_ID_ZIRC,
@@ -98,9 +107,17 @@ int mhi_ctxt_init(struct mhi_device_ctxt *mhi_dev_ctxt)
 		ret_val = request_irq(mhi_dev_ctxt->core.irq_base +
 				mhi_dev_ctxt->ev_ring_props[j].msi_vec,
 				mhi_dev_ctxt->ev_ring_props[j].mhi_handler_ptr,
+#ifdef CONFIG_ONE_MSI_VECTOR
+				IRQF_SHARED |
+#endif
 				IRQF_NO_SUSPEND,
 				"mhi_drv",
-				(void *)mhi_dev_ctxt);
+#ifndef CONFIG_ONE_MSI_VECTOR
+				(void *)mhi_dev_ctxt
+#else
+				(void *)&mhi_dev_ctxt->mhi_local_event_ctxt[j]
+#endif
+				);
 		if (ret_val) {
 			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 				"Failed to register handler for MSI ret_val = %d\n",
@@ -111,7 +128,7 @@ int mhi_ctxt_init(struct mhi_device_ctxt *mhi_dev_ctxt)
 
 	mhi_dev_ctxt->mmio_info.mmio_addr = mhi_dev_ctxt->core.bar0_base;
 
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_NAPIER_X86
 	/*
 	 * This is a WAR for SYSERR when wlan driver is loaded in below case.
 	 *
@@ -133,15 +150,20 @@ int mhi_ctxt_init(struct mhi_device_ctxt *mhi_dev_ctxt)
 
 irq_error:
 	kfree(mhi_dev_ctxt->state_change_work_item_list.q_lock);
+	mhi_dev_ctxt->state_change_work_item_list.q_lock = NULL;
 	kfree(mhi_dev_ctxt->mhi_ev_wq.m0_event);
+	mhi_dev_ctxt->mhi_ev_wq.m0_event = NULL;
 	kfree(mhi_dev_ctxt->mhi_ev_wq.m3_event);
+	mhi_dev_ctxt->mhi_ev_wq.m3_event = NULL;
 	kfree(mhi_dev_ctxt->mhi_ev_wq.bhi_event);
-	dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+	mhi_dev_ctxt->mhi_ev_wq.bhi_event = NULL;
+	cnss_dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
 		   mhi_dev_ctxt->dev_space.dev_mem_len,
 		   mhi_dev_ctxt->dev_space.dev_mem_start,
 		   mhi_dev_ctxt->dev_space.dma_dev_mem_start);
-
+	mhi_dev_ctxt->dev_space.dev_mem_start = NULL;
 	kfree(mhi_dev_ctxt->ev_ring_props);
+	mhi_dev_ctxt->ev_ring_props = NULL;
 	for (j = j - 1; j >= 0; --j)
 		free_irq(mhi_dev_ctxt->core.irq_base + j, NULL);
 
@@ -151,25 +173,16 @@ irq_error:
 void mhi_ctxt_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	int i;
-
-	if (mhi_dev_ctxt->state_change_work_item_list.q_lock) {
-		kfree(mhi_dev_ctxt->state_change_work_item_list.q_lock);
-		mhi_dev_ctxt->state_change_work_item_list.q_lock = NULL;
-	}
-
-	kfree(mhi_dev_ctxt->mhi_ev_wq.m0_event);
-	kfree(mhi_dev_ctxt->mhi_ev_wq.m3_event);
-	kfree(mhi_dev_ctxt->mhi_ev_wq.bhi_event);
-
-	dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
-		   mhi_dev_ctxt->dev_space.dev_mem_len,
-		   mhi_dev_ctxt->dev_space.dev_mem_start,
-		   mhi_dev_ctxt->dev_space.dma_dev_mem_start);
-
-	kfree(mhi_dev_ctxt->ev_ring_props);
-
-	for (i = 0; i < mhi_dev_ctxt->core.max_nr_msis; i++)
+	for (i = 0; i < mhi_dev_ctxt->mmio_info.nr_event_rings; i++)
+#ifndef CONFIG_ONE_MSI_VECTOR
 		free_irq(mhi_dev_ctxt->core.irq_base + i, (void *)mhi_dev_ctxt);
+#else
+		free_irq(mhi_dev_ctxt->core.irq_base +
+			mhi_dev_ctxt->ev_ring_props[i].msi_vec,
+			(void *)&mhi_dev_ctxt->mhi_local_event_ctxt[i]);
+#endif
+
+	mhi_deinit_device_ctxt(mhi_dev_ctxt);
 }
 
 static const struct dev_pm_ops pm_ops = {
@@ -192,30 +205,33 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 			 const struct pci_device_id *mhi_device_id)
 {
 	int ret_val = 0;
-	struct platform_device *plat_dev;
 	struct mhi_device_ctxt *mhi_dev_ctxt = NULL, *itr;
 	u32 domain = pci_domain_nr(pcie_device->bus);
 	u32 bus = pcie_device->bus->number;
 	u32 dev_id = pcie_device->device;
 	u32 slot = PCI_SLOT(pcie_device->devfn);
 	unsigned long msi_requested, msi_required;
-#ifdef CONFIG_ARCH_QCOM
-	struct msm_pcie_register_event *mhi_pci_link_event;
-#endif
 	struct pcie_core_info *core;
 	int i;
 	char node[32];
-
+#ifndef CONFIG_NAPIER_X86
+	struct platform_device *plat_dev;
+	struct msm_pcie_register_event *mhi_pci_link_event;
+#endif
 	/* Find correct device context based on bdf & dev_id */
 	mutex_lock(&mhi_device_drv->lock);
 	list_for_each_entry(itr, &mhi_device_drv->head, node) {
 		core = &itr->core;
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_NAPIER_X86
+		UNUSED(domain);
+		UNUSED(bus);
+		UNUSED(slot);
+		UNUSED(node);
+		if (core->dev_id == PCI_ANY_ID || (core->dev_id == dev_id)) {
+#else
 		if (core->domain == domain && core->bus == bus &&
 		    (core->dev_id == PCI_ANY_ID || (core->dev_id == dev_id)) &&
 		    core->slot == slot) {
-#else
-		if (core->dev_id == PCI_ANY_ID || (core->dev_id == dev_id)) {
 #endif
 			/* change default dev_id to actual dev_id */
 			core->dev_id = dev_id;
@@ -227,7 +243,9 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 	if (!mhi_dev_ctxt)
 		return -EPROBE_DEFER;
 
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_NAPIER_X86
+	msi_required = 2;
+#else
 	snprintf(node, sizeof(node), "mhi_%04x_%02u.%02u.%02u",
 		 core->dev_id, core->domain, core->bus, core->slot);
 	mhi_dev_ctxt->mhi_ipc_log =
@@ -245,12 +263,10 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 			"Failed to pull ev ring info from DT, %d\n", ret_val);
 		return ret_val;
 	}
-#else 
-	msi_required = 2;
-#endif
 
 	plat_dev = mhi_dev_ctxt->plat_dev;
 	pcie_device->dev.of_node = plat_dev->dev.of_node;
+#endif
 	mhi_dev_ctxt->mhi_pm_state = MHI_PM_DISABLE;
 	INIT_WORK(&mhi_dev_ctxt->process_m1_worker, process_m1_transition);
 	INIT_WORK(&mhi_dev_ctxt->st_thread_worker, mhi_state_change_worker);
@@ -261,7 +277,10 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 	init_completion(&mhi_dev_ctxt->cmd_complete);
 	mhi_dev_ctxt->flags.link_up = 1;
 
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_NAPIER_X86
+	mhi_dev_ctxt->pcie_device = pcie_device;
+
+#else
 	/* Setup bus scale */
 	mhi_dev_ctxt->bus_scale_table = msm_bus_cl_get_pdata(plat_dev);
 	if (!mhi_dev_ctxt->bus_scale_table)
@@ -286,10 +305,7 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 			"Failed to reg for link notifications %d\n", ret_val);
 		return ret_val;
 	}
-#else
-	mhi_dev_ctxt->pcie_device = pcie_device;
 #endif
-
 	dev_set_drvdata(&pcie_device->dev, mhi_dev_ctxt);
 
 	mhi_dev_ctxt->core.pci_master = true;
@@ -303,23 +319,24 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 	}
 	pci_set_master(pcie_device);
 	device_disable_async_suspend(&pcie_device->dev);
-
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 	ret_val = mhi_esoc_register(mhi_dev_ctxt);
 	if (ret_val) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 			"Failed to reg with esoc ret %d\n", ret_val);
 	}
 #endif
-
 	/* # of MSI requested must be power of 2 */
 	msi_requested = 1 << find_last_bit(&msi_required, 32);
 	if (msi_requested < msi_required)
 		msi_requested <<= 1;
 
-	ret_val = pci_alloc_irq_vectors(pcie_device, 1, msi_requested,
-					PCI_IRQ_MSI);
+	ret_val = pci_alloc_irq_vectors(pcie_device, 1, msi_requested, PCI_IRQ_MSI);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+	if (IS_ERR_VALUE((unsigned long)ret_val) || (ret_val < msi_requested)) {
+#else
 	if (IS_ERR_VALUE(ret_val) || (ret_val < msi_requested)) {
+#endif
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 			"Failed to enable MSIs for pcie dev ret_val %d.\n",
 			ret_val);
@@ -420,13 +437,106 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 unlock_pm_lock:
 	mutex_unlock(&mhi_dev_ctxt->pm_lock);
 deregister_pcie:
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 	msm_pcie_deregister_event(&mhi_dev_ctxt->mhi_pci_link_event);
 #endif
 	return ret_val;
 }
 
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_NAPIER_X86
+
+#if (defined(CONFIG_USE_CUSTOMIZED_DMA_MEM))
+static ulong pmem_start = 0x0;
+module_param(pmem_start, ulong, 0600);
+MODULE_PARM_DESC(pmem_start, "start of physical memoryfor PCI transaction");
+
+static ulong pmem_end = 0xffffffff;
+module_param(pmem_end, ulong, 0600);
+MODULE_PARM_DESC(pmem_end, "end of physical memoryfor PCI transaction");
+#endif
+
+static int mhi_plat_probe(void)
+{
+	struct pcie_core_info *core;
+	u64 address_window[2];
+
+	mhi_dev_ctxt = kzalloc(sizeof(*mhi_dev_ctxt), GFP_KERNEL);
+	if (!mhi_dev_ctxt)
+		return -ENOMEM;
+#if (defined(CONFIG_USE_CUSTOMIZED_DMA_MEM))
+	address_window[0] = pmem_start;
+	address_window[1] = pmem_end;
+#else
+	address_window[0] = 0x0;
+	address_window[1] = 0xFFFFFFFFF;
+#endif
+	core = &mhi_dev_ctxt->core;
+	core->dev_id = PCI_ANY_ID;
+	mhi_dev_ctxt->poll_reset_timeout_ms = BHI_POLL_TIMEOUT_MS << 4;
+
+	mhi_dev_ctxt->dev_space.start_win_addr = address_window[0];
+	mhi_dev_ctxt->dev_space.end_win_addr = address_window[1];
+
+	mhi_dev_ctxt->bhi_ctxt.alignment = BHI_DEFAULT_ALIGNMENT;
+	mhi_dev_ctxt->bhi_ctxt.poll_timeout = BHI_POLL_TIMEOUT_MS << 4;
+
+	mhi_dev_ctxt->bhi_ctxt.manage_boot = true;
+	if (mhi_dev_ctxt->bhi_ctxt.manage_boot) {
+		struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+		struct firmware_info *fw_info = &bhi_ctxt->firmware_info;
+
+		bhi_ctxt->fw_table.sequence = 1;
+
+		fw_info->fw_image = napier_fw_img;
+		fw_info->max_sbl_len = 0x40000;
+		fw_info->segment_size = 0x80000;
+
+		INIT_WORK(&bhi_ctxt->fw_load_work, bhi_firmware_download);
+	}
+#if (defined(CONFIG_USE_CUSTOMIZED_DMA_MEM))
+	mhi_dev_ctxt->flags.bb_required = true;
+#else
+	mhi_dev_ctxt->flags.bb_required = false;
+#endif
+	mhi_dev_ctxt->parent = mhi_device_drv->parent;
+	mhi_dev_ctxt->ready = true;
+	mutex_lock(&mhi_device_drv->lock);
+	list_add_tail(&mhi_dev_ctxt->node, &mhi_device_drv->head);
+	mutex_unlock(&mhi_device_drv->lock);
+
+	return 0;
+}
+
+static int __exit mhi_plat_remove(void)
+{
+	return 0;
+}
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+void mhi_exit(void)
+#else
+static void __exit mhi_exit(void)
+#endif
+{
+	pci_unregister_driver(&mhi_pcie_driver);
+	mhi_plat_remove();
+	if(mhi_dev_ctxt){
+		mutex_lock(&mhi_device_drv->lock);
+		list_del(&mhi_dev_ctxt->node);
+		mutex_unlock(&mhi_device_drv->lock);
+		flush_work(&mhi_dev_ctxt->bhi_ctxt.fw_load_work);
+		kfree(mhi_dev_ctxt);
+		mhi_dev_ctxt = NULL;
+	}
+	if(mhi_device_drv){
+		debugfs_remove(mhi_device_drv->parent);
+		mhi_device_drv->parent = NULL;
+		class_destroy(mhi_device_drv->mhi_bhi_class);
+		kfree(mhi_device_drv);
+		mhi_device_drv = NULL;
+	}
+}
+#else
 static int mhi_plat_probe(struct platform_device *pdev)
 {
 	int r = 0, len;
@@ -526,7 +636,6 @@ static int mhi_plat_probe(struct platform_device *pdev)
 			return r;
 		}
 		INIT_WORK(&bhi_ctxt->fw_load_work, bhi_firmware_download);
-		bhi_ctxt->fw_table.sequence = 1;
 	}
 
 	mhi_dev_ctxt->flags.bb_required =
@@ -550,76 +659,6 @@ static int mhi_plat_probe(struct platform_device *pdev)
 
 	return 0;
 }
-#else
-static int mhi_plat_probe(struct platform_device *pdev)
-{
-	int r = 0, len;
-	struct mhi_device_ctxt *mhi_dev_ctxt;
-	struct pcie_core_info *core;
-	struct device_node *of_node = pdev->dev.of_node;
-	u64 address_window[2];
-
-	if (of_node == NULL)
-		return -ENODEV;
-
-	pdev->id = 0;
-	if (pdev->id < 0)
-		return -ENODEV;
-
-	mhi_dev_ctxt = devm_kzalloc(&pdev->dev,
-				    sizeof(*mhi_dev_ctxt),
-				    GFP_KERNEL);
-	if (!mhi_dev_ctxt)
-		return -ENOMEM;
-
-	address_window[0] = 0x0;
-	address_window[1] = 0xFFFFFFFFF;
-
-	core = &mhi_dev_ctxt->core;
-
-	core->dev_id = PCI_ANY_ID;
-	mhi_dev_ctxt->poll_reset_timeout_ms = BHI_POLL_TIMEOUT_MS << 4;
-
-	mhi_dev_ctxt->dev_space.start_win_addr = address_window[0];
-	mhi_dev_ctxt->dev_space.end_win_addr = address_window[1];
-
-	mhi_dev_ctxt->bhi_ctxt.alignment = BHI_DEFAULT_ALIGNMENT;
-	mhi_dev_ctxt->bhi_ctxt.poll_timeout = BHI_POLL_TIMEOUT_MS << 4;
-
-	mhi_dev_ctxt->bhi_ctxt.manage_boot = true;
-	if (mhi_dev_ctxt->bhi_ctxt.manage_boot) {
-		struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
-		struct firmware_info *fw_info = &bhi_ctxt->firmware_info;
-
-		bhi_ctxt->fw_table.sequence = 1;
-		fw_info->fw_image = hst_fw_img;
-		fw_info->max_sbl_len = 0x40000;
-		fw_info->segment_size = 0x80000;
-
-		INIT_WORK(&bhi_ctxt->fw_load_work, bhi_firmware_download);
-	}
-
-	mhi_dev_ctxt->flags.bb_required = false;
-
-	mhi_dev_ctxt->plat_dev = pdev;
-	platform_set_drvdata(pdev, mhi_dev_ctxt);
-
-	/*r = dma_set_mask(&pdev->dev, MHI_DMA_MASK);
-	if (r) {
-		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
-			"Failed to set mask for DMA ret %d\n", r);
-		return r;
-	}*/
-
-	mhi_dev_ctxt->parent = mhi_device_drv->parent;
-	mhi_dev_ctxt->ready = true;
-	mutex_lock(&mhi_device_drv->lock);
-	list_add_tail(&mhi_dev_ctxt->node, &mhi_device_drv->head);
-	mutex_unlock(&mhi_device_drv->lock);
-
-	return 0;
-}
-#endif
 
 static struct platform_driver mhi_plat_driver = {
 	.probe	= mhi_plat_probe,
@@ -645,11 +684,10 @@ static int __exit mhi_plat_remove(struct platform_device *pdev)
 {
 	struct mhi_device_ctxt *mhi_dev_ctxt = platform_get_drvdata(pdev);
 
-#ifdef CONFIG_ARCH_QCOM
 	ipc_log_context_destroy(mhi_dev_ctxt->mhi_ipc_log);
-#endif
 	return 0;
 }
+#endif
 
 #ifdef CONFIG_WLAN_CNSS_CORE
 int mhi_init(void)
@@ -676,11 +714,15 @@ static int __init mhi_init(void)
 	mhi_dev_drv->parent = debugfs_create_dir("mhi", NULL);
 	mhi_device_drv = mhi_dev_drv;
 
+#ifdef CONFIG_NAPIER_X86
+	mhi_plat_probe();
+#else
 	r = platform_driver_register(&mhi_plat_driver);
 	if (r) {
 		pr_err("%s: Failed to probe platform ret %d\n", __func__, r);
 		goto platform_error;
 	}
+#endif
 	r = pci_register_driver(&mhi_pcie_driver);
 	if (r) {
 		pr_err("%s: Failed to register pcie drv ret %d\n", __func__, r);
@@ -689,8 +731,12 @@ static int __init mhi_init(void)
 
 	return 0;
 error:
+#ifndef CONFIG_NAPIER_X86
 	platform_driver_unregister(&mhi_plat_driver);
 platform_error:
+#endif
+	debugfs_remove(mhi_dev_drv->parent);
+	mhi_dev_drv->parent = NULL;
 	class_destroy(mhi_device_drv->mhi_bhi_class);
 
 class_error:

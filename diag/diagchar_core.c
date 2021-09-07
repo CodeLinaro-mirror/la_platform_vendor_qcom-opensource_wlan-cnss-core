@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,7 +21,6 @@
 #include <linux/sched.h>
 #include <linux/ratelimit.h>
 #include <linux/timer.h>
-#include <linux/sched.h>
 #include <linux/platform_device.h>
 #ifdef CONFIG_DIAG_OVER_USB
 #include <linux/usb/usbdiag.h>
@@ -30,23 +29,11 @@
 #include "diagmem.h"
 #include "diagchar.h"
 #include "diagfwd.h"
-#ifdef CONFIG_ARCH_QCOM
-#include "diagchar_hdlc.h"
-#include "diagfwd_cntl.h"
-#include "diag_dci.h"
-#include "diag_debugfs.h"
-#include "diag_usb.h"
-#include "diag_memorydevice.h"
-#include "diag_ipc_logging.h"
-#include "diagfwd_peripheral.h"
-#endif
 #include "diag_masks.h"
 #include "diagfwd_bridge.h"
 #include "diag_mux.h"
 #include "msm_mhi.h"
-#include "diagchar.h"
 
-#include <linux/coresight-stm.h>
 #include <linux/kernel.h>
 #ifdef CONFIG_COMPAT
 #include <linux/compat.h>
@@ -54,6 +41,11 @@
 
 #include <net/netlink.h>
 #include <net/sock.h>
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+#include "unified_wlan_cnsscore.h"
+#endif
+#include <linux/kmemleak.h>
 
 MODULE_DESCRIPTION("Diag Char Driver");
 MODULE_LICENSE("GPL v2");
@@ -87,49 +79,53 @@ module_param(poolsize_mdm, uint, 0);
 
 static int diag_remote_init(void)
 {
-	uint32_t itemsize = DIAG_MAX_REQ_SIZE;
+        uint32_t itemsize = DIAG_MAX_REQ_SIZE;
 	uint32_t itemsize_hdlc = DIAG_MAX_HDLC_BUF_SIZE + APF_DIAG_PADDING;
+		
 	diagmem_setsize(POOL_TYPE_COPY, itemsize, poolsize);
 	diagmem_setsize(POOL_TYPE_HDLC, itemsize_hdlc, poolsize_hdlc);
-	diagmem_setsize(POOL_TYPE_MDM, itemsize_mdm, poolsize_mdm);
+        diagmem_setsize(POOL_TYPE_MDM, itemsize_mdm, poolsize_mdm);
 
-	diagmem_init(driver, POOL_TYPE_COPY);
+        diagmem_init(driver, POOL_TYPE_COPY);
 	diagmem_init(driver, POOL_TYPE_HDLC);
-	diagmem_init(driver, POOL_TYPE_MDM);
-
+        diagmem_init(driver, POOL_TYPE_MDM);
+	
+	
 	driver->hdlc_encode_buf = kzalloc(DIAG_MAX_HDLC_BUF_SIZE, GFP_KERNEL);
 	if (!driver->hdlc_encode_buf)
 		return -ENOMEM;
 	driver->hdlc_encode_buf_len = 0;
 
+
 	driver->hdlc_buf = kzalloc(DIAG_MAX_HDLC_BUF_SIZE, GFP_KERNEL);
 	if (!driver->hdlc_buf)
-		return -ENOMEM;
+		return -ENOMEM;	
 	driver->hdlc_buf_len = 0;
 
+	
 	return 0;
 }
 
 static void diag_remote_exit(void)
 {
-	diagmem_exit(driver, POOL_TYPE_COPY);
+        diagmem_exit(driver, POOL_TYPE_COPY);
 	diagmem_exit(driver, POOL_TYPE_HDLC);
 	diagmem_exit(driver, POOL_TYPE_MDM);
 
 	if(driver->hdlc_encode_buf)
-		kfree(driver->hdlc_encode_buf);
-
+	kfree(driver->hdlc_encode_buf);
 	if(driver->hdlc_buf)
-		kfree(driver->hdlc_buf);
+	kfree(driver->hdlc_buf);
 }
 
+#ifdef CONFIG_DIAG_MHI
 static int diag_mhi_probe(struct platform_device *pdev)
 {
 	int ret;
-
-	printk("diag_mhi_probe start \n");
-	if (!mhi_is_device_ready(&pdev->dev, "qcom,mhi"))
-		return -EPROBE_DEFER;
+        
+        pr_debug("diag_mhi_probe start \n");
+	if (!mhi_is_device_ready(NULL, "qcom,mhi"))
+		return -EPROBE_DEFER; 
 	driver->pdev = pdev;
 	ret = diag_remote_init();
 	if (ret) {
@@ -141,23 +137,53 @@ static int diag_mhi_probe(struct platform_device *pdev)
 		diagfwd_bridge_exit();
 		return ret;
 	}
-	printk("diag: mhi device is ready\n");
+	pr_debug("diag: mhi device is ready\n");
 	return 0;
 }
 
-static const struct of_device_id diag_mhi_table[] = {
-	{.compatible = "qcom,diag-mhi"},
-	{},
-};
+#endif
 
-static struct platform_driver diag_mhi_driver = {
-	.probe = diag_mhi_probe,
-	.driver = {
-		.name = "DIAG MHI Platform",
-		.owner = THIS_MODULE,
-		.of_match_table = diag_mhi_table,
-	},
-};
+#ifdef CONFIG_DIAG_HSIC
+static int diagfwd_usb_probe(struct platform_device *pdev)
+{
+        int ret;
+
+        driver->pdev = pdev;
+        ret = diag_remote_init();
+        if (ret) {
+                diag_remote_exit();
+                return ret;
+        }
+        ret = diagfwd_bridge_init();
+        if (ret) {
+                diagfwd_bridge_exit();
+                return ret;
+        }
+        pr_debug("diag: usb device is ready\n");
+        return 0;
+}
+#endif
+
+#ifdef CONFIG_DIAG_SDIO
+static int diagfwd_sdio_probe(struct platform_device *pdev)
+{
+        int ret;
+
+        driver->pdev = pdev;
+        ret = diag_remote_init();
+        if (ret) {
+                diag_remote_exit();
+                return ret;
+        }
+        ret = diagfwd_bridge_init();
+        if (ret) {
+                diagfwd_bridge_exit();
+                return ret;
+        }
+        pr_debug("diag: usb device is ready\n");
+        return 0;
+}
+#endif
 
 #ifdef CONFIG_WLAN_CNSS_CORE
 int diagchar_init(void)
@@ -165,24 +191,27 @@ int diagchar_init(void)
 static int __init diagchar_init(void)
 #endif
 {
-	int ret = 0;
+	int ret;
 
-	printk("diagchar initializing ..\n");
+	printk(KERN_INFO "diagchar initializing ..\n");
+	ret = 0;
 	driver = kzalloc(sizeof(struct diagchar_dev) + 5, GFP_KERNEL);
 	if (!driver)
 		return -ENOMEM;
 	kmemleak_not_leak(driver);
 
+	driver->hdlc_disabled = 0;
 	driver->time_sync_enabled = 0;
 	driver->uses_time_api = 0;
 	driver->poolsize = poolsize;
 	driver->poolsize_hdlc = poolsize_hdlc;
 
 	driver->logging_mode = DIAG_LOCAL_MODE;
+
 	driver->mask_check = 0;
 	driver->hdlc_encode_buf = NULL;
 	driver->hdlc_buf = NULL;
-
+	
 	mutex_init(&driver->hdlc_disable_mutex);
 	mutex_init(&driver->diagchar_mutex);
 	mutex_init(&driver->diag_maskclear_mutex);
@@ -190,13 +219,21 @@ static int __init diagchar_init(void)
 	mutex_init(&driver->msg_mask_lock);
 	mutex_init(&driver->hdlc_recovery_mutex);
 	mutex_init(&driver->diag_hdlc_mutex);
+	
 	driver->num = 1;
 
-	printk("diagchar initialized now");
-	platform_driver_register(&diag_mhi_driver);
+	printk(KERN_INFO "diagchar initialized now..\n");
+#ifdef CONFIG_DIAG_MHI
+        diag_mhi_probe(NULL);
+#endif
+#ifdef CONFIG_DIAG_HSIC
+	diagfwd_usb_probe(NULL);
+#endif
+#ifdef CONFIG_DIAG_SDIO
+        diagfwd_sdio_probe(NULL);
+#endif
 	return 0;
 }
-
 #ifdef CONFIG_WLAN_CNSS_CORE
 void diagchar_exit(void)
 #else
@@ -206,6 +243,8 @@ static void diagchar_exit(void)
 	printk(KERN_INFO "diagchar exiting ..\n");
 	diagfwd_bridge_exit();
 	diag_remote_exit();
+	kfree(driver);
+	driver = NULL;
 	printk(KERN_INFO "done diagchar exit\n");
 }
 

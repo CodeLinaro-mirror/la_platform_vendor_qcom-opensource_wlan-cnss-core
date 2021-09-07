@@ -15,7 +15,7 @@
 #include <linux/of_gpio.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 #include <linux/msm-bus.h>
 #endif
 #include <linux/cpu.h>

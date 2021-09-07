@@ -70,7 +70,8 @@ static void diag_hsic_read_complete(void *ctxt, char *buf, int len,
 
 fail:
 	diagmem_free(driver, buf, ch->mempool);
-	queue_work(ch->hsic_wq, &ch->read_work);
+	if (!ch->suspended && ch->hsic_wq)
+		queue_work(ch->hsic_wq, &ch->read_work);
 	return;
 }
 
@@ -107,6 +108,7 @@ static int diag_hsic_suspend(void *ctxt)
 	spin_lock_irqsave(&ch->lock, flags);
 	ch->suspended = 1;
 	spin_unlock_irqrestore(&ch->lock, flags);
+	cancel_work_sync(&(ch->read_work));
 	return 0;
 }
 
@@ -224,7 +226,7 @@ static void hsic_read_work_fn(struct work_struct *work)
 	unsigned char *buf = NULL;
 	struct diag_hsic_info *ch = container_of(work, struct diag_hsic_info,
 						 read_work);
-	if (!ch || !ch->enabled || !ch->opened)
+	if (!ch || !ch->enabled || !ch->opened || ch->suspended)
 		return;
 
 	do {
@@ -237,8 +239,9 @@ static void hsic_read_work_fn(struct work_struct *work)
 		err = diag_bridge_read(ch->id, buf, DIAG_MDM_BUF_SIZE);
 		if (err) {
 			diagmem_free(driver, buf, ch->mempool);
-			pr_err_ratelimited("diag: Unable to read from HSIC channel %d, err: %d\n",
-					   ch->id, err);
+			if (err != -ENODEV)
+				pr_err_ratelimited("diag: Unable to read from HSIC channel %d, err: %d\n",
+						   ch->id, err);
 			break;
 		}
 	} while (buf);
@@ -286,6 +289,7 @@ static int diag_hsic_remove(struct platform_device *pdev)
 	}
 
 	ch = &diag_hsic[pdev->id];
+	cancel_work_sync(&(ch->read_work));
 	queue_work(ch->hsic_wq, &(ch->close_work));
 	return 0;
 }
@@ -324,7 +328,8 @@ static int hsic_queue_read(int id)
 				   __func__, id);
 		return -EINVAL;
 	}
-	queue_work(diag_hsic[id].hsic_wq, &(diag_hsic[id].read_work));
+	if (!diag_hsic[id].suspended && diag_hsic[id].hsic_wq)
+		queue_work(diag_hsic[id].hsic_wq, &(diag_hsic[id].read_work));
 	return 0;
 }
 
@@ -369,7 +374,9 @@ static int hsic_fwd_complete(int id, unsigned char *buf, int len, int ctxt)
 	if (!buf)
 		return -EIO;
 	diagmem_free(driver, buf, diag_hsic[id].mempool);
-	queue_work(diag_hsic[id].hsic_wq, &(diag_hsic[id].read_work));
+	if (!diag_hsic[id].suspended && diag_hsic[id].hsic_wq)
+		queue_work(diag_hsic[id].hsic_wq, &(diag_hsic[id].read_work));
+
 	return 0;
 }
 
@@ -425,6 +432,7 @@ void diag_hsic_exit()
 	int i;
 	struct diag_hsic_info *ch = NULL;
 
+	platform_driver_unregister(&msm_hsic_ch_driver);
 	for (i = 0; i < NUM_HSIC_DEV; i++) {
 		ch = &diag_hsic[i];
 		ch->enabled = 0;
@@ -432,7 +440,7 @@ void diag_hsic_exit()
 		ch->suspended = 0;
 		if (ch->hsic_wq)
 			destroy_workqueue(ch->hsic_wq);
+		ch->hsic_wq = NULL;
 	}
-	platform_driver_unregister(&msm_hsic_ch_driver);
 }
 

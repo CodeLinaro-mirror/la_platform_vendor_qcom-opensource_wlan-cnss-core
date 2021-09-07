@@ -21,7 +21,11 @@
 #include <linux/gfp.h>
 #include <linux/uaccess.h>
 #include <linux/kernel.h>
+#ifdef CONFIG_NAPIER_X86
 #include "msm_ipc.h"
+#else
+#include <linux/msm_ipc.h>
+#endif
 #include <linux/rwsem.h>
 #include <linux/uaccess.h>
 
@@ -101,7 +105,7 @@ EXPORT_SYMBOL(check_permissions);
 int msm_ipc_config_sec_rules(void *arg)
 {
 	struct config_sec_rules_args sec_rules_arg;
-	struct security_rule *rule;
+	struct security_rule *rule, *temp_rule;
 	int key;
 	size_t kgroup_info_sz;
 	int ret;
@@ -116,10 +120,6 @@ int msm_ipc_config_sec_rules(void *arg)
 			     sizeof(sec_rules_arg));
 	if (ret)
 		return -EFAULT;
-
-	/* Default rule change from config util not allowed */
-	if (sec_rules_arg.service_id == ALL_SERVICE)
-		return -EINVAL;
 
 	if (sec_rules_arg.num_group_info <= 0)
 		return -EINVAL;
@@ -178,11 +178,21 @@ int msm_ipc_config_sec_rules(void *arg)
 
 	key = rule->service_id & (SEC_RULES_HASH_SZ - 1);
 	down_write(&security_rules_lock_lha4);
+	if (rule->service_id == ALL_SERVICE) {
+		temp_rule = list_first_entry(&security_rules[key],
+					     struct security_rule, list);
+		list_del(&temp_rule->list);
+		kfree(temp_rule->group_id);
+		kfree(temp_rule);
+	}
 	list_add_tail(&rule->list, &security_rules[key]);
 	up_write(&security_rules_lock_lha4);
 
-	msm_ipc_sync_sec_rule(rule->service_id, rule->instance_id,
-			      (void *)rule);
+	if (rule->service_id == ALL_SERVICE)
+		msm_ipc_sync_default_sec_rule((void *)rule);
+	else
+		msm_ipc_sync_sec_rule(rule->service_id, rule->instance_id,
+				      (void *)rule);
 
 	return 0;
 }
@@ -218,10 +228,10 @@ static int msm_ipc_add_default_rule(void)
 	rule->service_id = ALL_SERVICE;
 	rule->instance_id = ALL_INSTANCE;
 	rule->num_group_info = 1;
-#ifdef CONFIG_ARCH_QCOM
-	*(rule->group_id) = AID_NET_RAW;
+#ifdef CONFIG_NAPIER_X86
+	*(rule->group_id) = KGIDT_INIT(3004);//AID_NET_RAW;
 #else
-	*(rule->group_id) = KGIDT_INIT(3004);
+	*(rule->group_id) = AID_NET_RAW;
 #endif
 	down_write(&security_rules_lock_lha4);
 	key = (ALL_SERVICE & (SEC_RULES_HASH_SZ - 1));
@@ -230,6 +240,20 @@ static int msm_ipc_add_default_rule(void)
 	return 0;
 }
 
+void msm_ipc_remove_default_rule(void)
+{
+	struct security_rule *rule;
+
+	rule = (struct security_rule *)msm_ipc_get_security_rule(ALL_SERVICE, ALL_INSTANCE);
+	if(!rule)
+		return;
+
+	down_write(&security_rules_lock_lha4);
+	list_del(&rule->list);
+	kfree(rule->group_id);
+	kfree(rule);
+	up_write(&security_rules_lock_lha4);
+}
 /**
  * msm_ipc_get_security_rule() - Get the security rule corresponding to a
  *                               service

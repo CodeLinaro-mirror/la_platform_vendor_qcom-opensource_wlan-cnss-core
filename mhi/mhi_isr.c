@@ -14,6 +14,7 @@
 
 #include "mhi_sys.h"
 #include "mhi_trace.h"
+#include "mhi_bhi.h"
 
 static int mhi_process_event_ring(
 		struct mhi_device_ctxt *mhi_dev_ctxt,
@@ -52,8 +53,10 @@ static int mhi_process_event_ring(
 	local_rp = (union mhi_event_pkt *)local_ev_ctxt->rp;
 	spin_unlock_irqrestore(&local_ev_ctxt->ring_lock, flags);
 	BUG_ON(validate_ev_el_addr(local_ev_ctxt, (uintptr_t)device_rp));
+
 	while ((local_rp != device_rp) && (event_quota > 0) &&
 			(device_rp != NULL) && (local_rp != NULL)) {
+
 		spin_lock_irqsave(&local_ev_ctxt->ring_lock, flags);
 		event_to_process = *local_rp;
 		recycle_trb_and_ring(mhi_dev_ctxt,
@@ -61,6 +64,7 @@ static int mhi_process_event_ring(
 				     MHI_RING_TYPE_EVENT_RING,
 				     ev_index);
 		spin_unlock_irqrestore(&local_ev_ctxt->ring_lock, flags);
+
 		switch (MHI_TRB_READ_INFO(EV_TRB_TYPE, &event_to_process)) {
 		case MHI_PKT_TYPE_CMD_COMPLETION_EVENT:
 		{
@@ -70,8 +74,8 @@ static int mhi_process_event_ring(
 			unsigned long flags;
 			struct mhi_ring *cmd_ring = &mhi_dev_ctxt->
 				mhi_local_cmd_ctxt[PRIMARY_CMD_RING];
-			__pm_stay_awake(&mhi_dev_ctxt->w_lock);
-			__pm_relax(&mhi_dev_ctxt->w_lock);
+			__pm_stay_awake(mhi_dev_ctxt->w_lock);
+			__pm_relax(mhi_dev_ctxt->w_lock);
 			get_cmd_pkt(mhi_dev_ctxt,
 				    &event_to_process,
 				    &cmd_pkt, ev_index);
@@ -99,7 +103,7 @@ static int mhi_process_event_ring(
 			struct mhi_ring *ring;
 			unsigned long flags;
 
-			__pm_stay_awake(&mhi_dev_ctxt->w_lock);
+			__pm_stay_awake(mhi_dev_ctxt->w_lock);
 			chan = MHI_EV_READ_CHID(EV_CHID, &event_to_process);
 			if (unlikely(!VALID_CHAN_NR(chan))) {
 				mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
@@ -113,7 +117,7 @@ static int mhi_process_event_ring(
 						 &event_to_process,
 						 ev_index);
 			spin_unlock_irqrestore(&ring->ring_lock, flags);
-			__pm_relax(&mhi_dev_ctxt->w_lock);
+			__pm_relax(mhi_dev_ctxt->w_lock);
 			event_quota--;
 			break;
 		}
@@ -123,8 +127,8 @@ static int mhi_process_event_ring(
 			unsigned long flags;
 			new_state = MHI_READ_STATE(&event_to_process);
 			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
-				"MHI STE received ring 0x%x State:%s, new_state is %d, mhi_state is %d\n",
-				ev_index, state_transition_str(new_state), new_state, mhi_dev_ctxt->mhi_state);
+				"MHI STE received ring 0x%x State:%s\n",
+				ev_index, state_transition_str(new_state));
 
 			switch (new_state) {
 			case STATE_TRANSITION_M0:
@@ -155,6 +159,10 @@ static int mhi_process_event_ring(
 				break;
 			case STATE_TRANSITION_SYS_ERR:
 			{
+#if defined(CONFIG_CNSS_QCA6490) || defined(CONFIG_CNSS_QCA6390)
+				mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
+					"MHI System Error Detected, skip\n");
+#else
 				enum MHI_PM_STATE new_state;
 				unsigned long flags;
 
@@ -163,12 +171,13 @@ static int mhi_process_event_ring(
 				write_lock_irqsave(&mhi_dev_ctxt->pm_xfer_lock,
 						   flags);
 				new_state = mhi_tryset_pm_state
-					(mhi_dev_ctxt, MHI_PM_SYS_ERR_DETECT);
+					    (mhi_dev_ctxt, MHI_PM_SYS_ERR_DETECT);
 				write_unlock_irqrestore
-					(&mhi_dev_ctxt->pm_xfer_lock, flags);
+					    (&mhi_dev_ctxt->pm_xfer_lock, flags);
 				if (new_state == MHI_PM_SYS_ERR_DETECT)
 					schedule_work(&mhi_dev_ctxt->
 						      process_sys_err_worker);
+#endif
 				break;
 			}
 			default:
@@ -184,12 +193,15 @@ static int mhi_process_event_ring(
 			enum STATE_TRANSITION new_state = 0;
 			enum MHI_EXEC_ENV event =
 				MHI_READ_EXEC_ENV(&event_to_process);
+#if defined(CONFIG_CNSS_QCA6490) || defined(CONFIG_CNSS_QCA6390)
+			u32 cur_exec = mhi_dev_ctxt->dev_exec_env;
+#endif
 
 			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 				"MHI EE received ring 0x%x event:0x%x\n",
 				ev_index, event);
-			__pm_stay_awake(&mhi_dev_ctxt->w_lock);
-			__pm_relax(&mhi_dev_ctxt->w_lock);
+			__pm_stay_awake(mhi_dev_ctxt->w_lock);
+			__pm_relax(mhi_dev_ctxt->w_lock);
 			switch (event) {
 			case MHI_EXEC_ENV_SBL:
 				new_state = STATE_TRANSITION_SBL;
@@ -197,13 +209,17 @@ static int mhi_process_event_ring(
 			case MHI_EXEC_ENV_AMSS:
 				new_state = STATE_TRANSITION_AMSS;
 				break;
-#ifndef CONFIG_HST_IMX
+#ifndef CONFIG_CNSS_QCA6390
 			case MHI_EXEC_ENV_BHIE:
 				new_state = STATE_TRANSITION_BHIE;
 				break;
 #endif
 			case MHI_EXEC_ENV_RDDM:
 				new_state = STATE_TRANSITION_RDDM;
+#if defined(CONFIG_CNSS_QCA6490) || defined(CONFIG_CNSS_QCA6390)
+				if (cur_exec != MHI_EXEC_ENV_DISABLE_TRANSITION && cur_exec != MHI_EXEC_ENV_RDDM)
+					schedule_work(&mhi_dev_ctxt->process_sys_err_worker);
+#endif
 				break;
 			default:
 				mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
@@ -255,7 +271,7 @@ void mhi_ev_task(unsigned long data)
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Enter\n");
 
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_CNSS_QCA6390
 	/* Patch from MSM as gerrit#2559252 */
 	/*
 	 * we can check pm_state w/o a lock here because there is no way
@@ -263,7 +279,14 @@ void mhi_ev_task(unsigned long data)
 	 * therad being executed.
 	 */
 	if (!MHI_REG_ACCESS_VALID(mhi_dev_ctxt->mhi_pm_state))
+	{
+#ifndef CONFIG_ONE_MSI_VECTOR
+		enable_irq(MSI_TO_IRQ(mhi_dev_ctxt, ev_index));
+#else
+		enable_irq(MSI_TO_IRQ(mhi_dev_ctxt, 0));
+#endif
 		return;
+	}
 #endif
 
 	/* Process event ring */
@@ -278,7 +301,7 @@ void mhi_ev_task(unsigned long data)
 		enum MHI_PM_STATE new_state;
 
 		read_lock_bh(&mhi_dev_ctxt->pm_xfer_lock);
-#ifndef CONFIG_HST_IMX
+#ifndef CONFIG_CNSS_QCA6390
 		/* Patch from MSM as gerrit#2559252 */
 		if (MHI_REG_ACCESS_VALID(mhi_dev_ctxt->mhi_pm_state))
 #endif
@@ -299,7 +322,11 @@ void mhi_ev_task(unsigned long data)
 		}
 	}
 
+#ifndef CONFIG_ONE_MSI_VECTOR
 	enable_irq(MSI_TO_IRQ(mhi_dev_ctxt, ev_index));
+#else
+	enable_irq(MSI_TO_IRQ(mhi_dev_ctxt, 0));
+#endif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Exit\n");
 }
 
@@ -360,6 +387,7 @@ void mhi_unmask_irq(struct mhi_client_handle *client_handle)
 	enable_irq(MSI_TO_IRQ(mhi_dev_ctxt, client_config->msi_vec));
 }
 
+#ifndef CONFIG_ONE_MSI_VECTOR
 irqreturn_t mhi_msi_handlr(int irq_number, void *dev_id)
 {
 	struct mhi_device_ctxt *mhi_dev_ctxt = dev_id;
@@ -367,6 +395,20 @@ irqreturn_t mhi_msi_handlr(int irq_number, void *dev_id)
 	struct mhi_ring *mhi_ring = &mhi_dev_ctxt->mhi_local_event_ctxt[msi];
 	struct mhi_event_ring_cfg *ring_props =
 		&mhi_dev_ctxt->ev_ring_props[msi];
+
+#if defined(CONFIG_CNSS_QCA6490) || defined(CONFIG_CNSS_QCA6390)
+	u32 cur_exec;
+	u32 prev_exec = mhi_dev_ctxt->dev_exec_env;
+	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+
+	cur_exec = mhi_reg_read(bhi_ctxt->bhi_base, BHI_EXECENV);
+
+	if (cur_exec != prev_exec && prev_exec != MHI_EXEC_ENV_DISABLE_TRANSITION && cur_exec == MHI_EXEC_ENV_RDDM) {
+		mhi_dev_ctxt->dev_exec_env = MHI_EXEC_ENV_RDDM;
+		mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "mhi_msi_handlr scheduler sys err cur_exec %x prev_exec %x\n", cur_exec, prev_exec);
+		schedule_work(&mhi_dev_ctxt->process_sys_err_worker);
+	}
+#endif
 
 	mhi_dev_ctxt->counters.msi_counter[
 			IRQ_TO_MSI(mhi_dev_ctxt, irq_number)]++;
@@ -380,6 +422,42 @@ irqreturn_t mhi_msi_handlr(int irq_number, void *dev_id)
 
 	return IRQ_HANDLED;
 }
+#else /* CONFIG_ONE_MSI_VECTOR */
+irqreturn_t mhi_msi_handlr(int irq_number, void *dev_id)
+{
+	struct mhi_ring *mhi_ring = dev_id;
+	int er_index = mhi_ring->index;
+	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_ring->mhi_dev_ctxt;
+	struct mhi_event_ring_cfg *ring_props =
+		&mhi_dev_ctxt->ev_ring_props[er_index];
+	int msi = IRQ_TO_MSI(mhi_dev_ctxt, irq_number);
+
+#if defined(CONFIG_CNSS_QCA6490) || defined(CONFIG_CNSS_QCA6390)
+	u32 cur_exec;
+	u32 prev_exec = mhi_dev_ctxt->dev_exec_env;
+	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+
+	cur_exec = mhi_reg_read(bhi_ctxt->bhi_base, BHI_EXECENV);
+
+	if (cur_exec != prev_exec && prev_exec != MHI_EXEC_ENV_DISABLE_TRANSITION && cur_exec == MHI_EXEC_ENV_RDDM) {
+		mhi_dev_ctxt->dev_exec_env = MHI_EXEC_ENV_RDDM;
+		mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "mhi_msi_handlr scheduler sys err cur_exec %x prev_exec %x\n", cur_exec, prev_exec);
+		schedule_work(&mhi_dev_ctxt->process_sys_err_worker);
+	}
+#endif
+	mhi_dev_ctxt->counters.msi_counter[er_index]++;
+	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Got MSI 0x%x for ring %u\n",
+		msi, er_index);
+	trace_mhi_msi(msi);
+	disable_irq_nosync(irq_number);
+	if (ring_props->priority <= MHI_EV_PRIORITY_TASKLET)
+		tasklet_schedule(&mhi_ring->ev_task);
+	else
+		schedule_work(&mhi_ring->ev_worker);
+
+	return IRQ_HANDLED;
+}
+#endif
 
 irqreturn_t mhi_msi_ipa_handlr(int irq_number, void *dev_id)
 {

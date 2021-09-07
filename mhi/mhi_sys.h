@@ -14,7 +14,7 @@
 #define _H_MHI_SYS_
 
 #include <linux/mutex.h>
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 #include <linux/ipc_logging.h>
 #endif
 #include <linux/sysfs.h>
@@ -40,7 +40,7 @@ extern void *mhi_ipc_log;
 		} \
 	} while (0)
 
-#ifdef CONFIG_ARCH_QCOM
+#ifndef CONFIG_NAPIER_X86
 #define mhi_log(mhi_dev_ctxt, _msg_lvl, _msg, ...) do {	\
 		if ((_msg_lvl) >= mhi_msg_lvl) \
 			pr_alert("[%s] " _msg, __func__, ##__VA_ARGS__);\
@@ -50,11 +50,11 @@ extern void *mhi_ipc_log;
 			       "[%s] " _msg, __func__, ##__VA_ARGS__); \
 } while (0)
 #else
-#define mhi_log(mhi_dev_ctxt, _msg_lvl, _msg, ...) do { \
-                if ((_msg_lvl) >= mhi_msg_lvl) \
-                        pr_err("[%s] " _msg, __func__, ##__VA_ARGS__);\
-} while (0)
-
+#define mhi_log(mhi_dev_ctxt, _msg_lvl, _msg, ...) do {			\
+		UNUSED(mhi_dev_ctxt);					\
+		if ((_msg_lvl) >= mhi_msg_lvl)				\
+			pr_alert("[%s] " _msg, __func__, ##__VA_ARGS__); \
+	} while (0)
 #endif
 
 extern const char * const mhi_states_str[MHI_STATE_LIMIT];
