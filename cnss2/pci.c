@@ -47,6 +47,9 @@
 
 #define MAX_M3_FILE_NAME_LENGTH		13
 #define DEFAULT_M3_FILE_NAME		"m3.bin"
+#define DEFAULT_FW_FILE_NAME		"amss.bin"
+#define DEFAULT_GENOA_FW_FTM_NAME	"genoaftm.bin"
+
 
 #define WAKE_MSI_NAME			"WAKE"
 
@@ -86,6 +89,8 @@ struct cnss_pci_reg {
 	char *name;
 	u32 offset;
 };
+
+static void cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv);
 
 static struct cnss_pci_reg qdss_csr[] = {
 	{ "QDSSCSR_ETRIRQCTRL", QDSS_APB_DEC_CSR_ETRIRQCTRL_OFFSET },
@@ -922,6 +927,10 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 		cnss_pr_err("Driver has already registered\n");
 		return -EEXIST;
 	}
+	if (driver_ops->get_driver_mode) {
+		plat_priv->driver_mode = driver_ops->get_driver_mode();
+		cnss_pci_update_fw_name(pci_priv);
+	}
 
 	ret = cnss_driver_event_post(plat_priv,
 				     CNSS_DRIVER_EVENT_REGISTER_DRIVER,
@@ -1550,7 +1559,6 @@ int cnss_pci_force_wake_request_sync(struct device *dev,int timeout_us)
         return 0;
 }
 EXPORT_SYMBOL(cnss_pci_force_wake_request_sync);
-
 int cnss_pci_is_device_awake(struct device *dev)
 {
 	return true;
@@ -1996,7 +2004,6 @@ void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 			     &control);
 	pci_read_config_dword(pci_dev, pci_dev->msi_cap + PCI_MSI_ADDRESS_LO,
 			      msi_addr_low);
-
 	/*return msi high addr only when device support 64 BIT MSI */
 	if (control & PCI_MSI_FLAGS_64BIT)
 		pci_read_config_dword(pci_dev,
@@ -2035,7 +2042,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	u16 device_id;
-	u32 pci_dma_mask = PCI_DMA_MASK_32_BIT;//PCI_DMA_MASK_36_BIT;
+	u32 pci_dma_mask = PCI_DMA_MASK_36_BIT;
 
 	pci_read_config_word(pci_dev, PCI_DEVICE_ID, &device_id);
 	if (device_id != pci_priv->pci_device_id->device)  {
@@ -2360,6 +2367,28 @@ static void cnss_mhi_notify_status(enum MHI_CB_REASON reason, void *priv)
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 			       cnss_reason);
 }
+
+static void cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct mhi_device_ctxt *mhi_dev_ctxt;
+	mhi_dev_ctxt = pci_priv->mhi_dev.mhi_dev_ctxt;
+
+	if (pci_priv->device_id == QCN7605_DEVICE_ID) {
+		if (plat_priv->driver_mode == CNSS_FTM) {
+			snprintf(plat_priv->firmware_name,
+				 sizeof(plat_priv->firmware_name),
+				 DEFAULT_GENOA_FW_FTM_NAME);
+		} else {
+			snprintf(plat_priv->firmware_name,
+				 sizeof(plat_priv->firmware_name),
+				 DEFAULT_FW_FILE_NAME);
+		}
+	}
+	mhi_dev_ctxt->bhi_ctxt.firmware_info.fw_image = plat_priv->firmware_name;
+	cnss_pr_info("Firmware name is %s\n", plat_priv->firmware_name);
+}
+
 
 static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 {
@@ -2759,8 +2788,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		 */
 		pci_read_config_byte(pci_dev, 0x80, &aspm_state);
 		cnss_pr_err("Current ASPM status: 0x%x", aspm_state);
-//		if (aspm_state & 0x3) {
-		if ( aspm_state & 0x3 ) {
+		if (aspm_state & 0x3) {
 			pci_write_config_byte(pci_dev, 0x80, aspm_state & ~0x3);
 			pci_read_config_byte(pci_dev, 0x80, &aspm_state);
 			cnss_pr_err("ASPM status changed to: %x", aspm_state);
@@ -2774,6 +2802,9 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 			cnss_pci_disable_msi(pci_priv);
 			goto disable_bus;
 		}
+		/* Update fw name according to different chip subtype */
+		cnss_pci_update_fw_name(pci_priv);
+		
 #ifndef CONFIG_PCIE_EMULATION
 		ret = cnss_suspend_pci_link(pci_priv);
 		if (ret)

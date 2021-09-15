@@ -122,6 +122,7 @@ struct cnss_wlan_driver {
 			     struct cnss_uevent_data *uevent);
 	struct cnss_wlan_runtime_ops *runtime_ops;
 	const struct pci_device_id *id_table;
+	enum cnss_driver_mode (*get_driver_mode)(void);
 };
 
 struct cnss_usb_wlan_driver {
@@ -258,6 +259,7 @@ extern int cnss_auto_suspend(struct device *dev);
 extern int cnss_auto_resume(struct device *dev);
 extern int cnss_pci_is_drv_connected(struct device *dev);
 extern int cnss_pci_force_wake_request(struct device *dev);
+extern int cnss_pci_force_wake_request_sync(struct device *dev,int timeout_us);
 extern int cnss_pci_is_device_awake(struct device *dev);
 extern int cnss_pci_force_wake_release(struct device *dev);
 extern int cnss_get_user_msi_assignment(struct device *dev, char *user_name,

@@ -80,7 +80,7 @@ unsigned long bd_file_type = 1;
 module_param(bd_file_type, ulong, 0600);
 MODULE_PARM_DESC(bd_file_type, "Board data file type.");
 
-static bool rddm_panic = 0;
+static bool rddm_panic = 1;
 module_param(rddm_panic, bool, 0600);
 MODULE_PARM_DESC(rddm_panic, "Trigger kernel panic when RDDM happens");
 
@@ -445,7 +445,7 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 
-	if (plat_priv->device_id == QCA6174_DEVICE_ID)
+	if (plat_priv->device_id == QCA6174_DEVICE_ID || plat_priv->device_id == QCN7605_DEVICE_ID)
 		return 0;
 
 	if (qmi_bypass)
@@ -580,8 +580,9 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 	ret = cnss_wlfw_tgt_cap_send_sync(plat_priv);
 	if (ret)
 		goto out;
-
-	cnss_wlfw_bdf_dnld_send_sync(plat_priv, CNSS_BDF_REGDB);
+	
+	if ((plat_priv->device_id == QCA6390_DEVICE_ID) || (plat_priv->device_id == QCA6490_DEVICE_ID))
+		cnss_wlfw_bdf_dnld_send_sync(plat_priv, CNSS_BDF_REGDB);
 	ret = cnss_wlfw_bdf_dnld_send_sync(plat_priv,
 					   CNSS_BDF_ELF);
 	if (ret)

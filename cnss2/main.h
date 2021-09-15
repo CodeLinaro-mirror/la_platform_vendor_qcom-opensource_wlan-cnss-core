@@ -41,6 +41,7 @@
 #define CNSS_EVENT_SYNC_UNINTERRUPTIBLE (CNSS_EVENT_SYNC | \
 				CNSS_EVENT_UNINTERRUPTIBLE)
 #define QCN7605_CALDB_SIZE 614400
+#define CNSS_FW_PATH_MAX_LEN 32
 
 extern unsigned long quirks;
 
@@ -227,6 +228,7 @@ struct cnss_cal_data {
 
 struct cnss_plat_data {
 	struct platform_device *plat_dev;
+	enum cnss_driver_mode driver_mode;
 	void *bus_priv;
 	enum cnss_dev_bus_type bus_type;
 	struct cnss_vreg_info *vreg_info;
@@ -256,6 +258,7 @@ struct cnss_plat_data {
 	struct wlfw_rf_board_info_s_v01 board_info;
 	struct wlfw_soc_info_s_v01 soc_info;
 	struct wlfw_fw_version_info_s_v01 fw_version_info;
+	char firmware_name[CNSS_FW_PATH_MAX_LEN];
 	u32 fw_mem_seg_len;
 	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
 	struct cnss_fw_mem m3_mem;

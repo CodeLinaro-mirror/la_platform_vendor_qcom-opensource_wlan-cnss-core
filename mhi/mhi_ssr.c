@@ -149,7 +149,7 @@ void process_disable_transition(enum MHI_PM_STATE transition_state,
 		read_lock_bh(pm_xfer_lock);
 		mhi_set_m_state(mhi_dev_ctxt, MHI_STATE_RESET);
 		read_unlock_bh(pm_xfer_lock);
-		mhi_test_for_device_reset(mhi_dev_ctxt);
+		//mhi_test_for_device_reset(mhi_dev_ctxt);
 	}
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
