@@ -836,8 +836,8 @@ static void cnss_pci_dump_qcn7605_sram_mem(struct cnss_pci_data *pci_priv)
 
 	cnss_pr_dbg("Dumping PBL log data\n");
 	/* cnss_pci_reg_read provides 32bit register values */
-	for (i = 0; i < QCA6390_DEBUG_PBL_LOG_SRAM_MAX_SIZE; i += sizeof(val)) {
-		mem_addr = QCA6390_DEBUG_PBL_LOG_SRAM_START + i;
+	for (i = 0; i < QCN7605_DEBUG_PBL_LOG_SRAM_MAX_SIZE; i += sizeof(val)) {
+		mem_addr = QCN7605_DEBUG_PBL_LOG_SRAM_START + i;
 		if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
 			break;
 		cnss_pr_dbg("SRAM[0x%x] = 0x%x\n", mem_addr, val);
