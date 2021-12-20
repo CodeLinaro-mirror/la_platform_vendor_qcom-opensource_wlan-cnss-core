@@ -13,6 +13,7 @@
 #include <linux/delay.h>
 #include <linux/of.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/gpio.h>
 #include <linux/module.h>
@@ -375,6 +376,16 @@ void cnss_power_off_device(struct cnss_plat_data *plat_priv)
 }
 #else
 
+static void cnss_get_wlan_en_resource(struct cnss_plat_data *plat_priv)
+{
+	plat_priv->gpio_wl_en = devm_gpiod_get(&plat_priv->plat_dev->dev,
+					       "wlan-en", GPIOD_OUT_LOW);
+	if (IS_ERR(plat_priv->gpio_wl_en)) {
+		cnss_pr_warn("Failed to obtain wl_en gpio from ACPI\n");
+		plat_priv->gpio_wl_en = NULL;
+	}
+}
+
 static int wlan_en_gpio_num = -1;
 module_param(wlan_en_gpio_num, int, 0600);
 MODULE_PARM_DESC(wlan_en_gpio_num, "Wlan en gpio number.");
@@ -384,7 +395,7 @@ int cnss_get_wlan_en_pin(struct cnss_plat_data *plat_priv)
 	int ret;
 
 	if (wlan_en_gpio_num < 0) {
-		cnss_pr_dbg("wlan en pin is not supported\n");
+		cnss_get_wlan_en_resource(plat_priv);
 		return 0;
 	}
 
@@ -425,25 +436,29 @@ int cnss_free_wlan_en_pin(struct cnss_plat_data *plat_priv)
 
 int cnss_power_on_device(struct cnss_plat_data *plat_priv)
 {
-	if (wlan_en_gpio_num < 0) {
-		cnss_pr_dbg("wlan en pin is not supported\n");
-		return 0;
+	if (wlan_en_gpio_num >= 0) {
+		gpio_set_value(wlan_en_gpio_num, 1);
+		udelay(WLAN_ENABLE_DELAY);
+	} else if (plat_priv->gpio_wl_en) {
+		if (gpiod_cansleep(plat_priv->gpio_wl_en))
+			gpiod_set_value_cansleep(plat_priv->gpio_wl_en, 1);
+		else
+			gpiod_set_value(plat_priv->gpio_wl_en, 1);
+		udelay(WLAN_ENABLE_DELAY);
 	}
-
-	gpio_set_value(wlan_en_gpio_num, 1);
-	udelay(WLAN_ENABLE_DELAY);
-
 	return 0;
 }
 
 void cnss_power_off_device(struct cnss_plat_data *plat_priv)
 {
-	if (wlan_en_gpio_num < 0) {
-		cnss_pr_dbg("wlan en pin is not supported\n");
-		return;
+	if (wlan_en_gpio_num >= 0) {
+		gpio_set_value(wlan_en_gpio_num, 0);
+	} else if (plat_priv->gpio_wl_en) {
+		if (gpiod_cansleep(plat_priv->gpio_wl_en))
+			gpiod_set_value_cansleep(plat_priv->gpio_wl_en, 0);
+		else
+			gpiod_set_value(plat_priv->gpio_wl_en, 0);
 	}
-
-	gpio_set_value(wlan_en_gpio_num, 0);
 }
 #endif
 

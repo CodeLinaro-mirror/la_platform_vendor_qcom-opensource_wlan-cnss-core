@@ -182,6 +182,10 @@ ifneq ($(CONFIG_ONE_MSI_VECTOR),)
      KBUILD_CPPFLAGS += -DCONFIG_ONE_MSI_VECTOR
 endif
 
+ifneq ($(CONFIG_PLATFORM_DRIVER),)
+     KBUILD_CPPFLAGS += -DCONFIG_PLATFORM_DRIVER
+endif
+
 CDEFINES :=	-Wall
 ##		-Werror
 KBUILD_CPPFLAGS += $(CDEFINES)
@@ -210,6 +214,7 @@ else
 endif
 
 
+ROOTDIR := $(src)
 KS_BRIDGE_DIR := $(CNSS_CORE_BASE)/ks_bridge
 MHI_DIR := $(CNSS_CORE_BASE)/mhi
 IPC_ROUTER_DIR := $(CNSS_CORE_BASE)/ipc_router

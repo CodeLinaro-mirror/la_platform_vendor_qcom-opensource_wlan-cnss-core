@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/acpi.h>
 #include <linux/delay.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
@@ -2096,6 +2097,14 @@ static const struct of_device_id cnss_of_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, cnss_of_match_table);
 
+#if defined(CONFIG_ACPI)
+static const struct acpi_device_id cnss_acpi_match[] = {
+	{ "QCA6595", 0 },
+	{ "", 0 },
+};
+MODULE_DEVICE_TABLE(acpi, cnss_acpi_match);
+#endif
+
 #ifdef  CONFIG_USB_EMULATION
 #define TEST_WITHOUT_DTS 1
 #endif
@@ -2155,18 +2164,16 @@ static int cnss_probe(struct platform_device *plat_dev)
 #else
 	plat_priv->device_id = device_id->driver_data;
 #endif
-
-	plat_priv->bus_type = cnss_get_bus_type(plat_priv->device_id);	
-	cnss_set_plat_priv(plat_dev, plat_priv);
-	platform_set_drvdata(plat_dev, plat_priv);
-#else
+#else /* CONFIG_NAPIER_X86 */
+	dev_info(&plat_dev->dev, "%s\n", __func__);
 	if (plat_env) {
 		cnss_pr_err("Driver is already initialized!\n");
 		ret = -EEXIST;
 		goto out;
 	}
 
-	plat_priv = kzalloc(sizeof(*plat_priv), GFP_KERNEL);
+	plat_priv = devm_kzalloc(&plat_dev->dev, sizeof(*plat_priv),
+				 GFP_KERNEL);
 	if (!plat_priv) {
 		ret = -ENOMEM;
 		goto out;
@@ -2179,10 +2186,14 @@ static int cnss_probe(struct platform_device *plat_dev)
 #else
 	plat_priv->device_id = QCA6290_DEVICE_ID;
 #endif
+#endif /* CONFIG_NAPIER_X86 */
+
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv->device_id);
 	cnss_set_plat_priv(plat_dev, plat_priv);
-#endif
-
+#ifdef CONFIG_PLATFORM_DRIVER
+	plat_priv->plat_dev = plat_dev;	
+	platform_set_drvdata(plat_dev, plat_priv);
+#endif 
 	ret = cnss_get_resources(plat_priv);
 	if (ret)
 		goto reset_ctx;
@@ -2275,26 +2286,24 @@ power_off:
 free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_PLATFORM_DRIVER
 	platform_set_drvdata(plat_dev, NULL);
 #endif
 	cnss_set_plat_priv(plat_dev, NULL);
-	kfree(plat_dev);
-	plat_dev = NULL;
 out:
 	return ret;
 }
 
 static int cnss_remove(struct platform_device *plat_dev)
 {
-#ifdef CONFIG_NAPIER_X86
+#ifndef CONFIG_PLATFORM_DRIVER
 	struct cnss_plat_data *plat_priv = plat_env;
 #else
 	struct cnss_plat_data *plat_priv = platform_get_drvdata(plat_dev);
 #endif
-
+	dev_info(&plat_dev->dev, "%s\n", __func__);
+	mutex_destroy(&plat_priv->dev_lock);
 	complete_all(&plat_priv->rddm_complete);
-	complete_all(&plat_priv->power_up_complete);
 #ifndef CONFIG_NAPIER_X86
 	device_init_wakeup(&plat_dev->dev, false);
 #endif
@@ -2303,22 +2312,21 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_free_caldb_mem(plat_priv);
 	cnss_debugfs_destroy(plat_priv);
 	cnss_qmi_deinit(plat_priv);
+	complete_all(&plat_priv->power_up_complete);
 	cnss_event_work_deinit(plat_priv);
 	cnss_remove_sysfs(plat_priv);
 	cnss_unregister_bus_scale(plat_priv);
 	cnss_unregister_esoc(plat_priv);
 	cnss_bus_deinit(plat_priv);
 	cnss_put_resources(plat_priv);
-#ifndef CONFIG_NAPIER_X86
+	cnss_set_plat_priv(plat_dev, NULL);
+#ifdef CONFIG_PLATFORM_DRIVER
 	platform_set_drvdata(plat_dev, NULL);
 #endif
-	if(plat_env)
-		kfree(plat_env);
-	plat_env = NULL;
 	return 0;
 }
 
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_PLATFORM_DRIVER
 static struct platform_driver cnss_platform_driver = {
 	.probe  = cnss_probe,
 	.remove = cnss_remove,
@@ -2326,6 +2334,7 @@ static struct platform_driver cnss_platform_driver = {
 		.name = "cnss2",
 		.owner = THIS_MODULE,
 		.of_match_table = cnss_of_match_table,
+		.acpi_match_table = ACPI_PTR(cnss_acpi_match),
 	},
 };
 #endif
@@ -2339,7 +2348,7 @@ static int __init cnss_initialize(void)
 	int ret = 0;
 
 	cnss_debug_init();
-#ifdef CONFIG_NAPIER_X86
+#ifndef CONFIG_PLATFORM_DRIVER
 	ret = cnss_probe(NULL);
 #else
 	ret = platform_driver_register(&cnss_platform_driver);
@@ -2356,7 +2365,7 @@ void cnss_exit(void)
 static void __exit cnss_exit(void)
 #endif
 {
-#ifdef CONFIG_NAPIER_X86
+#ifndef CONFIG_PLATFORM_DRIVER
 	cnss_remove(NULL);
 #else
 	platform_driver_unregister(&cnss_platform_driver);

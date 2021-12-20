@@ -15,6 +15,7 @@
 
 #include <linux/version.h>
 #include <linux/etherdevice.h>
+#include <linux/gpio.h>
 #include <linux/pm_qos.h>
 #ifdef CONFIG_NAPIER_X86
 #include "cnss2.h"
@@ -231,6 +232,7 @@ struct cnss_plat_data {
 	enum cnss_driver_mode driver_mode;
 	void *bus_priv;
 	enum cnss_dev_bus_type bus_type;
+	struct gpio_desc *gpio_wl_en;
 	struct cnss_vreg_info *vreg_info;
 	struct cnss_pinctrl_info pinctrl_info;
 	struct cnss_subsys_info subsys_info;
