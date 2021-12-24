@@ -555,7 +555,7 @@ int bhi_expose_dev_bhi(struct mhi_device_ctxt *mhi_dev_ctxt)
 	if (IS_ERR(bhi_ctxt->dev)) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_CRITICAL,
 			"Failed to add bhi cdev\n");
-		ret_val = PTR_RET(bhi_ctxt->dev);
+		ret_val = PTR_ERR_OR_ZERO(bhi_ctxt->dev);
 		goto err_dev_create;
 	}
 	return 0;

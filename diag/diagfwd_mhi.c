@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/vmalloc.h>
+#include <linux/kmemleak.h>
 #include <asm/current.h>
 #include <linux/atomic.h>
 #include "diagmem.h"

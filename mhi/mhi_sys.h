@@ -50,9 +50,10 @@ extern void *mhi_ipc_log;
 			       "[%s] " _msg, __func__, ##__VA_ARGS__); \
 } while (0)
 #else
-#define mhi_log(mhi_dev_ctxt, _msg_lvl, _msg, ...) do { \
-                if ((_msg_lvl) >= mhi_msg_lvl) \
-                        pr_err("[%s] " _msg, __func__, ##__VA_ARGS__);\
+#define mhi_log(mhi_dev_ctxt, _msg_lvl, _msg, ...) do { 		\
+		UNUSED(mhi_dev_ctxt);					\
+		if ((_msg_lvl) >= mhi_msg_lvl)				\
+			pr_err("[%s] " _msg, __func__, ##__VA_ARGS__);	\
 } while (0)
 
 #endif

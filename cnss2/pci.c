@@ -1752,6 +1752,12 @@ int cnss_smmu_map(struct device *dev,
 }
 EXPORT_SYMBOL(cnss_smmu_map);
 
+struct iommu_domain *cnss_smmu_get_domain(struct device *dev)
+{
+	return NULL;
+}
+EXPORT_SYMBOL(cnss_smmu_get_domain);
+
 int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info)
 {
 	int ret = 0;

@@ -156,8 +156,13 @@ int mhi_init_pcie_device(struct mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 		"Successfully enabled pcie device.\n");
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	core->bar0_base = ioremap(pci_resource_start(pcie_device, 0),
+				  pci_resource_len(pcie_device, 0));
+#else
 	core->bar0_base = ioremap_nocache(pci_resource_start(pcie_device, 0),
 					  pci_resource_len(pcie_device, 0));
+#endif
 	if (!core->bar0_base)
 		goto mhi_device_list_error;
 
@@ -227,6 +232,25 @@ int mhi_cpu_notifier_cb(struct notifier_block *nfb, unsigned long action,
 }
 
 #ifdef CONFIG_ARCH_QCOM
+extern struct mhi_device_ctxt *mhi_dev_ctxt;
+int mhi_hp_online(unsigned int cpu)
+{
+	if (cpu > 0)
+		mhi_move_interrupts(mhi_dev_ctxt, cpu);
+
+	return 0;
+}
+
+int mhi_hp_offline(unsigned int cpu)
+{
+	for_each_online_cpu(cpu) {
+		if (cpu > 0)
+			mhi_move_interrupts(mhi_dev_ctxt, cpu);
+	}
+
+	return 0;
+}
+
 int get_chan_props(struct mhi_device_ctxt *mhi_dev_ctxt, int chan,
 		   struct mhi_chan_info *chan_info)
 {
@@ -2269,11 +2293,7 @@ u32 mhi_reg_read_field(void __iomem *io_addr, uintptr_t io_offset,
 
 u32 mhi_reg_read(void __iomem *io_addr, uintptr_t io_offset)
 {
-	u32 ret;
-	ret = ioread32(io_addr + io_offset);
-	mhi_log(mhi_dev_ctxt, MHI_MSG_RAW,
-                "d.s 0x%p off: 0x%lx 0x%x\n", io_addr, io_offset, ret);
-	return ret;
+	return ioread32(io_addr + io_offset);
 }
 
 #define MAX_UNWINDOWED_ADDRESS 0x80000

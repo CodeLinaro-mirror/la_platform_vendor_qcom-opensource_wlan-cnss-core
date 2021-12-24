@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/kref.h>
 #include <linux/platform_device.h>
+#include <linux/of_device.h>
 #include <linux/ratelimit.h>
 #include <linux/uaccess.h>
 #include <linux/usb.h>

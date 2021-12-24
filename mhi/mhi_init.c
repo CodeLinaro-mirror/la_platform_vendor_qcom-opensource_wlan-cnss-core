@@ -22,6 +22,7 @@
 #include <linux/of.h>
 #include <linux/completion.h>
 #include <linux/platform_device.h>
+#include <linux/version.h>
 
 static int mhi_init_sync(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
@@ -315,10 +316,17 @@ static int mhi_init_state_change_thread_work_queue(
 	return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 static void mhi_init_wakelock(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
-	wakeup_source_init(&mhi_dev_ctxt->w_lock, "mhi_wakeup_source");
+	mhi_dev_ctxt->w_lock = wakeup_source_register(NULL, "mhi_wakeup_source");
 }
+#else
+static void mhi_init_wakelock(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	mhi_dev_ctxt->w_lock = wakeup_source_register("mhi_wakeup_source");
+}
+#endif
 
 /**
  * @brief Main initialization function for a mhi struct device context
@@ -468,6 +476,21 @@ int mhi_reset_all_thread_queues(
 	return ret_val;
 }
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
+int mhi_reg_notifiers(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+#ifdef CONFIG_ARCH_QCOM
+	cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+				  "mhi:online",
+				  mhi_hp_online, NULL);
+
+	cpuhp_setup_state_nocalls(CPUHP_AP_OFFLINE,
+				  "mhi:dead",
+				  NULL, mhi_hp_offline);
+#endif
+	return 0;
+}
+#else
 int mhi_reg_notifiers(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 #ifdef CONFIG_ARCH_QCOM
@@ -482,3 +505,4 @@ int mhi_reg_notifiers(struct mhi_device_ctxt *mhi_dev_ctxt)
 	return 0;
 #endif
 }
+#endif

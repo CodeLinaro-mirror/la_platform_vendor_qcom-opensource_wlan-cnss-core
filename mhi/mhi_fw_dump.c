@@ -17,30 +17,20 @@
 #include "mhi_bhi.h"
 #include "mhi_sys.h"
 
-#if (KERNEL_VERSION(4, 14, 0) > LINUX_VERSION_CODE)
-static int file_write(struct file *fp, const void *buf,
-		       size_t count, loff_t *pos)
-{
-	return vfs_write(fp, buf, count, pos);
-}
-#else
-static int file_write(struct file *fp, const void *buf,
-		       size_t count, loff_t *pos)
-{
-	return kernel_write(fp, buf, count, pos);
-}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+#define vfs_write kernel_write
 #endif
 
 static int get_time_of_the_day_in_hr_min_sec(char *tbuf, int len)
 {
-	struct timeval tv;
+	struct timespec64 tv;
 	struct rtc_time tm;
 	int time_len = 0;
 
-	do_gettimeofday(&tv);
+	ktime_get_real_ts64(&tv);
 	/* Convert rtc to local time */
 	tv.tv_sec -= sys_tz.tz_minuteswest * 60;
-	rtc_time_to_tm(tv.tv_sec, &tm);
+	rtc_time64_to_tm(tv.tv_sec, &tm);
 	time_len = scnprintf(tbuf, len,
 		"%04d-%02d-%02d-%02d-%02d-%02d-",
 		tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
@@ -83,7 +73,7 @@ static int firmware_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			file_full_path,
 			buf,
 			size);
-		status = file_write(fp, buf, size, &pos);
+		status = vfs_write(fp, buf, size, &pos);
 		if (status < 0) {
 			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 				"write file:%s error\n", file_full_path);
@@ -170,7 +160,7 @@ static int extract_fw_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			" mem: 0x%p, size: 0x%x\n",
 			buf,
 			size);
-		status = file_write(fp, buf, size, &pos);
+		status = vfs_write(fp, buf, size, &pos);
 		if (status < 0) {
 			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 				"write file:%s error\n", file_full_path);
@@ -219,10 +209,10 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 		file_full_path,
 		fw_mem->vaddr,
 		(unsigned int)(fw_mem->size));
-	status = file_write(fp,
-			   (const char __user *)(fw_mem->vaddr),
-			   fw_mem->size,
-			   &pos);
+	status = vfs_write(fp,
+			  (const char __user *)(fw_mem->vaddr),
+			  fw_mem->size,
+			  &pos);
 	if (status < 0) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 			"write file:%s error\n",

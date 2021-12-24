@@ -13,6 +13,7 @@
 #define MSM_MHI_H
 #include <linux/types.h>
 #include <linux/device.h>
+#include <linux/of_device.h>
 #include <linux/scatterlist.h>
 
 #define MHI_DMA_MASK       0xFFFFFFFFFFULL

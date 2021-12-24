@@ -16,6 +16,7 @@
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/errno.h>
+#include <linux/version.h>
 #include <linux/mm.h>
 #include <linux/list.h>
 #include <linux/pm.h>

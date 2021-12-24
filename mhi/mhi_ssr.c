@@ -86,7 +86,7 @@ int mhi_esoc_register(struct mhi_device_ctxt *mhi_dev_ctxt)
 					mhi_dev_ctxt->esoc_handle->name,
 					&mhi_dev_ctxt->mhi_ssr_nb);
 	if (IS_ERR_OR_NULL(mhi_dev_ctxt->esoc_ssr_handle)) {
-		ret_val = PTR_RET(mhi_dev_ctxt->esoc_ssr_handle);
+		ret_val = PTR_ERR_OR_ZERO(mhi_dev_ctxt->esoc_ssr_handle);
 		mhi_log(mhi_dev_ctxt, MHI_MSG_CRITICAL,
 			"Can't find esoc desc ret 0x%lx\n",
 			(uintptr_t)mhi_dev_ctxt->esoc_ssr_handle);

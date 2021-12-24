@@ -12,6 +12,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/of_device.h>
 #include <linux/slab.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/mmc.h>

@@ -21,6 +21,7 @@
 #include <linux/sched.h>
 #include <linux/ratelimit.h>
 #include <linux/timer.h>
+#include <linux/kmemleak.h>
 #include <linux/sched.h>
 #include <linux/platform_device.h>
 #ifdef CONFIG_DIAG_OVER_USB

@@ -21,7 +21,6 @@
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
 #include <linux/sched.h>
-#include <linux/wakelock.h>
 #ifdef CONFIG_ARCH_QCOM
 #include <soc/qcom/smd.h>
 #endif
