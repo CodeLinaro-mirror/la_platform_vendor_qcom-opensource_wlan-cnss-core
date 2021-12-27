@@ -1055,6 +1055,34 @@ struct elem_info wlfw_cap_req_msg_v01_ei[] = {
 	},
 };
 
+static struct elem_info wlfw_dev_mem_info_s_v01_ei[] = {
+	{
+		.data_type      = QMI_UNSIGNED_8_BYTE,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u64),
+		.is_array       = NO_ARRAY,
+		.tlv_type       = 0,
+		.offset         = offsetof(struct
+					   wlfw_dev_mem_info_s_v01,
+					   start),
+	},
+	{
+		.data_type      = QMI_UNSIGNED_8_BYTE,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u64),
+		.is_array       = NO_ARRAY,
+		.tlv_type       = 0,
+		.offset         = offsetof(struct
+					   wlfw_dev_mem_info_s_v01,
+					   size),
+	},
+	{
+		.data_type      = QMI_EOTI,
+		.is_array       = NO_ARRAY,
+		.tlv_type       = QMI_COMMON_TLV_TYPE,
+	},
+};
+
 struct elem_info wlfw_cap_resp_msg_v01_ei[] = {
 	{
 		.data_type      = QMI_STRUCT,
@@ -1178,6 +1206,25 @@ struct elem_info wlfw_cap_resp_msg_v01_ei[] = {
 		.offset         = offsetof(struct wlfw_cap_resp_msg_v01,
 					   num_macs),
 	},
+	{
+		.data_type      = QMI_OPT_FLAG,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u8),
+		.is_array       = NO_ARRAY,
+		.tlv_type       = 0x1C,
+		.offset         = offsetof(struct wlfw_cap_resp_msg_v01,
+					   dev_mem_info_valid),
+	},
+	{
+		.data_type      = QMI_STRUCT,
+		.elem_len       = QMI_WLFW_MAX_DEV_MEM_NUM_V01,
+		.elem_size      = sizeof(struct wlfw_dev_mem_info_s_v01),
+		.is_array       = STATIC_ARRAY,
+		.tlv_type       = 0x1C,
+		.offset         = offsetof(struct wlfw_cap_resp_msg_v01,
+					   dev_mem_info),
+		.ei_array      = wlfw_dev_mem_info_s_v01_ei,
+        },
 	{
 		.data_type      = QMI_EOTI,
 		.is_array       = NO_ARRAY,
