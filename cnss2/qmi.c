@@ -531,7 +531,7 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 	struct wlfw_cap_req_msg_v01 req;
 	struct wlfw_cap_resp_msg_v01 resp;
 	struct msg_desc req_desc, resp_desc;
-	int ret = 0;
+	int ret = 0, i;
 
 	cnss_pr_dbg("Sending target capability message, state: 0x%lx\n",
 		    plat_priv->driver_state);
@@ -573,6 +573,18 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 		plat_priv->soc_info = resp.soc_info;
 	if (resp.fw_version_info_valid)
 		plat_priv->fw_version_info = resp.fw_version_info;
+
+	if (resp.dev_mem_info_valid) {
+		for (i = 0; i < QMI_WLFW_MAX_DEV_MEM_NUM_V01; i++) {
+			plat_priv->dev_mem_info[i].start =
+				resp.dev_mem_info[i].start;
+			plat_priv->dev_mem_info[i].size =
+				resp.dev_mem_info[i].size;
+			cnss_pr_dbg("Device memory info[%d]: start = 0x%llx, size = 0x%llx\n",
+				    i, plat_priv->dev_mem_info[i].start,
+				    plat_priv->dev_mem_info[i].size);
+		}
+	}
 
 	cnss_pr_dbg("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, fw_version: 0x%x, fw_build_timestamp: %s",
 		    plat_priv->chip_info.chip_id,
