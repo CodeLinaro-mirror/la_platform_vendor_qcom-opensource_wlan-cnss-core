@@ -686,6 +686,7 @@ int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv)
 	case QCA6290_EMULATION_DEVICE_ID:
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 		ret = cnss_qca6290_powerup(pci_priv);
 		break;
@@ -714,6 +715,7 @@ int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv)
 	case QCA6290_EMULATION_DEVICE_ID:
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 		ret = cnss_qca6290_shutdown(pci_priv);
 		break;
@@ -742,6 +744,7 @@ int cnss_pci_dev_crash_shutdown(struct cnss_pci_data *pci_priv)
 	case QCA6290_EMULATION_DEVICE_ID:
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
 		cnss_qca6290_crash_shutdown(pci_priv);
 		break;
 	default:
@@ -769,6 +772,7 @@ int cnss_pci_dev_ramdump(struct cnss_pci_data *pci_priv)
 	case QCA6290_EMULATION_DEVICE_ID:
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 		ret = cnss_qca6290_ramdump(pci_priv);
 		break;
@@ -1471,8 +1475,15 @@ int cnss_pci_force_wake_request(struct device *dev)
 	if (!pci_priv)
 		return -ENODEV;
 
-	if (pci_priv->device_id != QCA6390_DEVICE_ID)
+	switch (pci_priv->device_id) {
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		break;
+	default:
+		cnss_pr_err("Unsupported device_id: 0x%x\n",
+			    pci_priv->device_id);
 		return 0;
+	}
 
 	mhi_dev = &(pci_priv->mhi_dev);
 	if (!mhi_dev)
@@ -1493,8 +1504,15 @@ int cnss_pci_is_device_awake(struct device *dev)
 	if (!pci_priv)
 		return -ENODEV;
 
-	if (pci_priv->device_id != QCA6390_DEVICE_ID)
+	switch (pci_priv->device_id) {
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		break;
+	default:
+		cnss_pr_err("Unsupported device_id: 0x%x\n",
+			    pci_priv->device_id);
 		return true;
+	}
 
 	mhi_dev = &(pci_priv->mhi_dev);
 	if (!mhi_dev)
@@ -1513,8 +1531,15 @@ int cnss_pci_force_wake_release(struct device *dev)
 	if (!pci_priv)
 		return -ENODEV;
 
-	if (pci_priv->device_id != QCA6390_DEVICE_ID)
+	switch (pci_priv->device_id) {
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		break;
+	default:
+		cnss_pr_err("Unsupported device_id: 0x%x\n",
+			    pci_priv->device_id);
 		return 0;
+	}
 
 	mhi_dev = &(pci_priv->mhi_dev);
 	if (!mhi_dev)
@@ -2517,6 +2542,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	case QCA6290_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
 		if (!mhi_is_device_ready(&plat_priv->plat_dev->dev,
 					 MHI_NODE_NAME)) {
 			cnss_pr_err("MHI driver is not ready, defer PCI probe!\n");
@@ -2605,6 +2631,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		cnss_power_off_device(plat_priv);
 		break;
 	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
 		/* Disable L1SS for QCA6390 */
 		pci_read_config_byte(pci_dev, 0x1F4, &aspm_state);
 		cnss_pr_err("Current L1SS status: 0x%x", aspm_state);
@@ -2686,6 +2713,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	case QCA6290_EMULATION_DEVICE_ID:
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
 		cnss_pci_unregister_mhi(pci_priv);
 		cnss_pci_disable_msi(pci_priv);
 		break;
@@ -2730,6 +2758,7 @@ static const struct pci_device_id cnss_pci_id_table[] = {
 	{ QCA6290_VENDOR_ID, QCA6290_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCA6390_VENDOR_ID, QCA6390_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{QCN7605_VENDOR_ID, QCN7605_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID},
+	{ QCA6490_VENDOR_ID, QCA6490_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, cnss_pci_id_table);
