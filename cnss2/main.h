@@ -244,6 +244,8 @@ struct cnss_plat_data {
 	void *caldb_mem;
 	bool cal_done;
 	struct completion rddm_complete;
+	bool fw_pcie_gen_switch;
+	u8 pcie_gen_speed;
 };
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
