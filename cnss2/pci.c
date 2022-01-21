@@ -47,8 +47,12 @@
 #define MHI_NODE_NAME			"qcom,mhi"
 #define MHI_MSI_NAME			"MHI"
 
-#define MAX_M3_FILE_NAME_LENGTH		13
+#define QCA6390_PATH_PREFIX		"qca6390/"
+#define QCA6490_PATH_PREFIX		"qca6490/"
 #define DEFAULT_M3_FILE_NAME		"m3.bin"
+#define DEFAULT_FW_FILE_NAME		"amss.bin"
+#define FW_V2_FILE_NAME			"amss20.bin"
+#define DEVICE_MAJOR_VERSION_MASK	0xF
 
 #define WAKE_MSI_NAME			"WAKE"
 
@@ -1576,6 +1580,27 @@ int cnss_pci_force_wake_release(struct device *dev)
 EXPORT_SYMBOL(cnss_pci_force_wake_release);
 #endif
 
+void cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv,
+			     char *file_name, char *name)
+{
+
+	switch (pci_priv->device_id) {
+	case QCA6390_DEVICE_ID:
+		scnprintf(file_name, MAX_FIRMWARE_NAME_LEN,
+			  QCA6390_PATH_PREFIX "%s", name);
+		break;
+	case QCA6490_DEVICE_ID:
+		scnprintf(file_name, MAX_FIRMWARE_NAME_LEN,
+			  QCA6490_PATH_PREFIX "%s", name);
+		break;
+	default:
+		scnprintf(file_name, MAX_FIRMWARE_NAME_LEN, "%s", name);
+		break;
+	}
+
+        cnss_pr_dbg("FW name updated as : %s\n", file_name);
+}
+
 int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -1639,13 +1664,13 @@ int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct cnss_fw_mem *m3_mem = &plat_priv->m3_mem;
-	char filename[MAX_M3_FILE_NAME_LENGTH];
+	char filename[MAX_FIRMWARE_NAME_LEN];
 	const struct firmware *fw_entry;
 	int ret = 0;
 
 	if (!m3_mem->va && !m3_mem->size) {
-		snprintf(filename, sizeof(filename), DEFAULT_M3_FILE_NAME);
-
+		cnss_pci_update_fw_name(pci_priv, filename,
+					DEFAULT_M3_FILE_NAME);
 		ret = request_firmware(&fw_entry, filename,
 				       &pci_priv->pci_dev->dev);
 		if (ret) {
@@ -2312,6 +2337,9 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_dev->rddm_size = 0x400000;
 #endif
 	mhi_dev->status_cb = cnss_mhi_notify_status;
+
+	/* Update firmware name */
+	cnss_pci_update_fw_name(pci_priv, mhi_dev->fw_name, DEFAULT_FW_FILE_NAME);
 
 	ret = mhi_register_device(mhi_dev, MHI_NODE_NAME, pci_priv);
 	if (ret) {

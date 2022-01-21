@@ -2105,6 +2105,9 @@ int mhi_register_device(struct mhi_device *mhi_device,
 			mhi_dev_ctxt->bhi_ctxt.rddm_size);
 	}
 
+	/* Update Firmware image name */
+	mhi_dev_ctxt->bhi_ctxt.firmware_info.fw_image = mhi_device->fw_name;
+
 	/* notify all the registered clients we probed */
 	for (i = 0; i < MHI_MAX_CHANNELS; i++) {
 		struct mhi_client_handle *client_handle =

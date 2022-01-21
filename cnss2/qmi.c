@@ -28,7 +28,6 @@
 
 #define WLFW_SERVICE_INS_ID_V01		1
 #define WLFW_CLIENT_ID			0x4b4e454c
-#define MAX_BDF_FILE_NAME		32
 #define BDF_FILE_NAME_PREFIX		"bdwlan"
 #define DEFAULT_ELF_BDF_FILE_NAME	"bdwlan.elf"
 #define ELF_BDF_FILE_NAME_PREFIX	"bdwlan.e"
@@ -795,7 +794,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv)
 	struct wlfw_bdf_download_req_msg_v01 *req;
 	struct wlfw_bdf_download_resp_msg_v01 resp;
 	struct msg_desc req_desc, resp_desc;
-	char filename[MAX_BDF_FILE_NAME];
+	char filename[MAX_FIRMWARE_NAME_LEN];
+	char filename_tmp[MAX_FIRMWARE_NAME_LEN];
 	const struct firmware *fw_entry;
 	const u8 *temp;
 	unsigned int remaining;
@@ -821,37 +821,39 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv)
 
 	if (plat_priv->board_info.board_id == 0xFF) {
 		if (bdf_type == CNSS_BDF_BIN)
-			snprintf(filename, sizeof(filename),
+			snprintf(filename_tmp, sizeof(filename_tmp),
 				 DEFAULT_BIN_BDF_FILE_NAME);
 		else
-			snprintf(filename, sizeof(filename),
+			snprintf(filename_tmp, sizeof(filename_tmp),
 				 DEFAULT_ELF_BDF_FILE_NAME);
 	} else if (plat_priv->board_info.board_id < 0xFF) {
 		if (bdf_type == CNSS_BDF_BIN)
-			snprintf(filename, sizeof(filename),
+			snprintf(filename_tmp, sizeof(filename_tmp),
 				 BIN_BDF_FILE_NAME_PREFIX "%02x",
 				 plat_priv->board_info.board_id);
 		else
-			snprintf(filename, sizeof(filename),
+			snprintf(filename_tmp, sizeof(filename_tmp),
 				 ELF_BDF_FILE_NAME_PREFIX "%02x",
 				 plat_priv->board_info.board_id);
 	} else {
 		if (bdf_type == CNSS_BDF_BIN)
-			snprintf(filename, sizeof(filename),
+			snprintf(filename_tmp, sizeof(filename_tmp),
 				 BDF_FILE_NAME_PREFIX "%02x.b%02x",
 				 plat_priv->board_info.board_id >> 8 & 0xFF,
 				 plat_priv->board_info.board_id & 0xFF);
 		else
-			snprintf(filename, sizeof(filename),
+			snprintf(filename_tmp, sizeof(filename_tmp),
 				 BDF_FILE_NAME_PREFIX "%02x.e%02x",
 				 plat_priv->board_info.board_id >> 8 & 0xFF,
 				 plat_priv->board_info.board_id & 0xFF);
 	}
 
+	cnss_bus_update_fw_name(plat_priv, filename, filename_tmp);
+
 	if (bdf_bypass) {
 		cnss_pr_info("bdf_bypass is enabled, sending dummy BDF\n");
 		temp = filename;
-		remaining = MAX_BDF_FILE_NAME;
+		remaining = MAX_FIRMWARE_NAME_LEN;
 		goto bypass_bdf;
 	}
 

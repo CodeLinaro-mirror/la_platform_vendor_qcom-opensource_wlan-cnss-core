@@ -134,6 +134,7 @@ struct __packed bhi_vec_entry {
  * struct mhi_device - IO resources for MHI
  * @dev: device node points to of_node
  * @pdev: pci device node
+ * @fw_name: firmware image name
  * @resource: bar memory space and IRQ resources
  * @support_rddm: this device support ramdump collection
  * @rddm_size: size of ramdump buffer in bytes to allocate
@@ -145,6 +146,7 @@ struct __packed bhi_vec_entry {
 struct mhi_device {
 	struct device *dev;
 	struct pci_dev *pci_dev;
+	char fw_name[32];
 	struct resource resources[2];
 	bool support_rddm;
 	size_t rddm_size;

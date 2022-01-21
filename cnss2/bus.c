@@ -136,6 +136,27 @@ void cnss_bus_deinit(struct cnss_plat_data *plat_priv)
 	return;
 }
 
+void cnss_bus_update_fw_name(struct cnss_plat_data *plat_priv,
+			     char *file_name, char *name)
+{
+	if (!plat_priv)
+		return;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		cnss_pci_update_fw_name(plat_priv->bus_priv,
+					file_name, name);
+		break;
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		break;
+	}
+
+	return;
+}
+
+
 int cnss_bus_load_m3(struct cnss_plat_data *plat_priv)
 {
 	if (!plat_priv)
