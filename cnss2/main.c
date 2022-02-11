@@ -2101,6 +2101,8 @@ static const struct platform_device_id cnss_platform_id_table[] = {
 	{ .name = "qcn7605", .driver_data = QCN7605_DEVICE_ID, },
 	{ .name = "qcn7605_sdio", .driver_data = QCN7605_SDIO_DEVICE_ID, },
 	{ .name = "qca6490", .driver_data = QCA6490_DEVICE_ID, },
+	{ .name = "qcaconv", .driver_data = 0},
+	{ },
 };
 
 static const struct of_device_id cnss_of_match_table[] = {
@@ -2122,9 +2124,18 @@ static const struct of_device_id cnss_of_match_table[] = {
 	{
 		.compatible = "qcom,cnss-qca6490",
 		.data = (void *)&cnss_platform_id_table[5]},
+	{
+		.compatible = "qcom,cnss-qca-converged",
+		.data = (void *)&cnss_platform_id_table[6]},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, cnss_of_match_table);
+
+static inline bool cnss_is_converged_dt(struct cnss_plat_data *plat_priv)
+{
+	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
+				     "qcom,converged-dt");
+}
 
 static int cnss_probe(struct platform_device *plat_dev)
 {
@@ -2157,7 +2168,8 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 	plat_priv->plat_dev = plat_dev;
 	plat_priv->device_id = device_id->driver_data;
-	plat_priv->bus_type = cnss_get_bus_type(plat_priv->device_id);
+	plat_priv->is_converged_dt = cnss_is_converged_dt(plat_priv);
+	plat_priv->bus_type = cnss_get_bus_type(plat_priv);
 	cnss_pr_dbg("bus type selected  %d\n", plat_priv->bus_type);
 	cnss_set_plat_priv(plat_dev, plat_priv);
 	platform_set_drvdata(plat_dev, plat_priv);

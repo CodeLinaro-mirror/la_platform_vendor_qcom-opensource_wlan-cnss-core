@@ -46,7 +46,7 @@
 #define QCN7605_VER20_COMPOSITE_PID     0x9903
 
 enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev);
-enum cnss_dev_bus_type cnss_get_bus_type(unsigned long device_id);
+enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv);
 void *cnss_bus_dev_to_bus_priv(struct device *dev);
 struct cnss_plat_data *cnss_bus_dev_to_plat_priv(struct device *dev);
 int cnss_bus_init(struct cnss_plat_data *plat_priv);
