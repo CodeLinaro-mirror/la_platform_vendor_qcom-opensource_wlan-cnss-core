@@ -2293,9 +2293,6 @@ static void cnss_mhi_notify_status(enum MHI_CB_REASON reason, void *priv)
 	set_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
 	del_timer(&plat_priv->fw_boot_timer);
 
-	if (reason == MHI_CB_SYS_ERROR)
-		cnss_reason = CNSS_REASON_TIMEOUT;
-
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 			       cnss_reason);
 }
@@ -2334,7 +2331,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 #ifdef CONFIG_ARCH_QCOM
 	mhi_dev->rddm_size = pci_priv->plat_priv->ramdump_info_v2.ramdump_size;
 #else
-	mhi_dev->rddm_size = 0x400000;
+	mhi_dev->rddm_size = 0x420000;
 #endif
 	mhi_dev->status_cb = cnss_mhi_notify_status;
 
