@@ -1,6 +1,6 @@
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 
-interface_type ?= pcie
+interface_type ?= usb
 emulation_build ?= 0
 unified_driver ?= 0
 unified_prealloc ?= 0

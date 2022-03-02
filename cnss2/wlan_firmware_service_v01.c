@@ -3128,7 +3128,7 @@ struct elem_info wlfw_device_info_resp_msg_v01_ei[] = {
 		.tlv_type       = 0x02,
 		.offset         = offsetof(struct wlfw_device_info_resp_msg_v01,
 					   resp),
-		.ei_array      = qmi_response_type_v01_ei,
+		.ei_array      = qmi_response_type_v01_ei_ext,
 	},
 	{
 		.data_type      = QMI_OPT_FLAG,
@@ -3249,7 +3249,7 @@ struct elem_info wlfw_m3_dump_upload_done_resp_msg_v01_ei[] = {
 		.offset         = offsetof(struct
 					wlfw_m3_dump_upload_done_resp_msg_v01,
 					resp),
-		.ei_array      = qmi_response_type_v01_ei,
+		.ei_array      = qmi_response_type_v01_ei_ext,
 	},
 	{
 		.data_type      = QMI_EOTI,
@@ -3294,7 +3294,7 @@ struct elem_info wlfw_soc_wake_resp_msg_v01_ei[] = {
 		.tlv_type       = 0x02,
 		.offset         = offsetof(struct wlfw_soc_wake_resp_msg_v01,
 					   resp),
-		.ei_array      = qmi_response_type_v01_ei,
+		.ei_array      = qmi_response_type_v01_ei_ext,
 	},
 	{
 		.data_type      = QMI_EOTI,
@@ -3321,7 +3321,7 @@ struct elem_info wlfw_exit_power_save_resp_msg_v01_ei[] = {
 		.offset         = offsetof(struct
 					   wlfw_exit_power_save_resp_msg_v01,
 					   resp),
-		.ei_array      = qmi_response_type_v01_ei,
+		.ei_array      = qmi_response_type_v01_ei_ext,
 	},
 	{
 		.data_type      = QMI_EOTI,
@@ -3494,7 +3494,7 @@ struct elem_info wlfw_pcie_gen_switch_resp_msg_v01_ei[] = {
 		.offset         = offsetof(struct
 					   wlfw_pcie_gen_switch_resp_msg_v01,
 					   resp),
-		.ei_array      = qmi_response_type_v01_ei,
+		.ei_array      = qmi_response_type_v01_ei_ext,
 	},
 	{
 		.data_type      = QMI_EOTI,

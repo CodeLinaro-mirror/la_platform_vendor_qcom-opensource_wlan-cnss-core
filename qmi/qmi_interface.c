@@ -94,7 +94,7 @@ static void qmi_notify_event_worker(struct work_struct *work);
 static DEFINE_HASHTABLE(handle_hash_tbl, HANDLE_HASH_TBL_SZ);
 static DEFINE_MUTEX(handle_hash_tbl_lock);
 
-struct elem_info qmi_response_type_v01_ei[] = {
+struct elem_info qmi_response_type_v01_ei_ext[] = {
 	{
 		.data_type	= QMI_SIGNED_2_BYTE_ENUM,
 		.elem_len	= 1,
@@ -125,7 +125,7 @@ struct elem_info qmi_response_type_v01_ei[] = {
 		.ei_array	= NULL,
 	},
 };
-EXPORT_SYMBOL(qmi_response_type_v01_ei);
+EXPORT_SYMBOL(qmi_response_type_v01_ei_ext);
 
 struct elem_info qmi_error_resp_type_v01_ei[] = {
 	{
@@ -135,7 +135,7 @@ struct elem_info qmi_error_resp_type_v01_ei[] = {
 		.is_array  = NO_ARRAY,
 		.tlv_type  = 0x02,
 		.offset    = 0,
-		.ei_array  = qmi_response_type_v01_ei,
+		.ei_array  = qmi_response_type_v01_ei_ext,
 	},
 	{
 		.data_type = QMI_EOTI,
@@ -220,7 +220,7 @@ static void qmi_log(struct qmi_handle *handle,
 		QMI_REQ_RESP_LOG("%s %s CF:%x TI:%x MI:%x ML:%x SvcId: %x",
 		(handle->handle_type == QMI_CLIENT_HANDLE ? "QCCI" : "QCSI"),
 		ops_type, cntl_flag, txn_id, msg_id, msg_len, service_id);
-	} else if ((cntl_flag == QMI_INDICATION_CONTROL_FLAG)) {
+	} else if (cntl_flag == QMI_INDICATION_CONTROL_FLAG) {
 		QMI_IND_LOG("%s %s CF:%x TI:%x MI:%x ML:%x SvcId: %x",
 		(handle->handle_type == QMI_CLIENT_HANDLE ? "QCCI" : "QCSI"),
 		ops_type, cntl_flag, txn_id, msg_id, msg_len, service_id);

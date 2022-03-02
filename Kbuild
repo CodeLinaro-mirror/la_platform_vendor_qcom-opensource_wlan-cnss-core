@@ -375,9 +375,8 @@ INCS += $(CNSS_INC)                     \
         $(CNSS_UTILS_INC)               \
         $(CNSS_PREALLOC_INC)
 
-
 cflags-y += $(INCS)
-ccflags-y += -Os -I$(src)/$(CNSS_CORE_BASE)/inc -I$(src)/$(CNSS_CORE_BASE)/mhi -I$(ROOTDIR)
+ccflags-y += -Os -I$(src)/$(CNSS_CORE_BASE)/inc -I$(src)/$(CNSS_CORE_BASE)/mhi -I$(ANDROID_BUILD_TOP)/vendor/qcom/opensource/wlan/wlan-cnss-core/inc  -I$(ANDROID_BUILD_TOP)/vendor/qcom/opensource/wlan/wlan-cnss-core
 
 obj-$(WLAN_CNSSCORE) +=$(MODNAME).o
 $(MODNAME)-y := $(OBJS)
