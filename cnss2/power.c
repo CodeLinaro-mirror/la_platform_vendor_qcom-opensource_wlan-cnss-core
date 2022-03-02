@@ -378,12 +378,17 @@ void cnss_power_off_device(struct cnss_plat_data *plat_priv)
 
 static void cnss_get_wlan_en_resource(struct cnss_plat_data *plat_priv)
 {
+#ifdef CONFIG_PLATFORM_DRIVER	
 	plat_priv->gpio_wl_en = devm_gpiod_get(&plat_priv->plat_dev->dev,
 					       "wlan-en", GPIOD_OUT_LOW);
 	if (IS_ERR(plat_priv->gpio_wl_en)) {
 		cnss_pr_warn("Failed to obtain wl_en gpio from ACPI\n");
 		plat_priv->gpio_wl_en = NULL;
 	}
+#else
+	cnss_pr_dbg("wlan_en pin is not supported");
+	plat_priv->gpio_wl_en = NULL;
+#endif
 }
 
 static int wlan_en_gpio_num = -1;

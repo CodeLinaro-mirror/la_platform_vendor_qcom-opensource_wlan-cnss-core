@@ -164,7 +164,9 @@ static int bhi_bhie_transfer(struct mhi_device_ctxt *mhi_dev_ctxt,
 	rwlock_t *pm_xfer_lock = &mhi_dev_ctxt->pm_xfer_lock;
 	unsigned bhie_vecaddr_high_offs, bhie_vecaddr_low_offs,
 		bhie_vecsize_offs, bhie_vecdb_offs,
-		bhie_vecstatus_offs;
+		bhie_vecstatus_offs, bhie_vecbd_seqnum_bmsk, bhie_vecbd_seqnum_shft,
+		bhie_vecstatus_seqnum_bmsk, bhie_vecstatus_seqnum_shft,
+		bhie_vecstatus_status_bmsk, bhie_vecstatus_status_shft, bhie_vecstatus_status_xfer_compl;
 
 	if (tx_vec_table) {
 		bhie_vecaddr_high_offs = BHIE_TXVECADDR_HIGH_OFFS;
@@ -172,37 +174,49 @@ static int bhi_bhie_transfer(struct mhi_device_ctxt *mhi_dev_ctxt,
 		bhie_vecsize_offs = BHIE_TXVECSIZE_OFFS;
 		bhie_vecdb_offs = BHIE_TXVECDB_OFFS;
 		bhie_vecstatus_offs = BHIE_TXVECSTATUS_OFFS;
+		bhie_vecbd_seqnum_bmsk = BHIE_TXVECDB_SEQNUM_BMSK;
+		bhie_vecbd_seqnum_shft = BHIE_TXVECDB_SEQNUM_SHFT;
+		bhie_vecstatus_seqnum_bmsk = BHIE_TXVECSTATUS_SEQNUM_BMSK;
+		bhie_vecstatus_seqnum_shft = BHIE_TXVECSTATUS_SEQNUM_SHFT;
+		bhie_vecstatus_status_bmsk = BHIE_TXVECSTATUS_STATUS_BMSK;
+		bhie_vecstatus_status_shft = BHIE_TXVECSTATUS_STATUS_SHFT;
+		bhie_vecstatus_status_xfer_compl = BHIE_TXVECSTATUS_STATUS_XFER_COMPL;
 	} else {
 		bhie_vecaddr_high_offs = BHIE_RXVECADDR_HIGH_OFFS;
 		bhie_vecaddr_low_offs = BHIE_RXVECADDR_LOW_OFFS;
 		bhie_vecsize_offs = BHIE_RXVECSIZE_OFFS;
 		bhie_vecdb_offs = BHIE_RXVECDB_OFFS;
 		bhie_vecstatus_offs = BHIE_RXVECSTATUS_OFFS;
+		bhie_vecbd_seqnum_bmsk = BHIE_RXVECDB_SEQNUM_BMSK;
+		bhie_vecbd_seqnum_shft = BHIE_RXVECDB_SEQNUM_SHFT;
+		bhie_vecstatus_seqnum_bmsk = BHIE_RXVECSTATUS_SEQNUM_BMSK;
+		bhie_vecstatus_seqnum_shft = BHIE_RXVECSTATUS_SEQNUM_SHFT;
+		bhie_vecstatus_status_bmsk = BHIE_RXVECSTATUS_STATUS_BMSK;
+		bhie_vecstatus_status_shft = BHIE_RXVECSTATUS_STATUS_SHFT;
+		bhie_vecstatus_status_xfer_compl = BHIE_RXVECSTATUS_STATUS_XFER_COMPL;
 	}
 
-	if (tx_vec_table) {
 	/* Program TX/RX Vector table */
-		read_lock_bh(pm_xfer_lock);
-		if (!MHI_REG_ACCESS_VALID(mhi_dev_ctxt->mhi_pm_state)) {
-			read_unlock_bh(pm_xfer_lock);
-			return -EIO;
-		}
-
-		val = HIGH_WORD(bhie_mem_info->phys_addr);
-		mhi_reg_write(mhi_dev_ctxt, bhi_ctxt->bhi_base,
-			      bhie_vecaddr_high_offs, val);
-		val = LOW_WORD(bhie_mem_info->phys_addr);
-		mhi_reg_write(mhi_dev_ctxt, bhi_ctxt->bhi_base,
-			      bhie_vecaddr_low_offs, val);
-		val = (u32)bhie_mem_info->size;
-		mhi_reg_write(mhi_dev_ctxt, bhi_ctxt->bhi_base, bhie_vecsize_offs, val);
-
-		/* Ring DB to begin Xfer */
-		mhi_reg_write_field(mhi_dev_ctxt, bhi_ctxt->bhi_base, bhie_vecdb_offs,
-				    BHIE_TXVECDB_SEQNUM_BMSK, BHIE_TXVECDB_SEQNUM_SHFT,
-				    tx_sequence);
+	read_lock_bh(pm_xfer_lock);
+	if (!MHI_REG_ACCESS_VALID(mhi_dev_ctxt->mhi_pm_state)) {
 		read_unlock_bh(pm_xfer_lock);
+		return -EIO;
 	}
+
+	val = HIGH_WORD(bhie_mem_info->phys_addr);
+	mhi_reg_write(mhi_dev_ctxt, bhi_ctxt->bhi_base,
+		      bhie_vecaddr_high_offs, val);
+	val = LOW_WORD(bhie_mem_info->phys_addr);
+	mhi_reg_write(mhi_dev_ctxt, bhi_ctxt->bhi_base,
+		      bhie_vecaddr_low_offs, val);
+	val = (u32)bhie_mem_info->size;
+	mhi_reg_write(mhi_dev_ctxt, bhi_ctxt->bhi_base, bhie_vecsize_offs, val);
+
+	/* Ring DB to begin Xfer */
+	mhi_reg_write_field(mhi_dev_ctxt, bhi_ctxt->bhi_base, bhie_vecdb_offs,
+			    bhie_vecbd_seqnum_bmsk, bhie_vecbd_seqnum_shft,
+			    tx_sequence);
+	read_unlock_bh(pm_xfer_lock);
 
 	timeout = jiffies + msecs_to_jiffies(bhi_ctxt->poll_timeout);
 	while (time_before(jiffies, timeout)) {
@@ -217,11 +231,11 @@ static int bhi_bhie_transfer(struct mhi_device_ctxt *mhi_dev_ctxt,
 		read_unlock_bh(pm_xfer_lock);
 		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 			"%sVEC_STATUS:0x%x\n", tx_vec_table ? "TX" : "RX", val);
-		current_seq = (val & BHIE_TXVECSTATUS_SEQNUM_BMSK) >>
-			BHIE_TXVECSTATUS_SEQNUM_SHFT;
-		status = (val & BHIE_TXVECSTATUS_STATUS_BMSK) >>
-			BHIE_TXVECSTATUS_STATUS_SHFT;
-		if ((status == BHIE_TXVECSTATUS_STATUS_XFER_COMPL) &&
+		current_seq = (val & bhie_vecstatus_seqnum_bmsk) >>
+			bhie_vecstatus_seqnum_shft;
+		status = (val & bhie_vecstatus_status_bmsk) >>
+			bhie_vecstatus_status_shft;
+		if ((status == bhie_vecstatus_status_xfer_compl) &&
 		    (current_seq == tx_sequence)) {
 			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 				"%s transfer complete\n",

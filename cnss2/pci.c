@@ -2341,16 +2341,20 @@ out:
 static void cnss_mhi_notify_status(enum MHI_CB_REASON reason, void *priv)
 {
 	struct cnss_pci_data *pci_priv = priv;
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
 	enum cnss_recovery_reason cnss_reason = CNSS_REASON_RDDM;
+	unsigned long drv_state;
 
 	if (!pci_priv)
 		return;
 
 	cnss_pr_dbg("MHI status cb is called with reason %d\n", reason);
 
-	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
-		cnss_pr_dbg("Driver is in recovery, ignore");
+	plat_priv = pci_priv->plat_priv;
+	drv_state = plat_priv->driver_state;
+	if (test_bit(CNSS_DRIVER_RECOVERY, &drv_state) ||
+		test_bit(CNSS_DRIVER_UNLOADING, &drv_state)) {
+		cnss_pr_dbg("Driver state 0x%lx, ignore recovery", drv_state);
 		return;
 	}
 

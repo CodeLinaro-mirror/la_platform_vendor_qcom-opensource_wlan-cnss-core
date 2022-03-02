@@ -2165,15 +2165,19 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->device_id = device_id->driver_data;
 #endif
 #else /* CONFIG_NAPIER_X86 */
-	dev_info(&plat_dev->dev, "%s\n", __func__);
+
 	if (plat_env) {
 		cnss_pr_err("Driver is already initialized!\n");
 		ret = -EEXIST;
 		goto out;
 	}
-
+#ifdef CONFIG_PLATFORM_DRIVER
+	dev_info(&plat_dev->dev, "%s\n", __func__);
 	plat_priv = devm_kzalloc(&plat_dev->dev, sizeof(*plat_priv),
 				 GFP_KERNEL);
+#else
+	plat_priv = kzalloc(sizeof(*plat_priv),GFP_KERNEL);
+#endif
 	if (!plat_priv) {
 		ret = -ENOMEM;
 		goto out;
@@ -2184,14 +2188,16 @@ static int cnss_probe(struct platform_device *plat_dev)
 #elif defined(CONFIG_CNSS2_SDIO)
 	plat_priv->device_id = QCN7605_SDIO_DEVICE_ID;
 #else
-	plat_priv->device_id = QCA6290_DEVICE_ID;
+	plat_priv->device_id = QCN7605_DEVICE_ID;
 #endif
 #endif /* CONFIG_NAPIER_X86 */
 
+#ifdef CONFIG_PLATFORM_DRIVER
+	plat_priv->plat_dev = plat_dev;	
+#endif
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv->device_id);
 	cnss_set_plat_priv(plat_dev, plat_priv);
 #ifdef CONFIG_PLATFORM_DRIVER
-	plat_priv->plat_dev = plat_dev;	
 	platform_set_drvdata(plat_dev, plat_priv);
 #endif 
 	ret = cnss_get_resources(plat_priv);
@@ -2288,8 +2294,12 @@ free_res:
 reset_ctx:
 #ifdef CONFIG_PLATFORM_DRIVER
 	platform_set_drvdata(plat_dev, NULL);
+	cnss_set_plat_priv(plat_dev,NULL);
+#else
+	if(plat_env)
+	    kfree(plat_env);
+	cnss_set_plat_priv(plat_dev,NULL);
 #endif
-	cnss_set_plat_priv(plat_dev, NULL);
 out:
 	return ret;
 }
@@ -2319,9 +2329,13 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_unregister_esoc(plat_priv);
 	cnss_bus_deinit(plat_priv);
 	cnss_put_resources(plat_priv);
-	cnss_set_plat_priv(plat_dev, NULL);
 #ifdef CONFIG_PLATFORM_DRIVER
 	platform_set_drvdata(plat_dev, NULL);
+	cnss_set_plat_priv(plat_dev,NULL);
+#else
+	if(plat_env)
+	    kfree(plat_env);
+	cnss_set_plat_priv(plat_dev,NULL);
 #endif
 	return 0;
 }
