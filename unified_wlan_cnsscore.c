@@ -247,8 +247,6 @@ fail8:
 #endif
 #ifdef CONFIG_MHI_XPRT
 	ipc_router_mhi_xprt_deinit();
-#endif
-#ifdef CONFIG_MHI_XPRT
 fail7:
 #endif
 #ifdef CONFIG_DIAG_IPC_BRIDGE

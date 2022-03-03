@@ -445,6 +445,8 @@ out:
 void cnss_usb_deinit(struct cnss_plat_data *plat_priv)
 {
 	cnss_pr_dbg("%s %d!\n", __func__, __LINE__);
-	kfree(plat_priv->bus_priv);
+
 	usb_deregister(&cnss_usb_driver);
+	kfree(plat_priv->bus_priv);
+	plat_priv->bus_priv = NULL;
 }

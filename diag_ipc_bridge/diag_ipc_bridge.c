@@ -261,6 +261,7 @@ int diag_bridge_read(int id, char *data, int size)
 	kref_get(&dev->kref);
 
 	mutex_lock(&dev->read_mutex);
+	mutex_lock(&dev->ifc_mutex);
 	if (!dev->ifc) {
 		ret = -ENODEV;
 		goto error;
@@ -320,11 +321,15 @@ int diag_bridge_read(int id, char *data, int size)
 	usb_autopm_put_interface(dev->ifc);
 
 	if (id == IPC_BRIDGE) {
+		mutex_unlock(&dev->ifc_mutex);
 		wait_for_completion(&dev->read_done);
 		ret = dev->read_result;
 	}
 
 	usb_free_urb(urb);
+	if (id != IPC_BRIDGE)
+		mutex_unlock(&dev->ifc_mutex);
+
 	mutex_unlock(&dev->read_mutex);
 	return ret;
 
@@ -332,6 +337,7 @@ free_error:
 	usb_free_urb(urb);
 error:
 	kref_put(&dev->kref, diag_bridge_delete);
+	mutex_unlock(&dev->ifc_mutex);
 	mutex_unlock(&dev->read_mutex);
 	return ret;
 }
@@ -405,6 +411,7 @@ int diag_bridge_write(int id, char *data, int size)
 	kref_get(&dev->kref);
 
 	mutex_lock(&dev->write_mutex);
+	mutex_lock(&dev->ifc_mutex);
 	if (!dev->ifc) {
 		ret = -ENODEV;
 		goto error;
@@ -455,11 +462,14 @@ int diag_bridge_write(int id, char *data, int size)
 	}
 
 	if (id == IPC_BRIDGE) {
+		mutex_unlock(&dev->ifc_mutex);
 		wait_for_completion(&dev->write_done);
 		ret = dev->write_result;
 	}
 
 	usb_free_urb(urb);
+	if (id != IPC_BRIDGE)
+		mutex_unlock(&dev->ifc_mutex);
 	mutex_unlock(&dev->write_mutex);
 	return ret;
 
@@ -467,6 +477,7 @@ free_error:
 	usb_free_urb(urb);
 error:
 	kref_put(&dev->kref, diag_bridge_delete);
+	mutex_unlock(&dev->ifc_mutex);
 	mutex_unlock(&dev->write_mutex);
 	return ret;
 }
@@ -662,7 +673,9 @@ diag_bridge_probe(struct usb_interface *ifc, const struct usb_device_id *id)
 			goto put_pdev;
 		}
 
+		mutex_unlock(&dev->ifc_mutex);
 		ret = platform_device_add(dev->pdev);
+		mutex_lock(&dev->ifc_mutex);
 		if (ret) {
 			pr_err("%s: fail to add pdev\n", __func__);
 			goto put_pdev;
