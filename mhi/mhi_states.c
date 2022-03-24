@@ -792,6 +792,11 @@ void process_stt_work_item(
 		break;
 	case STATE_TRANSITION_READY:
 		r = process_ready_transition(mhi_dev_ctxt, cur_work_item);
+		if (mhi_dev_ctxt->dev_exec_env == MHI_EXEC_ENV_DISABLE_TRANSITION) {
+			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
+						"Transition to READY r %d\n", r);
+			complete(&mhi_dev_ctxt->cmd_complete);
+		}
 		break;
 	case STATE_TRANSITION_SBL:
 		write_lock_irq(&mhi_dev_ctxt->pm_xfer_lock);
