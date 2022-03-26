@@ -106,6 +106,31 @@ static struct cnss_pci_reg qdss_csr[] = {
 #define CLEAR_MASTER(pci_dev) /* no-op */
 #endif
 
+static int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
+{
+	u16 device_id;
+
+	if (pci_priv->pci_link_state == PCI_LINK_DOWN) {
+		cnss_pr_err("PCIe link is suspended\n");
+		return -EIO;
+	}
+
+	if (pci_priv->pci_link_down_ind) {
+		cnss_pr_err("PCIe link is down\n");
+		return -EIO;
+	}
+
+	pci_read_config_word(pci_priv->pci_dev, PCI_DEVICE_ID, &device_id);
+	if (device_id != pci_priv->pci_device_id->device)  {
+		cnss_pr_err("PCI device ID mismatch, link possibly down, current read ID: 0x%x, record ID: 0x%x\n",
+			       device_id, pci_priv->device_id);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+
 /* For reg out of BAR's basic range */
 static u32 cnss_pci_window_reg_read(struct cnss_pci_data *pci_priv, u32 offset)
 {
@@ -309,7 +334,7 @@ int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
 		goto out;
 	}
 
-	CLEAR_MASTER(pci_priv->pci_dev);
+	pci_clear_master(pci_priv->pci_dev);
 
 	ret = cnss_set_pci_config_space(pci_priv, SAVE_PCI_CONFIG_SPACE);
 	if (ret)
@@ -1169,7 +1194,7 @@ static int cnss_pci_suspend(struct device *dev)
 			goto out;
 		}
 
-		CLEAR_MASTER(pci_dev);
+		pci_clear_master(pci_dev);
 
 		cnss_set_pci_config_space(pci_priv,
 					  SAVE_PCI_CONFIG_SPACE);
@@ -1180,6 +1205,8 @@ static int cnss_pci_suspend(struct device *dev)
 			cnss_pr_err("Failed to set D3Hot, err =  %d\n",
 				    ret);
 	}
+	cnss_set_pci_link(pci_priv, PCI_LINK_DOWN);
+	pci_priv->pci_link_state = PCI_LINK_DOWN;
 
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
 
@@ -1207,6 +1234,15 @@ static int cnss_pci_resume(struct device *dev)
 	if (pci_priv->pci_link_down_ind)
 		goto out;
 
+	if (pci_priv->pci_link_state == PCI_LINK_UP)
+		goto out;
+
+	cnss_set_pci_link(pci_priv, PCI_LINK_UP);
+	pci_priv->pci_link_state = PCI_LINK_UP;
+
+	if (cnss_pci_check_link_status(pci_priv))
+		goto out;
+	
 	if (pci_priv->pci_link_state) {
 		ret = pci_enable_device(pci_dev);
 		if (ret)
@@ -1402,7 +1438,7 @@ int cnss_auto_suspend(struct device *dev)
 			goto out;
 		}
 
-		CLEAR_MASTER(pci_dev);
+		pci_clear_master(pci_dev);
 		cnss_set_pci_config_space(pci_priv, SAVE_PCI_CONFIG_SPACE);
 		pci_disable_device(pci_dev);
 

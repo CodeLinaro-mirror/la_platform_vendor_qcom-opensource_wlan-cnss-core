@@ -187,7 +187,6 @@ static int mhi_pm_initiate_m0(struct mhi_device_ctxt *mhi_dev_ctxt)
 	if (!r || mhi_dev_ctxt->mhi_pm_state == MHI_PM_LD_ERR_FATAL_DETECT) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 			"Failed to get M0 event, timeout or LD\n");
-#ifdef CONFIG_CNSS_QCA6390
 		/* Patch from MSM as gerrit#2559252 */
 		/*
 		 * It's possible device already in error state and we didn't
@@ -197,13 +196,19 @@ static int mhi_pm_initiate_m0(struct mhi_device_ctxt *mhi_dev_ctxt)
 				enum MHI_PM_STATE new_state = MHI_PM_DISABLE;
 				unsigned long flags;
 				enum MHI_STATE state = MHI_STATE_LIMIT;
+				u32 ee = 0;
 
-				mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
+				mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 					"MHI System Error Detected\n");
 				write_lock_irqsave(&mhi_dev_ctxt->pm_xfer_lock,
 						   flags);
 				if (MHI_REG_ACCESS_VALID(mhi_dev_ctxt->mhi_pm_state))
+				{
 					state = mhi_get_m_state(mhi_dev_ctxt);
+					ee = mhi_reg_read(mhi_dev_ctxt->bhi_ctxt.bhi_base, BHI_EXECENV);
+					mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+						"MHI System Error Detected read state 0x%x 0x%x\n", state, ee);
+				}
 
 				if (state == MHI_STATE_SYS_ERR)
 					new_state = mhi_tryset_pm_state
@@ -216,7 +221,6 @@ static int mhi_pm_initiate_m0(struct mhi_device_ctxt *mhi_dev_ctxt)
 						      process_sys_err_worker);
 		}
 		//mhi_intvec_threaded_handlr(0, mhi_cntrl);
-#endif
 		r = -EIO;
 	} else
 		r = 0;
