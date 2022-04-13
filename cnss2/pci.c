@@ -1580,8 +1580,8 @@ int cnss_pci_force_wake_release(struct device *dev)
 EXPORT_SYMBOL(cnss_pci_force_wake_release);
 #endif
 
-void cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv,
-			     char *file_name, char *name)
+void cnss_pci_fw_name_add_path(struct cnss_pci_data *pci_priv,
+			       char *file_name, char *name)
 {
 
 	switch (pci_priv->device_id) {
@@ -1598,7 +1598,7 @@ void cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv,
 		break;
 	}
 
-        cnss_pr_dbg("FW name updated as : %s\n", file_name);
+        cnss_pr_dbg("FW name with path : %s\n", file_name);
 }
 
 int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
@@ -1669,8 +1669,8 @@ int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 
 	if (!m3_mem->va && !m3_mem->size) {
-		cnss_pci_update_fw_name(pci_priv, filename,
-					DEFAULT_M3_FILE_NAME);
+		cnss_pci_fw_name_add_path(pci_priv, filename,
+					  DEFAULT_M3_FILE_NAME);
 		ret = request_firmware(&fw_entry, filename,
 				       &pci_priv->pci_dev->dev);
 		if (ret) {
@@ -2336,7 +2336,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_dev->status_cb = cnss_mhi_notify_status;
 
 	/* Update firmware name */
-	cnss_pci_update_fw_name(pci_priv, mhi_dev->fw_name, DEFAULT_FW_FILE_NAME);
+	cnss_pci_fw_name_add_path(pci_priv, mhi_dev->fw_name, DEFAULT_FW_FILE_NAME);
 
 	ret = mhi_register_device(mhi_dev, MHI_NODE_NAME, pci_priv);
 	if (ret) {

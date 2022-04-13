@@ -575,9 +575,13 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 	if (ret)
 		goto out;
 
-	ret = cnss_wlfw_bdf_dnld_send_sync(plat_priv);
+	ret = cnss_wlfw_bdf_dnld_send_sync(plat_priv, CNSS_BDF_ELF);
 	if (ret)
 		goto out;
+
+	if (plat_priv->device_id == QCA6490_DEVICE_ID) {
+		cnss_wlfw_bdf_dnld_send_sync(plat_priv, CNSS_BDF_REGDB);
+	}
 
 	if (plat_priv->device_id == QCN7605_DEVICE_ID)
 		goto skip_m3_dnld;
@@ -1364,7 +1368,7 @@ static int cnss_wlfw_server_arrive_hdlr(struct cnss_plat_data *plat_priv)
 		if (ret)
 			goto out;
 
-		ret = cnss_wlfw_bdf_dnld_send_sync(plat_priv);
+		ret = cnss_wlfw_bdf_dnld_send_sync(plat_priv, CNSS_BDF_ELF);
 	}
 out:
 	return ret;

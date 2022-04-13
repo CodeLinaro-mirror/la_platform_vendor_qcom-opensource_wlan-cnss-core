@@ -38,6 +38,14 @@
 #define QCN7605_CALDB_SIZE 614400
 #define HOST_WAKE_GPIO_IN 144
 
+enum cnss_bdf_type {
+    CNSS_BDF_BIN,
+    CNSS_BDF_ELF,
+    CNSS_BDF_FLASH,
+    CNSS_BDF_EEPROM,
+    CNSS_BDF_REGDB,
+};
+
 enum cnss_dev_bus_type {
 	CNSS_BUS_NONE = -1,
 	CNSS_BUS_PCI,

@@ -155,8 +155,8 @@ static inline int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
 int cnss_pci_init(struct cnss_plat_data *plat_priv);
 void cnss_pci_deinit(struct cnss_plat_data *plat_priv);
 int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv);
-void cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv,
-			     char *file_name, char *name);
+void cnss_pci_fw_name_add_path(struct cnss_pci_data *pci_priv,
+			       char *file_name, char *name);
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv);
 int cnss_pci_get_bar_info(struct cnss_pci_data *pci_priv, void __iomem **va,
 			  phys_addr_t *pa);
