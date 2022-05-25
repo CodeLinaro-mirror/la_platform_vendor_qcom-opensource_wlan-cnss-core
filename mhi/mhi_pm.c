@@ -409,7 +409,7 @@ static void mhi_pm_slave_mode_power_off(struct mhi_device_ctxt *mhi_dev_ctxt)
 	}
 	process_disable_transition(MHI_PM_SHUTDOWN_PROCESS, mhi_dev_ctxt);
 
-#ifdef CONFIG_HST_IMX
+#if defined(CONFIG_HST_IMX) && !defined(SUPPORT_WLAN_EN)
 	mhi_pcie_sw_reset(mhi_dev_ctxt);
 #endif
 }

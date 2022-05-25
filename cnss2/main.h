@@ -259,6 +259,9 @@ struct cnss_plat_data {
 	u8 pcie_gen_speed;
 	bool is_converged_dt;
 	struct device_node *dev_node;
+	u32 wlan_en_gpio;
+	u8 wlan_en_active;
+	u8 power_on;
 };
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);

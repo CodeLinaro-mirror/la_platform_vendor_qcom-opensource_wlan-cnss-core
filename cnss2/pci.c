@@ -278,7 +278,110 @@ int cnss_pci_link_down(struct device *dev)
 	return 0;
 }
 EXPORT_SYMBOL(cnss_pci_link_down);
+#elif defined(PCI_RC_SUPPORT_PM)
+int imx6_rc_pm_control(void *endpoint, int op);
+static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
+{
+	struct pci_dev *pci_dev = pci_priv->pci_dev;
 
+	imx6_rc_pm_control(pci_dev, link_up);
+	return 0;
+}
+
+int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
+{
+	int ret = 0;
+
+	if (!pci_priv)
+		return -ENODEV;
+
+	cnss_pr_dbg("Resuming PCI link\n");
+	if (pci_priv->pci_link_state) {
+		cnss_pr_info("PCI link is already resumed!\n");
+		goto out;
+	}
+
+	ret = cnss_set_pci_link(pci_priv, PCI_LINK_UP);
+	if (ret)
+		goto out;
+
+	pci_priv->pci_link_state = PCI_LINK_UP;
+
+	if (pci_priv->pci_dev->device != QCA6174_DEVICE_ID) {
+		ret = pci_set_power_state(pci_priv->pci_dev, PCI_D0);
+		if (ret) {
+			cnss_pr_err("Failed to set D0, err = %d\n", ret);
+			goto out;
+		}
+	}
+
+	ret = cnss_set_pci_config_space(pci_priv, RESTORE_PCI_CONFIG_SPACE);
+	if (ret) {
+		cnss_pr_dbg("fail to restore pci config space\n");
+		goto out;
+	}
+
+	ret = pci_enable_device(pci_priv->pci_dev);
+	if (ret) {
+		cnss_pr_err("Failed to enable PCI device, err = %d\n", ret);
+		goto out;
+	}
+
+	pci_set_master(pci_priv->pci_dev);
+
+	if (pci_priv->pci_link_down_ind)
+		pci_priv->pci_link_down_ind = false;
+
+	cnss_pr_dbg("Resume PCI link done\n");
+	return 0;
+out:
+	cnss_pr_err("error pci resume link\n");
+	return ret;
+}
+
+int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
+{
+	int ret = 0;
+
+	if (!pci_priv)
+		return -ENODEV;
+
+	cnss_pr_dbg("Suspending PCI link\n");
+	if (!pci_priv->pci_link_state) {
+		cnss_pr_info("PCI link is already suspended!\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	pci_clear_master(pci_priv->pci_dev);
+
+	ret = cnss_set_pci_config_space(pci_priv, SAVE_PCI_CONFIG_SPACE);
+	if (ret) {
+		cnss_pr_dbg("fail to save pci config space\n");
+		goto out;
+	}
+
+	pci_disable_device(pci_priv->pci_dev);
+
+	if (pci_priv->pci_dev->device != QCA6174_DEVICE_ID) {
+		ret = pci_set_power_state(pci_priv->pci_dev, PCI_D3hot);
+		if (ret)
+			cnss_pr_err("Failed to set D3Hot, err =  %d\n", ret);
+
+	}
+
+	ret = cnss_set_pci_link(pci_priv, PCI_LINK_DOWN);
+	if (ret)
+		goto out;
+
+	pci_priv->pci_link_state = PCI_LINK_DOWN;
+
+	cnss_pr_dbg("Suspend PCI link done\n");
+	return 0;
+out:
+	cnss_pr_err("error pci suspend link\n");
+	return ret;
+}
 #else /* CONFIG_PCI_MSM */
 static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
 {

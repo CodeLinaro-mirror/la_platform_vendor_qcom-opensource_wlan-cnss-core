@@ -377,6 +377,30 @@ void cnss_power_off_device(struct cnss_plat_data *plat_priv)
 	cnss_vreg_off(plat_priv);
 }
 #endif /* CONFIG_MSM_GVM_QUIN */
+#elif defined(SUPPORT_WLAN_EN)
+int cnss_power_on_device(struct cnss_plat_data *plat_priv)
+{
+	u32 pin = plat_priv->wlan_en_gpio;
+	u8 active = plat_priv->wlan_en_active;
+
+	if (gpio_is_valid(pin) && !plat_priv->power_on) {
+		cnss_pr_info("power_on_device wlan_en %d\n",active);
+		gpio_set_value_cansleep(pin, active);
+		plat_priv->power_on = 1;
+	}
+	return 0;
+}
+void cnss_power_off_device(struct cnss_plat_data *plat_priv)
+{
+	u32 pin = plat_priv->wlan_en_gpio;
+	u8 deactive = !plat_priv->wlan_en_active;
+
+	if (gpio_is_valid(pin) && plat_priv->power_on) {
+		cnss_pr_info("power_off_device wlan_en %d\n", deactive);
+		gpio_set_value_cansleep(pin, deactive);
+		plat_priv->power_on = 0;
+	}
+};
 #else
 int cnss_power_on_device(struct cnss_plat_data *plat_priv) {return 0;}
 void cnss_power_off_device(struct cnss_plat_data *plat_priv) {};

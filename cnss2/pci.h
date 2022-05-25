@@ -137,7 +137,7 @@ static inline int cnss_pci_get_auto_suspended(void *bus_priv)
 	return atomic_read(&pci_priv->auto_suspended);
 }
 
-#ifdef CONFIG_PCI_MSM
+#if defined(CONFIG_PCI_MSM) || defined(PCI_RC_SUPPORT_PM)
 int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv);
 int cnss_resume_pci_link(struct cnss_pci_data *pci_priv);
 #else /* CONFIG_PCI_MSM */

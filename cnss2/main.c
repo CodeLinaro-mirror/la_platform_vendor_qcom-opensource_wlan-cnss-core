@@ -15,6 +15,9 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#if defined(SUPPORT_WLAN_EN)
+#include <linux/of_gpio.h>
+#endif
 #include <linux/pm_wakeup.h>
 #include <linux/rwsem.h>
 #include <linux/suspend.h>
@@ -1055,6 +1058,30 @@ static int cnss_subsys_ramdump(int enable,
 
 	return cnss_bus_dev_ramdump(plat_priv);
 }
+#elif defined(SUPPORT_WLAN_EN)
+static int cnss_get_resources(struct cnss_plat_data *plat_priv)
+{
+	struct platform_device *pdev = plat_priv->plat_dev;
+	struct device *dev = &pdev->dev;
+	struct device_node *node = dev->of_node;
+	enum of_gpio_flags flags;
+	int ret;
+
+	plat_priv->wlan_en_gpio = of_get_named_gpio_flags(node, "wlan-en-gpio", 0, &flags);
+	plat_priv->wlan_en_active = flags ? 0 : 1;
+	ret = devm_gpio_request_one(dev,  plat_priv->wlan_en_gpio,
+				    GPIOF_OUT_INIT_HIGH, "WL_EN");
+	if (ret)
+		cnss_pr_info("gpio %d already requested\n",
+			     plat_priv->wlan_en_gpio);
+
+	cnss_pr_info("wlan_en_gpio = %d flags %d\n", plat_priv->wlan_en_gpio, flags);
+
+	return 0;
+}
+static void cnss_put_resources(struct cnss_plat_data *plat_priv) {}
+static int cnss_register_esoc(struct cnss_plat_data *plat_priv) {return 0;}
+static void cnss_unregister_esoc(struct cnss_plat_data *plat_priv) {}
 #else
 static int cnss_get_resources(struct cnss_plat_data *plat_priv) {return 0;}
 static void cnss_put_resources(struct cnss_plat_data *plat_priv) {}
