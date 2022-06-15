@@ -38,6 +38,7 @@ static int get_time_of_the_day_in_hr_min_sec(char *tbuf, int len)
 	return time_len;
 }
 
+#ifdef DUMP_TO_FS
 #define BUF_SIZE 64
 static int firmware_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			 struct bhie_vec_table *rddm_table,
@@ -235,7 +236,7 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 	return status;
 
 }
-
+#endif /*DUMP_TO_FS*/
 #define MAX_RAMDUMP_TABLE_SIZE  6
 
 typedef struct
@@ -254,6 +255,7 @@ typedef struct
 	ramdump_entry ramdump_table[MAX_RAMDUMP_TABLE_SIZE];
 }ramdump_header_t;
 
+#ifdef DUMP_TO_FS
 void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	int ret = 0;
@@ -303,6 +305,7 @@ void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt)
 		offset += entry->size;
 	}
 }
+#endif
 
 #define FW_DUMP_INFO_FORMAT_STR \
 	"[%s] to write file:none, mem: 0x%p, size: 0x%x\n"
