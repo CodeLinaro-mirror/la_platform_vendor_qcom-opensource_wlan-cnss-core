@@ -101,6 +101,9 @@ uint64_t dynamic_feature_mask = ICNSS_DEFAULT_FEATURE_MASK;
 #define RAMDUMP_NUM_DEVICES		256
 #define ICNSS_RAMDUMP_NAME		"icnss_ramdump"
 
+#define WLAN_EN_TEMP_THRESHOLD		5000
+#define WLAN_EN_DELAY			500
+
 #define ICNSS_RPROC_LEN			10
 static DEFINE_IDA(rd_minor_id);
 
@@ -614,6 +617,33 @@ static void register_early_crash_notifications(struct device *dev)
 	priv->fw_early_crash_irq = irq;
 }
 
+static int icnss_get_temperature(struct icnss_priv *priv, int *temp)
+{
+	struct thermal_zone_device *thermal_dev;
+	const char *tsens;
+	int ret;
+
+	ret = of_property_read_string(priv->pdev->dev.of_node,
+				      "tsens",
+				      &tsens);
+	if (ret)
+		return ret;
+
+	icnss_pr_dbg("Thermal Sensor is %s\n", tsens);
+	thermal_dev = thermal_zone_get_zone_by_name(tsens);
+	if (IS_ERR(thermal_dev)) {
+		icnss_pr_err("Fail to get thermal zone. ret: %d",
+			     PTR_ERR(thermal_dev));
+		return PTR_ERR(thermal_dev);
+	}
+
+	ret = thermal_zone_get_temp(thermal_dev, temp);
+	if (ret)
+		icnss_pr_err("Fail to get temperature. ret: %d", ret);
+
+	return ret;
+}
+
 static irqreturn_t fw_soc_wake_ack_handler(int irq, void *ctx)
 {
 	struct icnss_priv *priv = ctx;
@@ -751,6 +781,7 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 						 void *data)
 {
 	int ret = 0;
+	int temp = 0;
 	bool ignore_assert = false;
 
 	if (!priv)
@@ -784,6 +815,12 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 	}
 
 	if (priv->device_id == WCN6750_DEVICE_ID) {
+		if (!icnss_get_temperature(priv, &temp)) {
+			icnss_pr_dbg("Temperature: %d\n", temp);
+			if (temp < WLAN_EN_TEMP_THRESHOLD)
+				priv->wlan_en_delay_ms = WLAN_EN_DELAY;
+		}
+
 		ret = wlfw_host_cap_send_sync(priv);
 		if (ret < 0)
 			goto fail;
@@ -1050,7 +1087,7 @@ static int icnss_driver_event_fw_ready_ind(struct icnss_priv *priv, void *data)
 	if (test_bit(ICNSS_PD_RESTART, &priv->state)) {
 		ret = icnss_pd_restart_complete(priv);
 	} else {
-		if (priv->device_id == WCN6750_DEVICE_ID)
+		if (priv->wpss_supported)
 			icnss_setup_dms_mac(priv);
 		ret = icnss_call_driver_probe(priv);
 	}
@@ -2129,7 +2166,7 @@ static int icnss_modem_ssr_register_notifier(struct icnss_priv *priv)
 	priv->modem_ssr_nb.priority = 1;
 
 	priv->modem_notify_handler =
-		qcom_register_ssr_notifier("modem", &priv->modem_ssr_nb);
+		qcom_register_ssr_notifier("mpss", &priv->modem_ssr_nb);
 
 	if (IS_ERR(priv->modem_notify_handler)) {
 		ret = PTR_ERR(priv->modem_notify_handler);
@@ -2431,7 +2468,7 @@ static int icnss_enable_recovery(struct icnss_priv *priv)
 	if (ret)
 		return ret;
 
-	if (priv->device_id == WCN6750_DEVICE_ID) {
+	if (priv->wpss_supported) {
 		icnss_wpss_early_ssr_register_notifier(priv);
 		icnss_wpss_ssr_register_notifier(priv);
 		return 0;
@@ -2455,11 +2492,6 @@ enable_pdr:
 static int icnss_dev_id_match(struct icnss_priv *priv,
 			      struct device_info *dev_info)
 {
-	if (!dev_info) {
-		icnss_pr_info("WLAN driver devinfo is null, Continue driver loading");
-		return 1;
-	}
-
 	while (dev_info->device_id) {
 		if (priv->device_id == dev_info->device_id)
 			return 1;
@@ -2660,6 +2692,11 @@ int __icnss_register_driver(struct icnss_driver_ops *ops,
 		icnss_pr_err("Driver already registered\n");
 		ret = -EEXIST;
 		goto out;
+	}
+
+	if (!ops->dev_info) {
+		icnss_pr_err("WLAN driver devinfo is null, Reject wlan driver loading");
+		return -EINVAL;
 	}
 
 	if (!icnss_dev_id_match(priv, ops->dev_info)) {
@@ -3175,7 +3212,7 @@ int icnss_wlan_enable(struct device *dev, struct icnss_wlan_enable_cfg *config,
 		return -EINVAL;
 	}
 
-	if (priv->device_id == WCN6750_DEVICE_ID &&
+	if (priv->wpss_supported &&
 	    !priv->dms.nv_mac_not_prov && !priv->dms.mac_valid)
 		icnss_setup_dms_mac(priv);
 
@@ -3631,7 +3668,7 @@ static ssize_t wpss_boot_store(struct device *dev,
 	struct icnss_priv *priv = dev_get_drvdata(dev);
 	int wpss_rproc = 0;
 
-	if (priv->device_id != WCN6750_DEVICE_ID)
+	if (!priv->wpss_supported)
 		return count;
 
 	if (sscanf(buf, "%du", &wpss_rproc) != 1) {
@@ -4081,6 +4118,11 @@ static void icnss_init_control_params(struct icnss_priv *priv)
 	priv->ctrl_params.quirks = ICNSS_QUIRKS_DEFAULT;
 	priv->ctrl_params.bdf_type = ICNSS_BDF_TYPE_DEFAULT;
 
+	if (priv->device_id == WCN6750_DEVICE_ID ||
+	    of_property_read_bool(priv->pdev->dev.of_node,
+				  "wpss-support-enable"))
+		priv->wpss_supported = true;
+
 	if (of_property_read_bool(priv->pdev->dev.of_node,
 				  "bdf-download-support"))
 		priv->bdf_download_support = true;
@@ -4210,21 +4252,10 @@ static int icnss_probe(struct platform_device *pdev)
 	INIT_WORK(&priv->event_work, icnss_driver_event_work);
 	INIT_LIST_HEAD(&priv->event_list);
 
-	priv->soc_wake_wq = alloc_workqueue("icnss_soc_wake_event",
-					    WQ_UNBOUND|WQ_HIGHPRI, 1);
-	if (!priv->soc_wake_wq) {
-		icnss_pr_err("Soc wake Workqueue creation failed\n");
-		ret = -EFAULT;
-		goto out_destroy_wq;
-	}
-
-	INIT_WORK(&priv->soc_wake_msg_work, icnss_soc_wake_msg_work);
-	INIT_LIST_HEAD(&priv->soc_wake_msg_list);
-
 	ret = icnss_register_fw_service(priv);
 	if (ret < 0) {
 		icnss_pr_err("fw service registration failed: %d\n", ret);
-		goto out_destroy_soc_wq;
+		goto out_destroy_wq;
 	}
 
 	icnss_enable_recovery(priv);
@@ -4243,9 +4274,17 @@ static int icnss_probe(struct platform_device *pdev)
 	init_completion(&priv->unblock_shutdown);
 
 	if (priv->device_id == WCN6750_DEVICE_ID) {
-		ret = icnss_dms_init(priv);
-		if (ret)
-			icnss_pr_err("ICNSS DMS init failed %d\n", ret);
+		priv->soc_wake_wq = alloc_workqueue("icnss_soc_wake_event",
+						    WQ_UNBOUND|WQ_HIGHPRI, 1);
+		if (!priv->soc_wake_wq) {
+			icnss_pr_err("Soc wake Workqueue creation failed\n");
+			ret = -EFAULT;
+			goto out_unregister_fw_service;
+		}
+
+		INIT_WORK(&priv->soc_wake_msg_work, icnss_soc_wake_msg_work);
+		INIT_LIST_HEAD(&priv->soc_wake_msg_list);
+
 		ret = icnss_genl_init();
 		if (ret < 0)
 			icnss_pr_err("ICNSS genl init failed %d\n", ret);
@@ -4255,11 +4294,17 @@ static int icnss_probe(struct platform_device *pdev)
 		icnss_aop_mbox_init(priv);
 		set_bit(ICNSS_COLD_BOOT_CAL, &priv->state);
 		priv->bdf_download_support = true;
+		register_trace_android_vh_rproc_recovery_set(rproc_restart_level_notifier, NULL);
+	}
+
+	if (priv->wpss_supported) {
+		ret = icnss_dms_init(priv);
+		if (ret)
+			icnss_pr_err("ICNSS DMS init failed %d\n", ret);
 		priv->use_nv_mac = icnss_use_nv_mac(priv);
 		icnss_pr_dbg("NV MAC feature is %s\n",
 			     priv->use_nv_mac ? "Mandatory":"Not Mandatory");
 		INIT_WORK(&wpss_loader, icnss_wpss_load);
-		register_trace_android_vh_rproc_recovery_set(rproc_restart_level_notifier, NULL);
 	}
 
 	INIT_LIST_HEAD(&priv->icnss_tcdev_list);
@@ -4268,8 +4313,8 @@ static int icnss_probe(struct platform_device *pdev)
 
 	return 0;
 
-out_destroy_soc_wq:
-	destroy_workqueue(priv->soc_wake_wq);
+out_unregister_fw_service:
+	icnss_unregister_fw_service(priv);
 out_destroy_wq:
 	destroy_workqueue(priv->event_wq);
 smmu_cleanup:
@@ -4300,16 +4345,6 @@ static int icnss_remove(struct platform_device *pdev)
 
 	icnss_pr_info("Removing driver: state: 0x%lx\n", priv->state);
 
-	if (priv->device_id == WCN6750_DEVICE_ID) {
-		icnss_dms_deinit(priv);
-		icnss_genl_exit();
-		icnss_runtime_pm_deinit(priv);
-		if (!IS_ERR_OR_NULL(priv->mbox_chan))
-			mbox_free_channel(priv->mbox_chan);
-		unregister_trace_android_vh_rproc_recovery_set(rproc_restart_level_notifier, NULL);
-		complete_all(&priv->smp2p_soc_wake_wait);
-	}
-
 	device_init_wakeup(&priv->pdev->dev, false);
 
 	icnss_debugfs_destroy(priv);
@@ -4320,18 +4355,29 @@ static int icnss_remove(struct platform_device *pdev)
 
 	icnss_destroy_ramdump_device(priv->msa0_dump_dev);
 
-	if (priv->device_id == WCN6750_DEVICE_ID) {
+	if (priv->wpss_supported) {
+		icnss_dms_deinit(priv);
 		icnss_wpss_early_ssr_unregister_notifier(priv);
 		icnss_wpss_ssr_unregister_notifier(priv);
-		rproc_put(priv->rproc);
+	} else {
+		icnss_modem_ssr_unregister_notifier(priv);
+		icnss_pdr_unregister_notifier(priv);
+	}
+
+	if (priv->device_id == WCN6750_DEVICE_ID) {
+		icnss_genl_exit();
+		icnss_runtime_pm_deinit(priv);
+		if (!IS_ERR_OR_NULL(priv->mbox_chan))
+			mbox_free_channel(priv->mbox_chan);
+		unregister_trace_android_vh_rproc_recovery_set(rproc_restart_level_notifier, NULL);
+		complete_all(&priv->smp2p_soc_wake_wait);
 		icnss_destroy_ramdump_device(priv->m3_dump_phyareg);
 		icnss_destroy_ramdump_device(priv->m3_dump_phydbg);
 		icnss_destroy_ramdump_device(priv->m3_dump_wmac0reg);
 		icnss_destroy_ramdump_device(priv->m3_dump_wcssdbg);
 		icnss_destroy_ramdump_device(priv->m3_dump_phyapdmem);
-	} else {
-		icnss_modem_ssr_unregister_notifier(priv);
-		icnss_pdr_unregister_notifier(priv);
+		if (priv->soc_wake_wq)
+			destroy_workqueue(priv->soc_wake_wq);
 	}
 
 	class_destroy(priv->icnss_ramdump_class);
@@ -4340,9 +4386,6 @@ static int icnss_remove(struct platform_device *pdev)
 	icnss_unregister_fw_service(priv);
 	if (priv->event_wq)
 		destroy_workqueue(priv->event_wq);
-
-	if (priv->soc_wake_wq)
-		destroy_workqueue(priv->soc_wake_wq);
 
 	priv->iommu_domain = NULL;
 
