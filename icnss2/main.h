@@ -10,6 +10,7 @@
 #include <linux/kobject.h>
 #include <linux/platform_device.h>
 #include <linux/ipc_logging.h>
+#include <linux/power_supply.h>
 #ifdef CONFIG_CNSS_OUT_OF_TREE
 #include "icnss2.h"
 #else
@@ -159,6 +160,11 @@ struct icnss_clk_cfg {
 	const char *name;
 	u32 freq;
 	u32 required;
+};
+
+struct icnss_battery_level {
+	int lower_battery_threshold;
+	int ldo_voltage;
 };
 
 struct icnss_clk_info {
@@ -470,12 +476,19 @@ struct icnss_priv {
 	struct mbox_client mbox_client_data;
 	struct mbox_chan *mbox_chan;
 	u32 wlan_en_delay_ms;
+	u32 wlan_en_delay_ms_user;
 	struct class *icnss_ramdump_class;
 	dev_t icnss_ramdump_dev;
 	struct completion smp2p_soc_wake_wait;
 	uint32_t fw_soc_wake_ack_irq;
 	char foundry_name;
 	bool bdf_download_support;
+	bool psf_supported;
+	struct notifier_block psf_nb;
+	struct power_supply *batt_psy;
+	int last_updated_voltage;
+	struct work_struct soc_update_work;
+	struct workqueue_struct *soc_update_wq;
 	unsigned long device_config;
 	bool wpss_supported;
 };

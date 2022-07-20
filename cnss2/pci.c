@@ -43,6 +43,7 @@
 #define QCA6390_PATH_PREFIX		"qca6390/"
 #define QCA6490_PATH_PREFIX		"qca6490/"
 #define KIWI_PATH_PREFIX		"kiwi/"
+#define MANGO_PATH_PREFIX		"mango/"
 #define DEFAULT_PHY_M3_FILE_NAME	"m3.bin"
 #define DEFAULT_PHY_UCODE_FILE_NAME	"phy_ucode.elf"
 #define PHY_UCODE_V2_FILE_NAME		"phy_ucode20.elf"
@@ -174,6 +175,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.doorbell_mode_switch = false,
 		.auto_queue = true,
 	},
+/* All MHI satellite config to be at the end of data struct */
 #if IS_ENABLED(CONFIG_MHI_SATELLITE)
 	{
 		.num = 50,
@@ -288,7 +290,15 @@ static const struct mhi_event_config cnss_mhi_events[] = {
 #endif
 };
 
-static const struct mhi_controller_config cnss_mhi_config = {
+#if IS_ENABLED(CONFIG_MHI_SATELLITE)
+#define CNSS_MHI_SATELLITE_CH_CFG_COUNT 4
+#define CNSS_MHI_SATELLITE_EVT_COUNT 1
+#else
+#define CNSS_MHI_SATELLITE_CH_CFG_COUNT 0
+#define CNSS_MHI_SATELLITE_EVT_COUNT 0
+#endif
+
+static const struct mhi_controller_config cnss_mhi_config_default = {
 #if IS_ENABLED(CONFIG_MHI_SATELLITE)
 	.max_channels = 72,
 #else
@@ -300,6 +310,20 @@ static const struct mhi_controller_config cnss_mhi_config = {
 	.num_channels = ARRAY_SIZE(cnss_mhi_channels),
 	.ch_cfg = cnss_mhi_channels,
 	.num_events = ARRAY_SIZE(cnss_mhi_events),
+	.event_cfg = cnss_mhi_events,
+	.m2_no_db = true,
+};
+
+static const struct mhi_controller_config cnss_mhi_config_no_satellite = {
+	.max_channels = 32,
+	.timeout_ms = 10000,
+	.use_bounce_buf = false,
+	.buf_len = 0x8000,
+	.num_channels = ARRAY_SIZE(cnss_mhi_channels) -
+			CNSS_MHI_SATELLITE_CH_CFG_COUNT,
+	.ch_cfg = cnss_mhi_channels,
+	.num_events = ARRAY_SIZE(cnss_mhi_events) -
+			CNSS_MHI_SATELLITE_EVT_COUNT,
 	.event_cfg = cnss_mhi_events,
 	.m2_no_db = true,
 };
@@ -935,6 +959,8 @@ static int cnss_setup_bus_bandwidth(struct cnss_plat_data *plat_priv,
 		return -EINVAL;
 	}
 
+	cnss_pr_vdbg("Bandwidth vote to %d, save %d\n", bw, save);
+
 	list_for_each_entry(bus_bw_info, &plat_priv->icc.list_head, list) {
 		ret = icc_set_bw(bus_bw_info->icc_path,
 				 bus_bw_info->cfg_table[bw].avg_bw,
@@ -1239,6 +1265,7 @@ int cnss_pci_recover_link_down(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		break;
 	default:
 		return -EOPNOTSUPP;
@@ -1448,6 +1475,12 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		pbl_log_sram_start = KIWI_DEBUG_PBL_LOG_SRAM_START;
 		pbl_log_max_size = KIWI_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
 		sbl_log_max_size = KIWI_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
+		break;
+	case MANGO_DEVICE_ID:
+		pbl_bootstrap_status_reg = MANGO_PBL_BOOTSTRAP_STATUS;
+		pbl_log_sram_start = MANGO_DEBUG_PBL_LOG_SRAM_START;
+		pbl_log_max_size = MANGO_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
+		sbl_log_max_size = MANGO_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
 		break;
 	default:
 		return;
@@ -1943,6 +1976,7 @@ static int cnss_pci_get_device_timestamp(struct cnss_pci_data *pci_priv,
 
 	switch (pci_priv->device_id) {
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		cnss_pci_reg_read(pci_priv, PCIE_MHI_TIME_LOW, &low);
 		cnss_pci_reg_read(pci_priv, PCIE_MHI_TIME_HIGH, &high);
 		break;
@@ -1963,6 +1997,7 @@ static void cnss_pci_enable_time_sync_counter(struct cnss_pci_data *pci_priv)
 {
 	switch (pci_priv->device_id) {
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		return;
 	default:
 		break;
@@ -1976,6 +2011,7 @@ static void cnss_pci_clear_time_sync_counter(struct cnss_pci_data *pci_priv)
 {
 	switch (pci_priv->device_id) {
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		return;
 	default:
 		break;
@@ -1985,15 +2021,21 @@ static void cnss_pci_clear_time_sync_counter(struct cnss_pci_data *pci_priv)
 			   TIME_SYNC_CLEAR);
 }
 
+
 static void cnss_pci_time_sync_reg_update(struct cnss_pci_data *pci_priv,
 					  u32 low, u32 high)
 {
-	u32 time_reg_low = PCIE_SHADOW_REG_VALUE_0;
-	u32 time_reg_high = PCIE_SHADOW_REG_VALUE_1;
+	u32 time_reg_low;
+	u32 time_reg_high;
 
 	switch (pci_priv->device_id) {
 	case KIWI_DEVICE_ID:
-		/* Forward compatibility */
+	case MANGO_DEVICE_ID:
+		/* Use the next two shadow registers after host's usage */
+		time_reg_low = PCIE_SHADOW_REG_VALUE_0 +
+				(pci_priv->plat_priv->num_shadow_regs_v3 *
+				 SHADOW_REG_LEN_BYTES);
+		time_reg_high = time_reg_low + SHADOW_REG_LEN_BYTES;
 		break;
 	default:
 		time_reg_low = PCIE_SHADOW_REG_VALUE_34;
@@ -2105,6 +2147,7 @@ static int cnss_pci_start_time_sync_update(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		break;
 	default:
 		return -EOPNOTSUPP;
@@ -2126,6 +2169,7 @@ static void cnss_pci_stop_time_sync_update(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		break;
 	default:
 		return;
@@ -2736,6 +2780,7 @@ int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		ret = cnss_qca6290_powerup(pci_priv);
 		break;
 	default:
@@ -2764,6 +2809,7 @@ int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		ret = cnss_qca6290_shutdown(pci_priv);
 		break;
 	default:
@@ -2792,6 +2838,7 @@ int cnss_pci_dev_crash_shutdown(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		cnss_qca6290_crash_shutdown(pci_priv);
 		break;
 	default:
@@ -2820,6 +2867,7 @@ int cnss_pci_dev_ramdump(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		ret = cnss_qca6290_ramdump(pci_priv);
 		break;
 	default:
@@ -2910,6 +2958,24 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 	if (!plat_priv) {
 		cnss_pr_buf("plat_priv is not ready for register driver\n");
 		return -EAGAIN;
+	}
+
+	if (test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state)) {
+		while (id_table && id_table->device) {
+			if (plat_priv->device_id == id_table->device) {
+				if (plat_priv->device_id == KIWI_DEVICE_ID &&
+				    driver_ops->chip_version != 2) {
+					cnss_pr_err("WLAN HW disabled. kiwi_v2 only supported\n");
+					return -ENODEV;
+				}
+				cnss_pr_info("WLAN register driver deferred for device ID: 0x%x due to HW disable\n",
+					     id_table->device);
+				plat_priv->driver_ops = driver_ops;
+				return 0;
+			}
+			id_table++;
+		}
+		return -ENODEV;
 	}
 
 	if (!test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state)) {
@@ -3687,6 +3753,7 @@ int cnss_pci_force_wake_request_sync(struct device *dev, int timeout_us)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		break;
 	default:
 		return 0;
@@ -3728,6 +3795,7 @@ int cnss_pci_force_wake_request(struct device *dev)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		break;
 	default:
 		return 0;
@@ -3763,6 +3831,7 @@ int cnss_pci_is_device_awake(struct device *dev)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		break;
 	default:
 		return 0;
@@ -3790,6 +3859,7 @@ int cnss_pci_force_wake_release(struct device *dev)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		break;
 	default:
 		return 0;
@@ -3983,6 +4053,7 @@ int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 		phy_filename = DEFAULT_PHY_M3_FILE_NAME;
 		break;
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		switch (plat_priv->device_version.major_version) {
 		case FW_V2_NUMBER:
 			phy_filename = PHY_UCODE_V2_FILE_NAME;
@@ -4442,6 +4513,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_36_BIT;
 		break;
 	default:
@@ -4760,6 +4832,7 @@ static void cnss_pci_send_hang_event(struct cnss_pci_data *pci_priv)
 		}
 		break;
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		offset = plat_priv->hang_data_addr_offset;
 		length = plat_priv->hang_event_data_len;
 		break;
@@ -4852,7 +4925,6 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_misc_reg(pci_priv);
 	cnss_pci_dump_shadow_reg(pci_priv);
-	cnss_pci_dump_qdss_reg(pci_priv);
 
 	ret = mhi_download_rddm_image(pci_priv->mhi_ctrl, in_panic);
 	if (ret) {
@@ -4868,6 +4940,8 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	rddm_image = pci_priv->mhi_ctrl->rddm_image;
 	dump_data->nentries = 0;
 
+	if (plat_priv->qdss_mem_seg_len)
+		cnss_pci_dump_qdss_reg(pci_priv);
 	cnss_mhi_dump_sfr(pci_priv);
 
 	if (!dump_seg) {
@@ -5020,6 +5094,10 @@ void cnss_pci_add_fw_prefix_name(struct cnss_pci_data *pci_priv,
 		scnprintf(prefix_name, MAX_FIRMWARE_NAME_LEN,
 			  KIWI_PATH_PREFIX "%s", name);
 		break;
+	case MANGO_DEVICE_ID:
+		scnprintf(prefix_name, MAX_FIRMWARE_NAME_LEN,
+			  MANGO_PATH_PREFIX "%s", name);
+		break;
 	default:
 		scnprintf(prefix_name, MAX_FIRMWARE_NAME_LEN, "%s", name);
 		break;
@@ -5031,21 +5109,6 @@ void cnss_pci_add_fw_prefix_name(struct cnss_pci_data *pci_priv,
 static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
-	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
-
-	plat_priv->device_version.family_number = mhi_ctrl->family_number;
-	plat_priv->device_version.device_number = mhi_ctrl->device_number;
-	plat_priv->device_version.major_version = mhi_ctrl->major_version;
-	plat_priv->device_version.minor_version = mhi_ctrl->minor_version;
-
-	cnss_pr_dbg("Get device version info, family number: 0x%x, device number: 0x%x, major version: 0x%x, minor version: 0x%x\n",
-		    plat_priv->device_version.family_number,
-		    plat_priv->device_version.device_number,
-		    plat_priv->device_version.major_version,
-		    plat_priv->device_version.minor_version);
-
-	/* Only keep lower 4 bits as real device major version */
-	plat_priv->device_version.major_version &= DEVICE_MAJOR_VERSION_MASK;
 
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
@@ -5081,6 +5144,7 @@ static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 		}
 		break;
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		switch (plat_priv->device_version.major_version) {
 		case FW_V2_NUMBER:
 			/*
@@ -5391,6 +5455,33 @@ static void cnss_mhi_write_reg(struct mhi_controller *mhi_ctrl,
 	writel_relaxed(val, addr);
 }
 
+static int cnss_get_mhi_soc_info(struct cnss_plat_data *plat_priv,
+				 struct mhi_controller *mhi_ctrl)
+{
+	int ret = 0;
+
+	ret = mhi_get_soc_info(mhi_ctrl);
+	if (ret)
+		goto exit;
+
+	plat_priv->device_version.family_number = mhi_ctrl->family_number;
+	plat_priv->device_version.device_number = mhi_ctrl->device_number;
+	plat_priv->device_version.major_version = mhi_ctrl->major_version;
+	plat_priv->device_version.minor_version = mhi_ctrl->minor_version;
+
+	cnss_pr_dbg("Get device version info, family number: 0x%x, device number: 0x%x, major version: 0x%x, minor version: 0x%x\n",
+		    plat_priv->device_version.family_number,
+		    plat_priv->device_version.device_number,
+		    plat_priv->device_version.major_version,
+		    plat_priv->device_version.minor_version);
+
+	/* Only keep lower 4 bits as real device major version */
+	plat_priv->device_version.major_version &= DEVICE_MAJOR_VERSION_MASK;
+
+exit:
+	return ret;
+}
+
 static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -5398,6 +5489,8 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
 	phys_addr_t bar_start;
+	const struct mhi_controller_config *cnss_mhi_config =
+						&cnss_mhi_config_default;
 
 	if (pci_priv->device_id == QCA6174_DEVICE_ID)
 		return 0;
@@ -5450,7 +5543,17 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->seg_len = SZ_512K;
 	mhi_ctrl->fbc_download = true;
 
-	ret = mhi_register_controller(mhi_ctrl, &cnss_mhi_config);
+	ret = cnss_get_mhi_soc_info(plat_priv, mhi_ctrl);
+	if (ret)
+		goto free_mhi_irq;
+
+	/* Satellite config only supported on KIWI V2 and later chipset */
+	if (plat_priv->device_id <= QCA6490_DEVICE_ID ||
+	    (plat_priv->device_id == KIWI_DEVICE_ID &&
+	     plat_priv->device_version.major_version == 1))
+		cnss_mhi_config = &cnss_mhi_config_no_satellite;
+
+	ret = mhi_register_controller(mhi_ctrl, cnss_mhi_config);
 	if (ret) {
 		cnss_pr_err("Failed to register to MHI bus, err = %d\n", ret);
 		goto free_mhi_irq;
@@ -5713,6 +5816,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, false, false);
 		timer_setup(&pci_priv->dev_rddm_timer,
 			    cnss_dev_rddm_timeout_hdlr, 0);
@@ -5778,6 +5882,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		cnss_pci_wake_gpio_deinit(pci_priv);
 		del_timer(&pci_priv->boot_debug_timer);
 		del_timer(&pci_priv->dev_rddm_timer);
@@ -5806,6 +5911,7 @@ static const struct pci_device_id cnss_pci_id_table[] = {
 	{ QCA6390_VENDOR_ID, QCA6390_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCA6490_VENDOR_ID, QCA6490_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ KIWI_VENDOR_ID, KIWI_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
+	{ MANGO_VENDOR_ID, MANGO_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, cnss_pci_id_table);
