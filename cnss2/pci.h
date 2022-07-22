@@ -138,9 +138,21 @@ static inline int cnss_pci_get_auto_suspended(void *bus_priv)
 
 	return atomic_read(&pci_priv->auto_suspended);
 }
-
+#ifdef PCI_SUPPORT_SUSPEND_RESUME
 int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv);
 int cnss_resume_pci_link(struct cnss_pci_data *pci_priv);
+#else
+static inline int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
+{
+	return 0;
+}
+
+static inline int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
+{
+	return 0;
+}
+
+#endif
 int cnss_pci_init(struct cnss_plat_data *plat_priv);
 void cnss_pci_deinit(struct cnss_plat_data *plat_priv);
 int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv);

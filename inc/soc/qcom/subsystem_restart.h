@@ -21,8 +21,8 @@ struct subsys_device;
 extern struct bus_type subsys_bus_type;
 
 enum {
-	RESET_SOC = 0,
-	RESET_SUBSYS_COUPLED,
+	RESET_SUBSYS_COUPLED = 0,
+	RESET_SOC = 1,
 	RESET_LEVEL_MAX
 };
 

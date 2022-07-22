@@ -322,10 +322,13 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 
 	if (test_bit(QMI_BYPASS, &plat_priv->ctrl_params.quirks))
 		return 0;
-	cnss_pr_info("cnss_wlan_disable: not send mode off when PCIE global reset is used\n");
 
+#ifdef SUPPORT_WLAN_EN	
+	return cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
+#else
+	cnss_pr_info("cnss_wlan_disable: not send mode off when PCIE global reset is used\n");
 	return 0;
-	//return cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
+#endif
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
 

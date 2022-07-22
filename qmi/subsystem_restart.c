@@ -120,8 +120,8 @@ static const char * const subsys_states[] = {
 };
 
 static const char * const restart_levels[] = {
-	[RESET_SOC] = "SYSTEM",
 	[RESET_SUBSYS_COUPLED] = "RELATED",
+	[RESET_SOC] = "SYSTEM",
 };
 
 /**
