@@ -2157,6 +2157,8 @@ static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 	}
 
 	pci_clear_master(pci_dev);
+	pci_load_and_free_saved_state(pci_dev, &pci_priv->saved_state);
+	pci_load_and_free_saved_state(pci_dev, &pci_priv->default_state);
 	pci_release_region(pci_dev, PCI_BAR_NUM);
 	if (pci_is_enabled(pci_dev))
 		pci_disable_device(pci_dev);
