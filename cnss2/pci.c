@@ -2993,6 +2993,8 @@ static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 	}
 
 	pci_clear_master(pci_dev);
+    pci_load_and_free_saved_state(pci_dev, &pci_priv->saved_state);
+    pci_load_and_free_saved_state(pci_dev, &pci_priv->default_state);
 	pci_release_region(pci_dev, PCI_BAR_NUM);
 	if (pci_is_enabled(pci_dev))
 		pci_disable_device(pci_dev);
@@ -3560,6 +3562,7 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	ipc_log_context_destroy(mhi_ctrl->cntrl_log_buf);
 #endif
 	kfree(mhi_ctrl->irq);
+	mhi_free_controller(mhi_ctrl);
 }
 
 static int cnss_pci_check_mhi_state_bit(struct cnss_pci_data *pci_priv,
@@ -4094,8 +4097,6 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	default:
 		break;
 	}
-
-	pci_load_and_free_saved_state(pci_dev, &pci_priv->saved_state);
 
 	cnss_pci_disable_bus(pci_priv);
 	cnss_dereg_pci_event(pci_priv);
