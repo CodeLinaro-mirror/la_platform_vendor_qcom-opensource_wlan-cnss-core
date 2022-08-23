@@ -41,6 +41,8 @@
 #define HW_STATE_UID 0x108
 #define HW_OP_GET_STATE 1
 #define HW_WIFI_UID 0x508
+#define FEATURE_NOT_SUPPORTED 12
+#define PERIPHERAL_NOT_FOUND 10
 #endif
 
 #define CNSS_DUMP_FORMAT_VER		0x11
@@ -67,6 +69,7 @@
 #endif
 #define CNSS_BDF_TYPE_DEFAULT		CNSS_BDF_ELF
 #define CNSS_TIME_SYNC_PERIOD_DEFAULT	900000
+#define CNSS_MIN_TIME_SYNC_PERIOD	2000
 #define CNSS_DMS_QMI_CONNECTION_WAIT_MS 50
 #define CNSS_DMS_QMI_CONNECTION_WAIT_RETRY 200
 #define CNSS_DAEMON_CONNECT_TIMEOUT_MS  30000
@@ -155,6 +158,22 @@ int cnss_get_mem_seg_count(enum cnss_remote_mem_type type, u32 *seg)
 	return 0;
 }
 EXPORT_SYMBOL(cnss_get_mem_seg_count);
+
+/**
+ * cnss_get_wifi_kobject -return wifi kobject
+ * Return: Null, to maintain driver comnpatibilty
+ */
+struct kobject *cnss_get_wifi_kobj(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv;
+
+	plat_priv = cnss_get_plat_priv(NULL);
+	if (!plat_priv)
+		return NULL;
+
+	return plat_priv->wifi_kobj;
+}
+EXPORT_SYMBOL(cnss_get_wifi_kobj);
 
 /**
  * cnss_get_mem_segment_info - Get memory info of different type
@@ -490,9 +509,10 @@ int cnss_set_pcie_gen_speed(struct device *dev, u8 pcie_gen_speed)
 	if (!plat_priv)
 		return -EINVAL;
 
-	if (plat_priv->device_id != QCA6490_DEVICE_ID ||
-	    !plat_priv->fw_pcie_gen_switch)
+	if (!plat_priv->fw_pcie_gen_switch) {
+		cnss_pr_err("Firmware does not support PCIe gen switch\n");
 		return -EOPNOTSUPP;
+	}
 
 	if (pcie_gen_speed < QMI_PCIE_GEN_SPEED_1_V01 ||
 	    pcie_gen_speed > QMI_PCIE_GEN_SPEED_3_V01)
@@ -715,6 +735,11 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 
 	if (!plat_priv)
 		return -ENODEV;
+
+	if (test_bit(CNSS_IN_REBOOT, &plat_priv->driver_state)) {
+		cnss_pr_err("Reboot is in progress, ignore FW ready\n");
+		return -EINVAL;
+	}
 
 	cnss_pr_dbg("Processing FW Init Done..\n");
 	del_timer(&plat_priv->fw_boot_timer);
@@ -1065,6 +1090,16 @@ int cnss_idle_restart(struct device *dev)
 		del_timer(&plat_priv->fw_boot_timer);
 		ret = -EINVAL;
 		goto out;
+	}
+
+	/* In non-DRV mode, remove MHI satellite configuration. Switching to
+	 * non-DRV is supported only once after device reboots and before wifi
+	 * is turned on. We do not allow switching back to DRV.
+	 * To bring device back into DRV, user needs to reboot device.
+	 */
+	if (test_bit(DISABLE_DRV, &plat_priv->ctrl_params.quirks)) {
+		cnss_pr_dbg("DRV is disabled\n");
+		cnss_bus_disable_mhi_satellite_cfg(plat_priv);
 	}
 
 	mutex_unlock(&plat_priv->driver_ops_lock);
@@ -3372,6 +3407,37 @@ static ssize_t recovery_show(struct device *dev,
 	return curr_len;
 }
 
+static ssize_t time_sync_period_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%u ms\n",
+			plat_priv->ctrl_params.time_sync_period);
+}
+
+static ssize_t time_sync_period_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
+	unsigned int time_sync_period = 0;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (sscanf(buf, "%du", &time_sync_period) != 1) {
+		cnss_pr_err("Invalid time sync sysfs command\n");
+		return -EINVAL;
+	}
+
+	if (time_sync_period >= CNSS_MIN_TIME_SYNC_PERIOD)
+		cnss_bus_update_time_sync_period(plat_priv, time_sync_period);
+
+	return count;
+}
+
 static ssize_t recovery_store(struct device *dev,
 			      struct device_attribute *attr,
 			      const char *buf, size_t count)
@@ -3546,6 +3612,7 @@ static DEVICE_ATTR_WO(qdss_trace_stop);
 static DEVICE_ATTR_WO(qdss_conf_download);
 static DEVICE_ATTR_WO(hw_trace_override);
 static DEVICE_ATTR_WO(charger_mode);
+static DEVICE_ATTR_RW(time_sync_period);
 
 static struct attribute *cnss_attrs[] = {
 	&dev_attr_fs_ready.attr,
@@ -3557,6 +3624,7 @@ static struct attribute *cnss_attrs[] = {
 	&dev_attr_qdss_conf_download.attr,
 	&dev_attr_hw_trace_override.attr,
 	&dev_attr_charger_mode.attr,
+	&dev_attr_time_sync_period.attr,
 	NULL,
 };
 
@@ -3679,6 +3747,10 @@ int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 	ret = IClientEnv_open(client_env, HW_STATE_UID, &app_object);
 	if (ret) {
 		cnss_pr_dbg("Failed to get app_object, ret: %d\n",  ret);
+		if (ret == FEATURE_NOT_SUPPORTED) {
+			ret = 0; /* Do not Assert */
+			cnss_pr_dbg("Secure HW feature not supported\n");
+		}
 		goto exit_release_clientenv;
 	}
 
@@ -3688,8 +3760,13 @@ int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 			    ObjectCounts_pack(1, 1, 0, 0));
 
 	cnss_pr_dbg("SMC invoke ret: %d state: %d\n", ret, state);
-	if (ret)
+	if (ret) {
+		if (ret == PERIPHERAL_NOT_FOUND) {
+			ret = 0; /* Do not Assert */
+			cnss_pr_dbg("Secure HW mode is not updated. Peripheral not found\n");
+		}
 		goto exit_release_app_obj;
+	}
 
 	if (state == 1)
 		set_bit(CNSS_WLAN_HW_DISABLED,
@@ -3763,7 +3840,9 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("QMI IPC connection call back register failed, err = %d\n",
 			    ret);
 
-	plat_priv->sram_dump = kcalloc(SRAM_DUMP_SIZE, 1, GFP_KERNEL);
+	if (plat_priv->device_id == QCA6490_DEVICE_ID &&
+	    cnss_get_host_build_type() == QMI_HOST_BUILD_TYPE_PRIMARY_V01)
+		plat_priv->sram_dump = kcalloc(SRAM_DUMP_SIZE, 1, GFP_KERNEL);
 
 	return 0;
 }
@@ -3975,6 +4054,8 @@ retry:
 		}
 		goto power_off;
 	}
+	return 0;
+
 power_off:
 	cnss_power_off_device(plat_priv);
 end:
@@ -3986,10 +4067,10 @@ int cnss_wlan_hw_enable(void)
 	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(NULL);
 	int ret = 0;
 
-	if (test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state))
-		return 0;
-
 	clear_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state);
+
+	if (test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state))
+		goto register_driver;
 
 	ret = cnss_wlan_device_init(plat_priv);
 	if (ret) {
@@ -4002,6 +4083,7 @@ int cnss_wlan_hw_enable(void)
 				       CNSS_DRIVER_EVENT_COLD_BOOT_CAL_START,
 				       0, NULL);
 
+register_driver:
 	if (plat_priv->driver_ops)
 		ret = cnss_wlan_register_driver(plat_priv->driver_ops);
 
