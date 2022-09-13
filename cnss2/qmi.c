@@ -207,9 +207,9 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		cnss_pr_dbg("Sending iova starting 0x%llx with size 0x%llx\n",
 			    req->ddr_range[0].start, req->ddr_range[0].size);
 	}
-	req->nm_modem_valid = 1;
+	/*req->nm_modem_valid = 1;
 	req->nm_modem |= WLFW_HOST_CAP_INTERNAL_SLEEPCLOCK_MASK;
-	cnss_pr_dbg("nm_modem is %d\n", req->nm_modem);
+	cnss_pr_dbg("nm_modem is %d\n", req->nm_modem);*/
 
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_host_cap_resp_msg_v01_ei, resp);
