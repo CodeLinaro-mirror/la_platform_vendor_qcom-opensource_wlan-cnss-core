@@ -984,143 +984,6 @@ int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-#ifdef CONFIG_ARCH_QCOM
-static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
-{
-	int ret = 0;
-	struct device *dev;
-	struct dma_iommu_mapping *mapping;
-	int atomic_ctx = 1;
-	int s1_bypass = 1;
-
-	dev = &pci_priv->pci_dev->dev;
-
-	mapping = arm_iommu_create_mapping(&platform_bus_type,
-					   pci_priv->smmu_iova_start,
-					   pci_priv->smmu_iova_len);
-	if (IS_ERR(mapping)) {
-		ret = PTR_ERR(mapping);
-		cnss_pr_err("Failed to create SMMU mapping, err = %d\n", ret);
-		goto out;
-	}
-
-	ret = iommu_domain_set_attr(mapping->domain,
-				    DOMAIN_ATTR_ATOMIC,
-				    &atomic_ctx);
-	if (ret) {
-		pr_err("Failed to set SMMU atomic_ctx attribute, err = %d\n",
-		       ret);
-		goto release_mapping;
-	}
-
-	ret = iommu_domain_set_attr(mapping->domain,
-				    DOMAIN_ATTR_S1_BYPASS,
-				    &s1_bypass);
-	if (ret) {
-		pr_err("Failed to set SMMU s1_bypass attribute, err = %d\n",
-		       ret);
-		goto release_mapping;
-	}
-
-	ret = arm_iommu_attach_device(dev, mapping);
-	if (ret) {
-		pr_err("Failed to attach SMMU device, err = %d\n", ret);
-		goto release_mapping;
-	}
-
-	pci_priv->smmu_mapping = mapping;
-
-	return ret;
-release_mapping:
-	arm_iommu_release_mapping(mapping);
-out:
-	return ret;
-}
-
-static void cnss_pci_deinit_smmu(struct cnss_pci_data *pci_priv)
-{
-	arm_iommu_detach_device(&pci_priv->pci_dev->dev);
-	arm_iommu_release_mapping(pci_priv->smmu_mapping);
-
-	pci_priv->smmu_mapping = NULL;
-}
-
-#ifdef CONFIG_PCI_MSM
-static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
-{
-	unsigned long flags;
-	struct pci_dev *pci_dev;
-	struct cnss_pci_data *pci_priv;
-
-	if (!notify)
-		return;
-
-	pci_dev = notify->user;
-	if (!pci_dev)
-		return;
-
-	pci_priv = cnss_get_pci_priv(pci_dev);
-	if (!pci_priv)
-		return;
-
-	switch (notify->event) {
-	case MSM_PCIE_EVENT_LINKDOWN:
-		if (pci_link_down_panic)
-			panic("cnss: PCI link is down!\n");
-
-		spin_lock_irqsave(&pci_link_down_lock, flags);
-		if (pci_priv->pci_link_down_ind) {
-			cnss_pr_dbg("PCI link down recovery is in progress, ignore!\n");
-			spin_unlock_irqrestore(&pci_link_down_lock, flags);
-			return;
-		}
-		pci_priv->pci_link_down_ind = true;
-		spin_unlock_irqrestore(&pci_link_down_lock, flags);
-
-		cnss_pr_err("PCI link down, schedule recovery!\n");
-		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_NOTIFY_LINK_ERROR);
-		if (pci_dev->device == QCA6174_DEVICE_ID)
-			disable_irq(pci_dev->irq);
-		cnss_schedule_recovery(&pci_dev->dev, CNSS_REASON_LINK_DOWN);
-		break;
-	case MSM_PCIE_EVENT_WAKEUP:
-		if (cnss_pci_get_monitor_wake_intr(pci_priv) &&
-		    cnss_pci_get_auto_suspended(pci_priv)) {
-			cnss_pci_set_monitor_wake_intr(pci_priv, false);
-			pm_request_resume(&pci_dev->dev);
-		}
-		break;
-	default:
-		cnss_pr_err("Received invalid PCI event: %d\n", notify->event);
-	}
-}
-
-static int cnss_reg_pci_event(struct cnss_pci_data *pci_priv)
-{
-	int ret = 0;
-	struct msm_pcie_register_event *pci_event;
-
-	pci_event = &pci_priv->msm_pci_event;
-	pci_event->events = MSM_PCIE_EVENT_LINKDOWN |
-		MSM_PCIE_EVENT_WAKEUP;
-	pci_event->user = pci_priv->pci_dev;
-	pci_event->mode = MSM_PCIE_TRIGGER_CALLBACK;
-	pci_event->callback = cnss_pci_event_cb;
-	pci_event->options = MSM_PCIE_CONFIG_NO_RECOVERY;
-
-	ret = msm_pcie_register_event(pci_event);
-	if (ret)
-		cnss_pr_err("Failed to register MSM PCI event, err = %d\n",
-			    ret);
-
-	return ret;
-}
-
-static void cnss_dereg_pci_event(struct cnss_pci_data *pci_priv)
-{
-	msm_pcie_deregister_event(&pci_priv->msm_pci_event);
-}
-#endif
 
 static int cnss_pci_suspend(struct device *dev)
 {
@@ -1345,6 +1208,143 @@ static int cnss_pci_runtime_idle(struct device *dev)
 
 	return -EBUSY;
 }
+#ifdef CONFIG_ARCH_QCOM
+static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
+{
+	int ret = 0;
+	struct device *dev;
+	struct dma_iommu_mapping *mapping;
+	int atomic_ctx = 1;
+	int s1_bypass = 1;
+
+	dev = &pci_priv->pci_dev->dev;
+
+	mapping = arm_iommu_create_mapping(&platform_bus_type,
+					   pci_priv->smmu_iova_start,
+					   pci_priv->smmu_iova_len);
+	if (IS_ERR(mapping)) {
+		ret = PTR_ERR(mapping);
+		cnss_pr_err("Failed to create SMMU mapping, err = %d\n", ret);
+		goto out;
+	}
+
+	ret = iommu_domain_set_attr(mapping->domain,
+				    DOMAIN_ATTR_ATOMIC,
+				    &atomic_ctx);
+	if (ret) {
+		pr_err("Failed to set SMMU atomic_ctx attribute, err = %d\n",
+		       ret);
+		goto release_mapping;
+	}
+
+	ret = iommu_domain_set_attr(mapping->domain,
+				    DOMAIN_ATTR_S1_BYPASS,
+				    &s1_bypass);
+	if (ret) {
+		pr_err("Failed to set SMMU s1_bypass attribute, err = %d\n",
+		       ret);
+		goto release_mapping;
+	}
+
+	ret = arm_iommu_attach_device(dev, mapping);
+	if (ret) {
+		pr_err("Failed to attach SMMU device, err = %d\n", ret);
+		goto release_mapping;
+	}
+
+	pci_priv->smmu_mapping = mapping;
+
+	return ret;
+release_mapping:
+	arm_iommu_release_mapping(mapping);
+out:
+	return ret;
+}
+
+static void cnss_pci_deinit_smmu(struct cnss_pci_data *pci_priv)
+{
+	arm_iommu_detach_device(&pci_priv->pci_dev->dev);
+	arm_iommu_release_mapping(pci_priv->smmu_mapping);
+
+	pci_priv->smmu_mapping = NULL;
+}
+
+#ifdef CONFIG_PCI_MSM
+static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
+{
+	unsigned long flags;
+	struct pci_dev *pci_dev;
+	struct cnss_pci_data *pci_priv;
+
+	if (!notify)
+		return;
+
+	pci_dev = notify->user;
+	if (!pci_dev)
+		return;
+
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	if (!pci_priv)
+		return;
+
+	switch (notify->event) {
+	case MSM_PCIE_EVENT_LINKDOWN:
+		if (pci_link_down_panic)
+			panic("cnss: PCI link is down!\n");
+
+		spin_lock_irqsave(&pci_link_down_lock, flags);
+		if (pci_priv->pci_link_down_ind) {
+			cnss_pr_dbg("PCI link down recovery is in progress, ignore!\n");
+			spin_unlock_irqrestore(&pci_link_down_lock, flags);
+			return;
+		}
+		pci_priv->pci_link_down_ind = true;
+		spin_unlock_irqrestore(&pci_link_down_lock, flags);
+
+		cnss_pr_err("PCI link down, schedule recovery!\n");
+		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_NOTIFY_LINK_ERROR);
+		if (pci_dev->device == QCA6174_DEVICE_ID)
+			disable_irq(pci_dev->irq);
+		cnss_schedule_recovery(&pci_dev->dev, CNSS_REASON_LINK_DOWN);
+		break;
+	case MSM_PCIE_EVENT_WAKEUP:
+		if (cnss_pci_get_monitor_wake_intr(pci_priv) &&
+		    cnss_pci_get_auto_suspended(pci_priv)) {
+			cnss_pci_set_monitor_wake_intr(pci_priv, false);
+			pm_request_resume(&pci_dev->dev);
+		}
+		break;
+	default:
+		cnss_pr_err("Received invalid PCI event: %d\n", notify->event);
+	}
+}
+
+static int cnss_reg_pci_event(struct cnss_pci_data *pci_priv)
+{
+	int ret = 0;
+	struct msm_pcie_register_event *pci_event;
+
+	pci_event = &pci_priv->msm_pci_event;
+	pci_event->events = MSM_PCIE_EVENT_LINKDOWN |
+		MSM_PCIE_EVENT_WAKEUP;
+	pci_event->user = pci_priv->pci_dev;
+	pci_event->mode = MSM_PCIE_TRIGGER_CALLBACK;
+	pci_event->callback = cnss_pci_event_cb;
+	pci_event->options = MSM_PCIE_CONFIG_NO_RECOVERY;
+
+	ret = msm_pcie_register_event(pci_event);
+	if (ret)
+		cnss_pr_err("Failed to register MSM PCI event, err = %d\n",
+			    ret);
+
+	return ret;
+}
+
+static void cnss_dereg_pci_event(struct cnss_pci_data *pci_priv)
+{
+	msm_pcie_deregister_event(&pci_priv->msm_pci_event);
+}
+#endif
 
 int cnss_wlan_pm_control(struct device *dev, bool vote)
 {
@@ -2946,7 +2946,6 @@ static const struct pci_device_id cnss_pci_id_table[] = {
 };
 MODULE_DEVICE_TABLE(pci, cnss_pci_id_table);
 
-#ifdef CONFIG_PCI_MSM
 static const struct dev_pm_ops cnss_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(cnss_pci_suspend, cnss_pci_resume)
 	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(cnss_pci_suspend_noirq,
@@ -2954,7 +2953,6 @@ static const struct dev_pm_ops cnss_pm_ops = {
 	SET_RUNTIME_PM_OPS(cnss_pci_runtime_suspend, cnss_pci_runtime_resume,
 			   cnss_pci_runtime_idle)
 };
-#endif
 
 struct pci_driver cnss_pci_driver = {
 	.name     = "cnss_pci",
@@ -2962,11 +2960,9 @@ struct pci_driver cnss_pci_driver = {
 	.probe    = cnss_pci_probe,
 	.remove   = cnss_pci_remove,
 	.shutdown = cnss_pci_shutdown,
-#ifdef CONFIG_PCI_MSM
 	.driver = {
 		.pm = &cnss_pm_ops,
 	},
-#endif
 };
 
 #ifdef CONFIG_PCI_MSM
