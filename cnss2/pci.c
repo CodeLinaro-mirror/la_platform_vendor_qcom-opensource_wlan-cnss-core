@@ -2557,11 +2557,13 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 {
 	if (!pci_priv)
 		return;
-
+#ifdef SUPPORT_WLAN_EN	
 	cnss_fatal_err("Timeout waiting for FW ready indication\n");
 
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 			       CNSS_REASON_TIMEOUT);
+#endif
+				   
 }
 
 int cnss_pci_get_iova(struct cnss_pci_data *pci_priv, u64 *addr, u64 *size)
