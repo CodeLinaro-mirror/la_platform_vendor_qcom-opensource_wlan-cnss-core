@@ -4255,8 +4255,10 @@ static void diag_debug_init(void)
 #else
 static void diag_debug_init(void)
 {
+	/*diag_debug_mask = DIAG_DEBUG_PERIPHERALS | DIAG_DEBUG_DCI |
+			DIAG_DEBUG_USERSPACE | DIAG_DEBUG_BRIDGE;*/
 	diag_debug_mask = DIAG_DEBUG_PERIPHERALS | DIAG_DEBUG_DCI |
-			DIAG_DEBUG_USERSPACE | DIAG_DEBUG_BRIDGE;
+			DIAG_DEBUG_USERSPACE;	
 }	
 #endif
 

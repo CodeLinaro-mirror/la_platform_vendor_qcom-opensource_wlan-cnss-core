@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
+#include <linux/of_gpio.h>
 
 #include "main.h"
 #include "debug.h"
@@ -500,8 +501,96 @@ int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
 
 	return cnss_power_on_device(plat_priv);
 }
-#else
+#elif defined(SUPPORT_WLAN_EN)
 
+int cnss_get_vreg(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+void cnss_put_vreg(struct cnss_plat_data *plat_priv)
+{
+	return;
+}
+
+int cnss_vreg_on(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+int cnss_vreg_off(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
+{
+	struct platform_device *pdev = plat_priv->plat_dev;
+	struct device *dev = &pdev->dev;
+	struct device_node *node = dev->of_node;
+	enum of_gpio_flags flags;
+	int ret;
+	
+	plat_priv->wlan_en_gpio = of_get_named_gpio_flags(node, "wlan-en-gpio", 0, &flags);
+	plat_priv->wlan_en_active = flags ? 0 : 1;
+	cnss_pr_info("cnss_get_pinctrl wlan_en_gpio %d, wlan_en_active %d\n",
+			 plat_priv->wlan_en_gpio, plat_priv->wlan_en_active);
+	ret = devm_gpio_request_one(dev,  plat_priv->wlan_en_gpio,
+				    GPIOF_OUT_INIT_HIGH, "WL_EN");
+	if (ret)
+		cnss_pr_info("gpio %d already requested\n",
+			     plat_priv->wlan_en_gpio);
+
+	cnss_pr_info("wlan_en_gpio = %d, flags %d, ret %d\n", plat_priv->wlan_en_gpio, flags, ret);
+	return 0;
+}
+
+void cnss_put_pinctrl(struct cnss_plat_data *plat_priv)
+{
+	return;
+}
+
+int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
+				     bool state)
+{
+	return 0;
+}
+
+int cnss_power_on_device(struct cnss_plat_data *plat_priv)
+{
+	u32 pin = plat_priv->wlan_en_gpio;
+	u8 active = plat_priv->wlan_en_active;
+
+	if (gpio_is_valid(pin) && !plat_priv->power_on) {
+		cnss_pr_info("power_on_device pin %d wlan_en %d\n",pin, active);
+		gpio_set_value_cansleep(pin, active);
+		plat_priv->power_on = 1;
+	}
+	return 0;
+}
+void cnss_power_off_device(struct cnss_plat_data *plat_priv)
+{
+	u32 pin = plat_priv->wlan_en_gpio;
+	u8 deactive = !plat_priv->wlan_en_active;
+
+	if (gpio_is_valid(pin) && plat_priv->power_on) {
+		cnss_pr_info("power_off_device pin %d, wlan_en %d\n", pin, deactive);
+		gpio_set_value_cansleep(pin, deactive);
+		plat_priv->power_on = 0;
+	}
+};
+
+
+void cnss_set_pin_connect_status(struct cnss_plat_data *plat_priv)
+{
+	return;
+}
+
+int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+#else
 int cnss_get_vreg(struct cnss_plat_data *plat_priv)
 {
 	return 0;

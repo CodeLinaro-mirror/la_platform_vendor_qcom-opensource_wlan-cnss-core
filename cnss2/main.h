@@ -325,6 +325,9 @@ struct cnss_plat_data {
 	u8 pcie_gen_speed;
 	char device_name[16];
 	enum cnss_suspend_mode suspend_mode;
+	u32 wlan_en_gpio;
+	u8 wlan_en_active;
+	u8 power_on;
 };
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);

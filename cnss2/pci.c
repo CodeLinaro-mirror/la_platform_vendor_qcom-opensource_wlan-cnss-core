@@ -328,17 +328,18 @@ static void cnss_pci_disable_l1(struct cnss_pci_data *pci_priv)
 
 	disable_l1 = of_property_read_bool(plat_priv->dev_node,
 					   "pcie-disable-l1");
-	cnss_pr_dbg("disable_l1 %d\n", disable_l1);
+	cnss_pr_info("disable_l1 %d\n", disable_l1);
 
 	if (!disable_l1)
 		return;
 
 	lnkctl_offset = pdev->pcie_cap + PCI_EXP_LNKCTL;
 	pci_read_config_dword(pdev, lnkctl_offset, &val);
-	cnss_pr_dbg("lnkctl 0x%x\n", val);
+	cnss_pr_dbg("read lnkctl_offset 0x%x, lnkctl 0x%x\n", lnkctl_offset, val);
 
 	val &= ~PCI_EXP_LNKCTL_ASPM_L1;
 	pci_write_config_dword(pdev, lnkctl_offset, val);
+	cnss_pr_dbg("write lnkctl_offset 0x%x, lnkctl 0x%x\n", lnkctl_offset, val);
 }
 
 static void cnss_pci_disable_l1ss(struct cnss_pci_data *pci_priv)
@@ -352,7 +353,7 @@ static void cnss_pci_disable_l1ss(struct cnss_pci_data *pci_priv)
 
 	disable_l1ss = of_property_read_bool(plat_priv->dev_node,
 					     "pcie-disable-l1ss");
-	cnss_pr_dbg("disable_l1ss %d\n", disable_l1ss);
+	cnss_pr_info("disable_l1ss %d\n", disable_l1ss);
 
 	if (!disable_l1ss)
 		return;
@@ -366,11 +367,12 @@ static void cnss_pci_disable_l1ss(struct cnss_pci_data *pci_priv)
 	l1ss_ctl1_offset = l1ss_cap_id_offset + PCI_L1SS_CTL1;
 
 	pci_read_config_dword(pdev, l1ss_ctl1_offset, &val);
-	cnss_pr_dbg("l1ss_ctl1 0x%x\n", val);
+	cnss_pr_dbg("read l1ss_ctl1_offset 0x%x, l1ss_ctl1 0x%x\n", l1ss_ctl1_offset, val);
 
 	val &= ~(PCI_L1SS_CTL1_PCIPM_L1_1 | PCI_L1SS_CTL1_PCIPM_L1_2 |
 		 PCI_L1SS_CTL1_ASPM_L1_1 | PCI_L1SS_CTL1_ASPM_L1_2);
 	pci_write_config_dword(pdev, l1ss_ctl1_offset, val);
+	cnss_pr_dbg("write l1ss_ctl1_offset 0x%x, l1ss_ctl1 0x%x\n", l1ss_ctl1_offset, val);
 }
 
 static int cnss_set_pci_config_space(struct cnss_pci_data *pci_priv, bool save)
@@ -408,9 +410,9 @@ static int cnss_set_pci_config_space(struct cnss_pci_data *pci_priv, bool save)
 	return 0;
 }
 
+#ifdef CONFIG_PCI_MSM
 static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
 {
-#ifdef CONFIG_PCI_MSM
 	int ret = 0;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	int retry = 0;
@@ -432,12 +434,25 @@ retry:
 
 		return ret;
 	}
-#else
-
-#endif
 	return 0;
 }
+#elif defined(PCI_RC_SUPPORT_PM)
+int imx6_rc_pm_control(void *endpoint, int op);
+static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
+{
+	struct pci_dev *pci_dev = pci_priv->pci_dev;
 
+	imx6_rc_pm_control(pci_dev, link_up);
+	return 0;
+}
+#else
+static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
+{
+	return 0;
+}
+#endif
+
+#ifdef PCI_SUPPORT_SUSPEND_RESUME
 int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -445,7 +460,7 @@ int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
 	if (!pci_priv)
 		return -ENODEV;
 
-	cnss_pr_dbg("Suspending PCI link\n");
+	cnss_pr_info("Suspending PCI link\n");
 	if (!pci_priv->pci_link_state) {
 		cnss_pr_info("PCI link is already suspended!\n");
 		goto out;
@@ -482,7 +497,7 @@ int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
 	if (!pci_priv)
 		return -ENODEV;
 
-	cnss_pr_dbg("Resuming PCI link\n");
+	cnss_pr_info("Resuming PCI link\n");
 	if (pci_priv->pci_link_state) {
 		cnss_pr_info("PCI link is already resumed!\n");
 		goto out;
@@ -523,6 +538,7 @@ int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
 out:
 	return ret;
 }
+#endif
 
 int cnss_pci_prevent_l1(struct device *dev)
 {
@@ -1010,13 +1026,11 @@ static int cnss_qca6174_powerup(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("Failed to power on device, err = %d\n", ret);
 		goto out;
 	}
-#ifdef PCI_SUSPEND_RESUME
 	ret = cnss_resume_pci_link(pci_priv);
 	if (ret) {
 		cnss_pr_err("Failed to resume PCI link, err = %d\n", ret);
 		goto power_off;
 	}
-#endif
 	ret = cnss_pci_call_driver_probe(pci_priv);
 	if (ret)
 		goto suspend_link;
@@ -1024,9 +1038,7 @@ static int cnss_qca6174_powerup(struct cnss_pci_data *pci_priv)
 	return 0;
 suspend_link:
 	cnss_suspend_pci_link(pci_priv);
-#ifdef PCI_SUSPEND_RESUME
 power_off:
-#endif
 	cnss_power_off_device(plat_priv);
 out:
 	return ret;
@@ -1182,24 +1194,19 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	unsigned int timeout;
-#ifdef PCI_SUSPEND_RESUME
 	int retry = 0;
-#endif
 
 	if (plat_priv->ramdump_info_v2.dump_data_valid ||
 	    test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_DEINIT);
 		cnss_pci_clear_dump_info(pci_priv);
 	}
-#ifdef PCI_SUSPEND_RESUME
 retry:
-#endif
 	ret = cnss_power_on_device(plat_priv);
 	if (ret) {
 		cnss_pr_err("Failed to power on device, err = %d\n", ret);
 		goto out;
 	}
-#ifdef PCI_SUSPEND_RESUME
 	ret = cnss_resume_pci_link(pci_priv);
 	if (ret) {
 		cnss_pr_err("Failed to resume PCI link, err = %d\n", ret);
@@ -1217,7 +1224,6 @@ retry:
 		}
 		goto power_off;
 	}
-#endif
 	cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, false, false);
 	timeout = cnss_get_boot_timeout(&pci_priv->pci_dev->dev);
 
@@ -1254,10 +1260,8 @@ retry:
 stop_mhi:
 	cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, true, true);
 	cnss_pci_stop_mhi(pci_priv);
-#ifdef PCI_SUSPEND_RESUME
 	cnss_suspend_pci_link(pci_priv);
 power_off:
-#endif
 	cnss_power_off_device(plat_priv);
 out:
 	return ret;
@@ -1294,11 +1298,9 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 
 	cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, true, do_force_wake);
 	cnss_pci_stop_mhi(pci_priv);
-#ifdef PCI_SUSPEND_RESUME
 	ret = cnss_suspend_pci_link(pci_priv);
 	if (ret)
 		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
-#endif
 	cnss_power_off_device(plat_priv);
 
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
@@ -2992,6 +2994,8 @@ static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 	}
 
 	pci_clear_master(pci_dev);
+    pci_load_and_free_saved_state(pci_dev, &pci_priv->saved_state);
+    pci_load_and_free_saved_state(pci_dev, &pci_priv->default_state);
 	pci_release_region(pci_dev, PCI_BAR_NUM);
 	if (pci_is_enabled(pci_dev))
 		pci_disable_device(pci_dev);
@@ -3559,6 +3563,7 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	ipc_log_context_destroy(mhi_ctrl->cntrl_log_buf);
 #endif
 	kfree(mhi_ctrl->irq);
+	mhi_free_controller(mhi_ctrl);
 }
 
 static int cnss_pci_check_mhi_state_bit(struct cnss_pci_data *pci_priv,
@@ -4035,12 +4040,10 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		if (pci_dev->device != QCN7605_DEVICE_ID)
 			cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false,
 						    true, false);
-#ifdef PCI_SUSPEND_RESUME
 		ret = cnss_suspend_pci_link(pci_priv);
 		if (ret)
 			cnss_pr_err("Failed to suspend PCI link, err = %d\n",
 				    ret);
-#endif
 		cnss_power_off_device(plat_priv);
 		break;
 	default:
@@ -4095,8 +4098,6 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	default:
 		break;
 	}
-
-	pci_load_and_free_saved_state(pci_dev, &pci_priv->saved_state);
 
 	cnss_pci_disable_bus(pci_priv);
 	cnss_dereg_pci_event(pci_priv);

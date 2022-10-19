@@ -144,7 +144,7 @@ int diag_local_cmd_handler(void *buf)
 			return -1;
 		}
 
-		printk("%s: diag_type_fw_msg cmd len is 0x%x.\n",
+		pr_debug("%s: diag_type_fw_msg cmd len is 0x%x.\n",
 			   __func__, slot->length);
 
 		ret = diag_local_write(slot->payload, slot->length); /* has done hdlc encode in user app */
