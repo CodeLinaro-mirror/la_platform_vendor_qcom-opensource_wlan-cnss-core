@@ -1851,6 +1851,11 @@ static int cnss_pci_suspend(struct device *dev)
 	plat_priv = pci_priv->plat_priv;
 	if (!plat_priv)
 		goto out;
+	driver_ops = pci_priv->driver_ops;
+	if(!driver_ops){
+		cnss_pr_info("cnss_pci_suspend driver already removed, do nothing");
+		return 0;
+	}
 
 	if (plat_priv->suspend_mode == CNSS_SUSPEND_POWER_DOWN) {
 		cnss_pr_dbg("Full power down while suspend, then shutdown wlan device\n");
@@ -1867,7 +1872,7 @@ static int cnss_pci_suspend(struct device *dev)
 
 	set_bit(CNSS_IN_SUSPEND_RESUME, &plat_priv->driver_state);
 
-	driver_ops = pci_priv->driver_ops;
+	
 	if (driver_ops && driver_ops->suspend) {
 		ret = driver_ops->suspend(pci_dev, state);
 		if (ret) {
@@ -1898,6 +1903,9 @@ static int cnss_pci_suspend(struct device *dev)
 				    ret);
 	}
 
+	cnss_set_pci_link(pci_priv, PCI_LINK_DOWN);
+	pci_priv->pci_link_state = PCI_LINK_DOWN;
+	
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
 
 	return 0;
@@ -1923,11 +1931,20 @@ static int cnss_pci_resume(struct device *dev)
 	if (!plat_priv)
 		goto out;
 
+	driver_ops = pci_priv->driver_ops;
+	if(!driver_ops){
+		cnss_pr_err("cnss_pci_resume, driver already removed, do nothing");
+		return 0;
+	}
+
 	if (plat_priv->suspend_mode == CNSS_SUSPEND_POWER_DOWN) {
 		cnss_pr_dbg("Full power down while suspend, then powerup wlan device\n");
 		cnss_pci_dev_powerup(pci_priv);
 		goto out;
 	}
+
+	cnss_set_pci_link(pci_priv, PCI_LINK_UP);
+	pci_priv->pci_link_state = PCI_LINK_UP;
 
 	if (cnss_pci_check_link_status(pci_priv))
 		goto out;
@@ -1946,7 +1963,6 @@ static int cnss_pci_resume(struct device *dev)
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RESUME);
 	}
 
-	driver_ops = pci_priv->driver_ops;
 	if (driver_ops && driver_ops->resume) {
 		ret = driver_ops->resume(pci_dev);
 		if (ret)
@@ -3933,7 +3949,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	struct cnss_pci_data *pci_priv;
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(NULL);
 
-	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
+	cnss_pr_info("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
 
 	pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
