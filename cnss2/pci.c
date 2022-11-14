@@ -6124,6 +6124,7 @@ static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
 	switch (pci_dev->device) {
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
+	case QCA6174_DEVICE_ID:
 		suspend_pwroff = false;
 		break;
 	default:
