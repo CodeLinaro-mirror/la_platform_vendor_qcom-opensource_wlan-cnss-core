@@ -832,6 +832,8 @@ int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
 				    ret);
 			goto out;
 		}
+
+		cnss_set_feature_list(plat_priv, CNSS_WLAN_EN_SUPPORT_V01);
 	} else {
 		pinctrl_info->wlan_en_gpio = -EINVAL;
 	}
@@ -1518,7 +1520,7 @@ int cnss_aop_pdc_reconfig(struct cnss_plat_data *plat_priv)
 static int cnss_aop_set_vreg_param(struct cnss_plat_data *plat_priv,
 				   const char *vreg_name,
 				   enum cnss_aop_vreg_param param,
-				   enum cnss_aop_tcs_seq_pram seq_param,
+				   enum cnss_aop_tcs_seq_param seq_param,
 				   int val)
 {
 	return 0;
