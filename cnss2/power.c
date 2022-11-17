@@ -356,12 +356,18 @@ static int cnss_get_vreg(struct cnss_plat_data *plat_priv,
 						 WLAN_VREGS_PROP);
 		if (id_n <= 0) {
 			if (id_n == -ENODATA) {
+				/* Child node contains wlan_vregs prop but assigned
+				 * no value.
+				 */
 				cnss_pr_dbg("No additional vregs for: %s:%lx\n",
 					    dt_node->name,
 					    plat_priv->device_id);
 				return 0;
 			}
 
+			/* Child node contains no wlan_vregs prop, or contains
+			 * wlan_vregs but assigned value of wrong format.
+			 */
 			cnss_pr_err("property %s is invalid or missed: %s:%lx\n",
 				    WLAN_VREGS_PROP, dt_node->name,
 				    plat_priv->device_id);
@@ -1804,6 +1810,9 @@ int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
 	int ret;
 
 	if (plat_priv->dt_type != CNSS_DTT_MULTIEXCHG)
+		return 0;
+
+	if (plat_priv->no_specific_poweron)
 		return 0;
 
 	ret = cnss_get_vreg_type(plat_priv, CNSS_VREG_PRIM);

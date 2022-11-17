@@ -6089,6 +6089,11 @@ static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 		if (strcmp(child->name, "chip_cfg"))
 			continue;
 
+		/* If dts node doesn't contain no-specific-poweron, default
+		 * value is false, means to run device specific power up
+		 * when enumeration finish. */
+		plat_priv->no_specific_poweron = of_property_read_bool(child,
+						 "qcom,no-specific-poweron");
 		id_n = of_property_count_u32_elems(child, "supported-ids");
 		if (id_n <= 0) {
 			cnss_pr_err("Device id is NOT set\n");

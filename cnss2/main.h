@@ -542,6 +542,7 @@ struct cnss_plat_data {
 	void *get_info_cb_ctx;
 	int (*get_info_cb)(void *ctx, void *event, int event_len);
 	bool cbc_enabled;
+	bool no_specific_poweron;
 	u8 use_pm_domain;
 	u8 use_nv_mac;
 	u8 set_wlaon_pwr_ctrl;
