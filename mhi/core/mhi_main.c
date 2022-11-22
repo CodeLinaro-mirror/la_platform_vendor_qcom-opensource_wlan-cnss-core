@@ -1637,10 +1637,13 @@ irqreturn_t mhi_intvec_threaded_handlr(int irq_number, void *dev)
 
 	state = mhi_get_mhi_state(mhi_cntrl);
 	ee = mhi_get_exec_env(mhi_cntrl);
+	
+#ifndef CONFIG_ONE_MSI_VECTOR
 	MHI_LOG("local ee:%s device ee:%s dev_state:%s\n",
 		TO_MHI_EXEC_STR(mhi_cntrl->ee),
 		TO_MHI_EXEC_STR(ee),
 		TO_MHI_STATE_STR(state));
+#endif
 
 	if (mhi_cntrl->power_down) {
 		write_unlock_irq(&mhi_cntrl->pm_lock);

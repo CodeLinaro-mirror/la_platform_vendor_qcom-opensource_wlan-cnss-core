@@ -234,6 +234,7 @@ enum cnss_debug_quirks {
 	ENABLE_DAEMON_SUPPORT,
 	IGNORE_PCI_LINK_FAILURE,
 	IGNORE_PROBE_FAIL_SHUTDOWN,
+	FORCE_ONE_MSI,
 };
 
 enum cnss_bdf_type {
