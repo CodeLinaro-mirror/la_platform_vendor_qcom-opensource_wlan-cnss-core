@@ -420,6 +420,7 @@ struct mhi_controller {
 	struct reg_write_info *reg_write_q;
 	atomic_t write_idx;
 	u32 read_idx;
+	unsigned long irq_flags;
 };
 
 /**
