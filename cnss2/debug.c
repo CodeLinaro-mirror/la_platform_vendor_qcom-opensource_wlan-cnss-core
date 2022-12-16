@@ -189,15 +189,15 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 	} else if (sysfs_streq(cmd, "linkdown")) {
 		ret = cnss_suspend_pci_link(plat_priv->bus_priv);
 	} else if (sysfs_streq(cmd, "powerup")) {
-		set_bit(CNSS_DRIVER_DEBUG, &plat_priv->driver_state);
+		set_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
 		ret = cnss_driver_event_post(plat_priv,
 					     CNSS_DRIVER_EVENT_POWER_UP,
 					     CNSS_EVENT_SYNC, NULL);
 	} else if (sysfs_streq(cmd, "shutdown")) {
+		set_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
 		ret = cnss_driver_event_post(plat_priv,
 					     CNSS_DRIVER_EVENT_POWER_DOWN,
 					     CNSS_EVENT_SYNC, NULL);
-		clear_bit(CNSS_DRIVER_DEBUG, &plat_priv->driver_state);
 	} else if (sysfs_streq(cmd, "assert")) {
 		struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 		ret = cnss_force_fw_assert(&pci_priv->pci_dev->dev);
