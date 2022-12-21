@@ -92,8 +92,6 @@ static struct cnss_plat_data *plat_env;
 
 static bool cnss_allow_driver_loading;
 
-static DECLARE_RWSEM(cnss_pm_sem);
-
 static struct cnss_fw_files FW_FILES_QCA6174_FW_3_0 = {
 	"qwlan30.bin", "bdwlan30.bin", "otp30.bin", "utf30.bin",
 	"utfbd30.bin", "epping30.bin", "evicted30.bin"
@@ -221,6 +219,36 @@ int cnss_get_mem_segment_info(enum cnss_remote_mem_type type,
 }
 EXPORT_SYMBOL(cnss_get_mem_segment_info);
 
+static int cnss_get_audio_iommu_domain(struct cnss_plat_data *plat_priv)
+{
+	struct device_node *audio_ion_node;
+	struct platform_device *audio_ion_pdev;
+
+	audio_ion_node = of_find_compatible_node(NULL, NULL,
+						 "qcom,msm-audio-ion");
+	if (!audio_ion_node) {
+		cnss_pr_err("Unable to get Audio ion node");
+		return -EINVAL;
+	}
+
+	audio_ion_pdev = of_find_device_by_node(audio_ion_node);
+	of_node_put(audio_ion_node);
+	if (!audio_ion_pdev) {
+		cnss_pr_err("Unable to get Audio ion platform device");
+		return -EINVAL;
+	}
+
+	plat_priv->audio_iommu_domain =
+				iommu_get_domain_for_dev(&audio_ion_pdev->dev);
+	put_device(&audio_ion_pdev->dev);
+	if (!plat_priv->audio_iommu_domain) {
+		cnss_pr_err("Unable to get Audio ion iommu domain");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 int cnss_set_feature_list(struct cnss_plat_data *plat_priv,
 			  enum cnss_feature_v01 feature)
 {
@@ -251,25 +279,6 @@ int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 	return 0;
 }
 
-static int cnss_pm_notify(struct notifier_block *b,
-			  unsigned long event, void *p)
-{
-	switch (event) {
-	case PM_SUSPEND_PREPARE:
-		down_write(&cnss_pm_sem);
-		break;
-	case PM_POST_SUSPEND:
-		up_write(&cnss_pm_sem);
-		break;
-	}
-
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block cnss_pm_notifier = {
-	.notifier_call = cnss_pm_notify,
-};
-
 void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv)
 {
 	if (atomic_inc_return(&plat_priv->pm_count) != 1)
@@ -295,18 +304,6 @@ void cnss_pm_relax(struct cnss_plat_data *plat_priv)
 		    atomic_read(&plat_priv->pm_count));
 	pm_relax(&plat_priv->plat_dev->dev);
 }
-
-void cnss_lock_pm_sem(struct device *dev)
-{
-	down_read(&cnss_pm_sem);
-}
-EXPORT_SYMBOL(cnss_lock_pm_sem);
-
-void cnss_release_pm_sem(struct device *dev)
-{
-	up_read(&cnss_pm_sem);
-}
-EXPORT_SYMBOL(cnss_release_pm_sem);
 
 int cnss_get_fw_files_for_target(struct device *dev,
 				 struct cnss_fw_files *pfw_files,
@@ -347,6 +344,41 @@ int cnss_get_platform_cap(struct device *dev, struct cnss_platform_cap *cap)
 	return 0;
 }
 EXPORT_SYMBOL(cnss_get_platform_cap);
+
+/**
+ * cnss_get_fw_cap - Check whether FW supports specific capability or not
+ * @dev: Device
+ * @fw_cap: FW Capability which needs to be checked
+ *
+ * Return: TRUE if supported, FALSE on failure or if not supported
+ */
+bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	bool is_supported = false;
+
+	if (!plat_priv)
+		return is_supported;
+
+	if (!plat_priv->fw_caps)
+		return is_supported;
+
+	switch (fw_cap) {
+	case CNSS_FW_CAP_DIRECT_LINK_SUPPORT:
+		is_supported = !!(plat_priv->fw_caps &
+				  QMI_WLFW_DIRECT_LINK_SUPPORT_V01);
+		if (is_supported && cnss_get_audio_iommu_domain(plat_priv))
+			is_supported = false;
+		break;
+	default:
+		cnss_pr_err("Invalid FW Capability: 0x%x\n", fw_cap);
+	}
+
+	cnss_pr_dbg("FW Capability 0x%x is %s\n", fw_cap,
+		    is_supported ? "supported" : "not supported");
+	return is_supported;
+}
+EXPORT_SYMBOL(cnss_get_fw_cap);
 
 void cnss_request_pm_qos(struct device *dev, u32 qos_val)
 {
@@ -429,6 +461,52 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 	return ret;
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
+
+int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
+			dma_addr_t iova, size_t size)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	uint32_t page_offset;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (!plat_priv->audio_iommu_domain)
+		return -EINVAL;
+
+	page_offset = iova & (PAGE_SIZE - 1);
+	if (page_offset + size > PAGE_SIZE)
+		size += PAGE_SIZE;
+
+	iova -= page_offset;
+	paddr -= page_offset;
+
+	return iommu_map(plat_priv->audio_iommu_domain, iova, paddr,
+			 roundup(size, PAGE_SIZE), IOMMU_READ | IOMMU_WRITE);
+}
+EXPORT_SYMBOL(cnss_audio_smmu_map);
+
+void cnss_audio_smmu_unmap(struct device *dev, dma_addr_t iova, size_t size)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	uint32_t page_offset;
+
+	if (!plat_priv)
+		return;
+
+	if (!plat_priv->audio_iommu_domain)
+		return;
+
+	page_offset = iova & (PAGE_SIZE - 1);
+	if (page_offset + size > PAGE_SIZE)
+		size += PAGE_SIZE;
+
+	iova -= page_offset;
+
+	iommu_unmap(plat_priv->audio_iommu_domain, iova,
+		    roundup(size, PAGE_SIZE));
+}
+EXPORT_SYMBOL(cnss_audio_smmu_unmap);
 
 int cnss_athdiag_read(struct device *dev, u32 offset, u32 mem_type,
 		      u32 data_len, u8 *output)
@@ -2007,6 +2085,20 @@ static int cnss_cold_boot_cal_start_hdlr(struct cnss_plat_data *plat_priv)
 		}
 	}
 
+	switch (plat_priv->device_id) {
+	case QCA6290_DEVICE_ID:
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
+		break;
+	default:
+		cnss_pr_err("Not supported for device ID 0x%lx\n",
+			    plat_priv->device_id);
+		ret = -EINVAL;
+		goto mark_cal_fail;
+	}
+
 	set_bit(CNSS_IN_COLD_BOOT_CAL, &plat_priv->driver_state);
 	if (test_bit(CNSS_DRIVER_REGISTER, &plat_priv->driver_state)) {
 		timeout = cnss_get_timeout(plat_priv,
@@ -3531,19 +3623,6 @@ static ssize_t fs_ready_store(struct device *dev,
 		return count;
 	}
 
-	switch (plat_priv->device_id) {
-	case QCA6290_DEVICE_ID:
-	case QCA6390_DEVICE_ID:
-	case QCA6490_DEVICE_ID:
-	case KIWI_DEVICE_ID:
-	case MANGO_DEVICE_ID:
-		break;
-	default:
-		cnss_pr_err("Not supported for device ID 0x%lx\n",
-			    plat_priv->device_id);
-		return count;
-	}
-
 	set_bit(CNSS_FS_READY, &plat_priv->driver_state);
 	if (fs_ready == FILE_SYSTEM_READY && plat_priv->cbc_enabled) {
 		cnss_driver_event_post(plat_priv,
@@ -3830,10 +3909,6 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	timer_setup(&plat_priv->fw_boot_timer,
 		    cnss_bus_fw_boot_timeout_hdlr, 0);
 
-	ret = register_pm_notifier(&cnss_pm_notifier);
-	if (ret)
-		cnss_pr_err("Failed to register PM notifier, err = %d\n", ret);
-
 	plat_priv->reboot_nb.notifier_call = cnss_reboot_notifier;
 	ret = register_reboot_notifier(&plat_priv->reboot_nb);
 	if (ret)
@@ -3870,6 +3945,10 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	    cnss_get_host_build_type() == QMI_HOST_BUILD_TYPE_PRIMARY_V01)
 		plat_priv->sram_dump = kcalloc(SRAM_DUMP_SIZE, 1, GFP_KERNEL);
 
+	if (of_property_read_bool(plat_priv->plat_dev->dev.of_node,
+				  "qcom,rc-ep-short-channel"))
+		cnss_set_feature_list(plat_priv, CNSS_RC_EP_ULTRASHORT_CHANNEL_V01);
+
 	return 0;
 }
 
@@ -3884,7 +3963,6 @@ static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 	complete_all(&plat_priv->daemon_connected);
 	device_init_wakeup(&plat_priv->plat_dev->dev, false);
 	unregister_reboot_notifier(&plat_priv->reboot_nb);
-	unregister_pm_notifier(&cnss_pm_notifier);
 	del_timer(&plat_priv->fw_boot_timer);
 	wakeup_source_unregister(plat_priv->recovery_ws);
 	cnss_deinit_sol_gpio(plat_priv);
@@ -4129,6 +4207,26 @@ register_driver:
 }
 EXPORT_SYMBOL(cnss_wlan_hw_enable);
 
+int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int ret = 0;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	/* If IMS server is connected, return success without QMI send */
+	if (test_bit(CNSS_IMS_CONNECTED, &plat_priv->driver_state)) {
+		cnss_pr_dbg("Ignore host request as IMS server is connected");
+		return ret;
+	}
+
+	ret = cnss_wlfw_send_host_wfc_call_status(plat_priv, cfg);
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_set_wfc_mode);
+
 static int cnss_probe(struct platform_device *plat_dev)
 {
 	int ret = 0;
@@ -4281,6 +4379,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 {
 	struct cnss_plat_data *plat_priv = platform_get_drvdata(plat_dev);
 
+	plat_priv->audio_iommu_domain = NULL;
 	cnss_genl_exit();
 	cnss_unregister_ims_service(plat_priv);
 	cnss_unregister_coex_service(plat_priv);
