@@ -90,6 +90,13 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define HST_HANG_DATA_OFFSET		((3 * 1024 * 1024) - HANG_DATA_LENGTH)
 #define HSP_HANG_DATA_OFFSET		((2 * 1024 * 1024) - HANG_DATA_LENGTH)
 
+#define AFC_SLOT_SIZE                   0x1000
+#define AFC_MAX_SLOT                    2
+#define AFC_MEM_SIZE                    (AFC_SLOT_SIZE * AFC_MAX_SLOT)
+#define AFC_AUTH_STATUS_OFFSET          1
+#define AFC_AUTH_SUCCESS                1
+#define AFC_AUTH_ERROR                  0
+
 static const struct mhi_channel_config cnss_mhi_channels[] = {
 	{
 		.num = 0,
@@ -961,7 +968,7 @@ static int cnss_setup_bus_bandwidth(struct cnss_plat_data *plat_priv,
 		return -EINVAL;
 	}
 
-	cnss_pr_vdbg("Bandwidth vote to %d, save %d\n", bw, save);
+	cnss_pr_buf("Bandwidth vote to %d, save %d\n", bw, save);
 
 	list_for_each_entry(bus_bw_info, &plat_priv->icc.list_head, list) {
 		ret = icc_set_bw(bus_bw_info->icc_path,
@@ -1329,8 +1336,11 @@ void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv)
 	}
 	pci_priv->pci_link_down_ind = true;
 	spin_unlock_irqrestore(&pci_link_down_lock, flags);
-	/* Notify MHI about link down*/
-	mhi_report_error(pci_priv->mhi_ctrl);
+
+	if (pci_priv->mhi_ctrl) {
+		/* Notify MHI about link down*/
+		mhi_report_error(pci_priv->mhi_ctrl);
+	}
 
 	if (pci_dev->device == QCA6174_DEVICE_ID)
 		disable_irq(pci_dev->irq);
@@ -1697,15 +1707,11 @@ static int cnss_rddm_trigger_debug(struct cnss_pci_data *pci_priv)
 {
 	int read_val, ret;
 
-	switch (pci_priv->device_id) {
-	case QCA6490_DEVICE_ID:
-	case KIWI_DEVICE_ID:
-	case MANGO_DEVICE_ID:
-		break;
-	default:
-		cnss_pr_err("RDDM Trigger debug not supported");
+	if (!pci_priv || pci_priv->device_id != QCA6490_DEVICE_ID)
 		return -EOPNOTSUPP;
-	}
+
+	if (cnss_pci_check_link_status(pci_priv))
+		return -EINVAL;
 
 	cnss_pr_err("Write GCC Spare with ACE55 Pattern");
 	cnss_pci_reg_write(pci_priv, GCC_GCC_SPARE_REG_1, 0xACE55);
@@ -1720,20 +1726,26 @@ static int cnss_rddm_trigger_debug(struct cnss_pci_data *pci_priv)
 static int cnss_rddm_trigger_check(struct cnss_pci_data *pci_priv)
 {
 	int read_val, ret;
+	u32 pbl_stage, sbl_log_start, sbl_log_size, pbl_wlan_boot_cfg;
 
-	switch (pci_priv->device_id) {
-	case QCA6490_DEVICE_ID:
-	case KIWI_DEVICE_ID:
-	case MANGO_DEVICE_ID:
-		break;
-	default:
-		cnss_pr_err("RDDM Trigger check not supported");
+	if (!pci_priv || pci_priv->device_id != QCA6490_DEVICE_ID)
 		return -EOPNOTSUPP;
-	}
+
+	if (cnss_pci_check_link_status(pci_priv))
+		return -EINVAL;
 
 	ret = cnss_pci_reg_read(pci_priv, GCC_GCC_SPARE_REG_1, &read_val);
 	cnss_pr_err("Read GCC spare to check reset status: 0x%x, ret: %d",
 		    read_val, ret);
+
+	cnss_pci_reg_read(pci_priv, TCSR_PBL_LOGGING_REG, &pbl_stage);
+	cnss_pci_reg_read(pci_priv, PCIE_BHI_ERRDBG2_REG, &sbl_log_start);
+	cnss_pci_reg_read(pci_priv, PCIE_BHI_ERRDBG3_REG, &sbl_log_size);
+	cnss_pci_reg_read(pci_priv, PBL_WLAN_BOOT_CFG, &pbl_wlan_boot_cfg);
+	cnss_pr_dbg("TCSR_PBL_LOGGING: 0x%08x PCIE_BHI_ERRDBG: Start: 0x%08x Size:0x%08x \n",
+		    pbl_stage, sbl_log_start, sbl_log_size);
+	cnss_pr_dbg("PBL_WLAN_BOOT_CFG: 0x%08x\n", pbl_wlan_boot_cfg);
+
 	return ret;
 }
 
@@ -1884,6 +1896,23 @@ out:
 	return ret;
 }
 
+static int cnss_pci_config_msi_data(struct cnss_pci_data *pci_priv)
+{
+	struct msi_desc *msi_desc;
+	struct pci_dev *pci_dev = pci_priv->pci_dev;
+
+	msi_desc = irq_get_msi_desc(pci_dev->irq);
+	if (!msi_desc) {
+		cnss_pr_err("msi_desc is NULL!\n");
+		return -EINVAL;
+	}
+
+	pci_priv->msi_ep_base_data = msi_desc->msg.data;
+	cnss_pr_dbg("MSI base data is %d\n", pci_priv->msi_ep_base_data);
+
+	return 0;
+}
+
 int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -1934,6 +1963,14 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 		 */
 		set_bit(CNSS_MHI_POWER_ON, &pci_priv->mhi_state);
 		ret = cnss_pci_handle_mhi_poweron_timeout(pci_priv);
+	} else if (!ret) {
+		/* kernel may allocate a dummy vector before request_irq and
+		 * then allocate a real vector when request_irq is called.
+		 * So get msi_data here again to avoid spurious interrupt
+		 * as msi_data will configured to srngs.
+		 */
+		if (cnss_pci_is_one_msi(pci_priv))
+			ret = cnss_pci_config_msi_data(pci_priv);
 	}
 
 	return ret;
@@ -2314,6 +2351,7 @@ int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv)
 		}
 		clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
 		set_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
+		cnss_pci_free_blob_mem(pci_priv);
 		complete_all(&plat_priv->power_up_complete);
 	} else if (test_bit(CNSS_DRIVER_IDLE_RESTART,
 			    &plat_priv->driver_state)) {
@@ -3223,8 +3261,12 @@ int cnss_pci_register_driver_hdlr(struct cnss_pci_data *pci_priv,
 
 int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 {
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
 
+	if (!pci_priv)
+		return -EINVAL;
+
+	plat_priv = pci_priv->plat_priv;
 	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 	cnss_pci_dev_shutdown(pci_priv);
 	pci_priv->driver_ops = NULL;
@@ -4024,6 +4066,94 @@ int cnss_pci_qmi_send_put(struct cnss_pci_data *pci_priv)
 	return ret;
 }
 
+int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
+			       uint8_t slotid)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_fw_mem *fw_mem;
+	void *mem = NULL;
+	int i, ret;
+	u32 *status;
+
+	if (!plat_priv)
+		return -EINVAL;
+
+	fw_mem = plat_priv->fw_mem;
+	if (slotid >= AFC_MAX_SLOT) {
+		cnss_pr_err("Invalid slot id %d\n", slotid);
+		ret = -EINVAL;
+		goto err;
+	}
+	if (len > AFC_SLOT_SIZE) {
+		cnss_pr_err("len %d greater than slot size", len);
+		ret = -EINVAL;
+		goto err;
+	}
+
+	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+		if (fw_mem[i].type == QMI_WLFW_AFC_MEM_V01) {
+			mem = fw_mem[i].va;
+			status = mem + (slotid * AFC_SLOT_SIZE);
+			break;
+		}
+	}
+
+	if (!mem) {
+		cnss_pr_err("AFC mem is not available\n");
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	memcpy(mem + (slotid * AFC_SLOT_SIZE), afcdb, len);
+	if (len < AFC_SLOT_SIZE)
+		memset(mem + (slotid * AFC_SLOT_SIZE) + len,
+		       0, AFC_SLOT_SIZE - len);
+	status[AFC_AUTH_STATUS_OFFSET] = cpu_to_le32(AFC_AUTH_SUCCESS);
+
+	return 0;
+err:
+	return ret;
+}
+EXPORT_SYMBOL(cnss_send_buffer_to_afcmem);
+
+int cnss_reset_afcmem(struct device *dev, uint8_t slotid)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_fw_mem *fw_mem;
+	void *mem = NULL;
+	int i, ret;
+
+	if (!plat_priv)
+		return -EINVAL;
+
+	fw_mem = plat_priv->fw_mem;
+	if (slotid >= AFC_MAX_SLOT) {
+		cnss_pr_err("Invalid slot id %d\n", slotid);
+		ret = -EINVAL;
+		goto err;
+	}
+
+	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+		if (fw_mem[i].type == QMI_WLFW_AFC_MEM_V01) {
+			mem = fw_mem[i].va;
+			break;
+		}
+	}
+
+	if (!mem) {
+		cnss_pr_err("AFC mem is not available\n");
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	memset(mem + (slotid * AFC_SLOT_SIZE), 0, AFC_SLOT_SIZE);
+	return 0;
+
+err:
+	return ret;
+}
+EXPORT_SYMBOL(cnss_reset_afcmem);
+
 int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -4224,6 +4354,17 @@ static void cnss_pci_free_m3_mem(struct cnss_pci_data *pci_priv)
 	m3_mem->size = 0;
 }
 
+#ifdef CONFIG_FREE_M3_BLOB_MEM
+void cnss_pci_free_blob_mem(struct cnss_pci_data *pci_priv)
+{
+	cnss_pci_free_m3_mem(pci_priv);
+}
+#else
+void cnss_pci_free_blob_mem(struct cnss_pci_data *pci_priv)
+{
+}
+#endif
+
 void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv;
@@ -4279,6 +4420,13 @@ int cnss_pci_get_iova_ipa(struct cnss_pci_data *pci_priv, u64 *addr, u64 *size)
 	return 0;
 }
 
+bool cnss_pci_is_smmu_s1_enabled(struct cnss_pci_data *pci_priv)
+{
+	if (pci_priv)
+		return pci_priv->smmu_s1_enable;
+
+	return false;
+}
 struct iommu_domain *cnss_smmu_get_domain(struct device *dev)
 {
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
@@ -4438,12 +4586,16 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	int num_vectors;
 	struct cnss_msi_config *msi_config;
-	struct msi_desc *msi_desc;
 
 	if (pci_priv->device_id == QCA6174_DEVICE_ID)
 		return 0;
 
-	ret = cnss_pci_get_msi_assignment(pci_priv);
+	if (cnss_pci_is_force_one_msi(pci_priv)) {
+		ret = cnss_pci_get_one_msi_assignment(pci_priv);
+		cnss_pr_dbg("force one msi\n");
+	} else {
+		ret = cnss_pci_get_msi_assignment(pci_priv);
+	}
 	if (ret) {
 		cnss_pr_err("Failed to get MSI assignment, err = %d\n", ret);
 		goto out;
@@ -4460,7 +4612,8 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 					    msi_config->total_vectors,
 					    msi_config->total_vectors,
 					    PCI_IRQ_MSI);
-	if (num_vectors != msi_config->total_vectors) {
+	if ((num_vectors != msi_config->total_vectors) &&
+	    !cnss_pci_fallback_one_msi(pci_priv, &num_vectors)) {
 		cnss_pr_err("Failed to get enough MSI vectors (%d), available vectors = %d",
 			    msi_config->total_vectors, num_vectors);
 		if (num_vectors >= 0)
@@ -4468,15 +4621,10 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 		goto reset_msi_config;
 	}
 
-	msi_desc = irq_get_msi_desc(pci_dev->irq);
-	if (!msi_desc) {
-		cnss_pr_err("msi_desc is NULL!\n");
+	if (cnss_pci_config_msi_data(pci_priv)) {
 		ret = -EINVAL;
 		goto free_msi_vector;
 	}
-
-	pci_priv->msi_ep_base_data = msi_desc->msg.data;
-	cnss_pr_dbg("MSI base data is %d\n", pci_priv->msi_ep_base_data);
 
 	return 0;
 
@@ -4548,6 +4696,17 @@ int cnss_get_msi_irq(struct device *dev, unsigned int vector)
 	return irq_num;
 }
 EXPORT_SYMBOL(cnss_get_msi_irq);
+
+bool cnss_is_one_msi(struct device *dev)
+{
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
+
+	if (!pci_priv)
+		return false;
+
+	return cnss_pci_is_one_msi(pci_priv);
+}
+EXPORT_SYMBOL(cnss_is_one_msi);
 
 void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 			  u32 *msi_addr_high)
@@ -5081,7 +5240,6 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	cnss_mhi_debug_reg_dump(pci_priv);
 	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_misc_reg(pci_priv);
-	cnss_pci_dump_shadow_reg(pci_priv);
 
 	cnss_rddm_trigger_debug(pci_priv);
 	ret = mhi_download_rddm_image(pci_priv->mhi_ctrl, in_panic);
@@ -5535,6 +5693,8 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 	int ret, num_vectors, i;
 	u32 user_base_data, base_vector;
 	int *irq;
+	unsigned int msi_data;
+	bool is_one_msi = false;
 
 	ret = cnss_get_user_msi_assignment(&pci_priv->pci_dev->dev,
 					   MHI_MSI_NAME, &num_vectors,
@@ -5542,6 +5702,10 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 	if (ret)
 		return ret;
 
+	if (cnss_pci_is_one_msi(pci_priv)) {
+		is_one_msi = true;
+		num_vectors = cnss_pci_get_one_msi_mhi_irq_array_size(pci_priv);
+	}
 	cnss_pr_dbg("Number of assigned MSI for MHI is %d, base vector is %d\n",
 		    num_vectors, base_vector);
 
@@ -5549,9 +5713,12 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 	if (!irq)
 		return -ENOMEM;
 
-	for (i = 0; i < num_vectors; i++)
-		irq[i] = cnss_get_msi_irq(&pci_priv->pci_dev->dev,
-					  base_vector + i);
+	for (i = 0; i < num_vectors; i++) {
+		msi_data = base_vector;
+		if (!is_one_msi)
+			msi_data += i;
+		irq[i] = cnss_get_msi_irq(&pci_priv->pci_dev->dev, msi_data);
+	}
 
 	pci_priv->mhi_ctrl->irq = irq;
 	pci_priv->mhi_ctrl->nr_irqs = num_vectors;
@@ -5685,6 +5852,9 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		goto free_mhi_ctrl;
 	}
 
+	if (cnss_pci_is_one_msi(pci_priv))
+		mhi_ctrl->irq_flags = IRQF_SHARED | IRQF_NOBALANCING;
+
 	if (pci_priv->smmu_s1_enable) {
 		mhi_ctrl->iova_start = pci_priv->smmu_iova_start;
 		mhi_ctrl->iova_stop = pci_priv->smmu_iova_start +
@@ -5755,7 +5925,9 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 
 	mhi_unregister_controller(mhi_ctrl);
 	kfree(mhi_ctrl->irq);
+	mhi_ctrl->irq = NULL;
 	mhi_free_controller(mhi_ctrl);
+	pci_priv->mhi_ctrl = NULL;
 }
 
 static void cnss_pci_config_regs(struct cnss_pci_data *pci_priv)
@@ -6132,6 +6304,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 		cnss_bus_dev_to_plat_priv(&pci_dev->dev);
 
 	clear_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state);
+	cnss_pci_unregister_driver_hdlr(pci_priv);
 	cnss_pci_free_m3_mem(pci_priv);
 	cnss_pci_free_fw_mem(pci_priv);
 	cnss_pci_free_qdss_mem(pci_priv);
