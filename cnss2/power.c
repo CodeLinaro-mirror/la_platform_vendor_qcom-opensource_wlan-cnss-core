@@ -76,6 +76,7 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 
 #define BOOTSTRAP_DELAY			1000
 #define WLAN_ENABLE_DELAY		1000
+#define WLAN_ENABLE_DELAY_ROME		10000
 
 #define TCS_CMD_DATA_ADDR_OFFSET	0x4
 #define TCS_OFFSET			0xC8
@@ -1012,12 +1013,19 @@ static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 					    ret);
 				goto out;
 			}
-			udelay(WLAN_ENABLE_DELAY);
+
+			if (plat_priv->device_id == QCA6174_DEVICE_ID ||
+			    plat_priv->device_id == 0)
+				udelay(WLAN_ENABLE_DELAY_ROME);
+			else
+				udelay(WLAN_ENABLE_DELAY);
+
 			cnss_set_xo_clk_gpio_state(plat_priv, false);
 		} else {
 			cnss_set_xo_clk_gpio_state(plat_priv, false);
 			goto out;
 		}
+
 	} else {
 		if (!IS_ERR_OR_NULL(pinctrl_info->wlan_en_sleep)) {
 			cnss_wlan_hw_disable_check(plat_priv);
@@ -1104,7 +1112,7 @@ int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num)
 	return gpio_get_value(gpio_num);
 }
 
-int cnss_power_on_device(struct cnss_plat_data *plat_priv)
+int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset)
 {
 	int ret = 0;
 
@@ -1130,6 +1138,26 @@ int cnss_power_on_device(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("Failed to turn on clocks, err = %d\n", ret);
 		goto vreg_off;
 	}
+
+#ifdef CONFIG_PULLDOWN_WLANEN
+	if (reset) {
+		/* The default state of wlan_en maybe not low,
+		 * according to datasheet, we should put wlan_en
+		 * to low first, and trigger high.
+		 * And the default delay for qca6390 is at least 4ms,
+		 * for qcn7605/qca6174, it is 10us. For safe, set 5ms delay
+		 * here.
+		 */
+		ret = cnss_select_pinctrl_state(plat_priv, false);
+		if (ret) {
+			cnss_pr_err("Failed to select pinctrl state, err = %d\n",
+				    ret);
+			goto clk_off;
+		}
+
+		usleep_range(4000, 5000);
+	}
+#endif
 
 	ret = cnss_select_pinctrl_enable(plat_priv);
 	if (ret) {
@@ -1788,5 +1816,5 @@ int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
 		return ret;
 
 	plat_priv->powered_on = false;
-	return cnss_power_on_device(plat_priv);
+	return cnss_power_on_device(plat_priv, false);
 }
