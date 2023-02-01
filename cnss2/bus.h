@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CNSS_BUS_H
@@ -20,10 +20,13 @@
 #define QCA6390_DEVICE_ID		0x1101
 #define QCA6490_VENDOR_ID		0x17CB
 #define QCA6490_DEVICE_ID		0x1103
+#define QCN7605_DEVICE_ID               0x1102
 #define KIWI_VENDOR_ID			0x17CB
 #define KIWI_DEVICE_ID			0x1107
 #define MANGO_VENDOR_ID			0x17CB
 #define MANGO_DEVICE_ID			0x110A
+#define PEACH_VENDOR_ID			0x17CB
+#define PEACH_DEVICE_ID			0x110E
 
 enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev);
 enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv);
@@ -70,6 +73,7 @@ int cnss_bus_debug_reg_write(struct cnss_plat_data *plat_priv, u32 offset,
 int cnss_bus_get_iova(struct cnss_plat_data *plat_priv, u64 *addr, u64 *size);
 int cnss_bus_get_iova_ipa(struct cnss_plat_data *plat_priv, u64 *addr,
 			  u64 *size);
+bool cnss_bus_is_smmu_s1_enabled(struct cnss_plat_data *plat_priv);
 int cnss_bus_update_time_sync_period(struct cnss_plat_data *plat_priv,
 				     unsigned int time_sync_period);
 void cnss_bus_disable_mhi_satellite_cfg(struct cnss_plat_data *plat_priv);
