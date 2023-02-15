@@ -1887,7 +1887,10 @@ retry_mhi_suspend:
 			ret = cnss_mhi_pm_fast_resume(pci_priv, true);
 			cnss_pci_allow_l1(&pci_priv->pci_dev->dev);
 		} else {
-			ret = mhi_pm_resume(pci_priv->mhi_ctrl);
+			if (pci_priv->device_id == QCA6390_DEVICE_ID)
+				ret = mhi_pm_resume_force(pci_priv->mhi_ctrl);
+			else
+				ret = mhi_pm_resume(pci_priv->mhi_ctrl);
 		}
 		mutex_unlock(&pci_priv->mhi_ctrl->pm_mutex);
 		break;
