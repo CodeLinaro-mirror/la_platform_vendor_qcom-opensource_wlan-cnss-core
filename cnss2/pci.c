@@ -279,12 +279,12 @@ int cnss_pci_link_down(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_pci_link_down);
 #elif defined(PCI_RC_SUPPORT_PM)
-int imx6_rc_pm_control(void *endpoint, int op);
+int platform_rc_pm_control(void *endpoint, int op);
 static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
 {
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 
-	imx6_rc_pm_control(pci_dev, link_up);
+	platform_rc_pm_control(pci_dev, link_up);
 	return 0;
 }
 
