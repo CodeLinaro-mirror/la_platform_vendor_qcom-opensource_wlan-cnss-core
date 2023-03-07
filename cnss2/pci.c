@@ -2970,46 +2970,57 @@ struct pci_driver cnss_pci_driver = {
 	},
 };
 
-#ifdef CONFIG_PCI_MSM
-static inline int cnss_msm_pcie_enumerate(struct cnss_plat_data *plat_priv)
+static inline int cnss_pcie_get_rc_index(struct device *dev, u32 *p_rc_num)
 {
-	int ret;
-	struct device *dev = &plat_priv->plat_dev->dev;
-	u32 rc_num;
+	int ret = 0;
 
-	ret = of_property_read_u32(dev->of_node, "qcom,wlan-rc-num", &rc_num);
-	if (ret) {
+	ret = of_property_read_u32(dev->of_node, "qcom,wlan-rc-num", p_rc_num);
+	if (ret)
 		cnss_pr_err("Failed to find PCIe RC number, err = %d\n", ret);
-		goto out;
-	}
 
-	ret = msm_pcie_enumerate(rc_num);
-	if (ret) {
-		cnss_pr_err("Failed to enable PCIe RC%x, err = %d\n",
-			    rc_num, ret);
-		goto out;
-	}
-
-	return 0;
-out:
 	return ret;
 }
-#else /* CONFIG_PCI_MSM */
-static inline int cnss_msm_pcie_enumerate(struct cnss_plat_data *plat_priv)
+
+#if defined(CONFIG_PCI_MSM)
+static inline int cnss_pcie_enumerate(struct cnss_plat_data *plat_priv)
+{
+	int ret;
+	u32 rc_num;
+	struct device *dev = &plat_priv->plat_dev->dev;
+
+	ret = cnss_pcie_get_rc_index(dev, &rc_num);
+	if (!ret)
+		return msm_pcie_enumerate(rc_num);
+	else
+		return ret;
+}
+#elif defined(CONFIG_PCI_QC_ENHANCE)
+static inline int cnss_pcie_enumerate(struct cnss_plat_data *plat_priv)
+{
+	int ret;
+	u32 rc_num;
+	struct device *dev = &plat_priv->plat_dev->dev;
+
+	ret = cnss_pcie_get_rc_index(dev, &rc_num);
+	if (!ret)
+		return platform_pcie_enumerate(rc_num);
+	else
+		return ret;
+}
+#else
+static inline int cnss_pcie_enumerate(struct cnss_plat_data *plat_priv)
 {
 	return 0;
 }
-#endif /* CONFIG_PCI_MSM */
+#endif /* CONFIG_PCI_MSM || CONFIG_PCI_QC_ENHANCE */
 
 int cnss_pci_init(struct cnss_plat_data *plat_priv)
 {
 	int ret;
 
-#ifdef CONFIG_ARCH_QCOM
-	ret = cnss_msm_pcie_enumerate(plat_priv);
+	ret = cnss_pcie_enumerate(plat_priv);
 	if (ret)
 		goto out;
-#endif
 
 	ret = pci_register_driver(&cnss_pci_driver);
 	if (ret) {

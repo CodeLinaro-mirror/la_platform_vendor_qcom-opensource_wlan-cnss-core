@@ -23,6 +23,10 @@
 #include <linux/iommu.h>
 #include <linux/pci.h>
 
+#if defined(CONFIG_PCI_QC_ENHANCE)
+#include <linux/pci_rc_api.h>
+#endif
+
 #include "main.h"
 
 #define QCA6174_VENDOR_ID		0x168C

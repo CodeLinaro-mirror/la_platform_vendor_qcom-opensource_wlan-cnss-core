@@ -38,6 +38,9 @@
 #define QCN7605_CALDB_SIZE 614400
 #define HOST_WAKE_GPIO_IN 144
 
+#define POWER_ON_RETRY_MAX_TIMES	4
+#define POWER_ON_RETRY_DELAY_MS		500
+
 enum cnss_bdf_type {
     CNSS_BDF_BIN,
     CNSS_BDF_ELF,
