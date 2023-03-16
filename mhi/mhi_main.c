@@ -304,8 +304,11 @@ int mhi_release_chan_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt,
 {
 	if (cc_list == NULL || ring == NULL)
 		return -EINVAL;
-
+#ifdef CONFIG_NAPIER_X86
+	dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
 	dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
 			  ring->len,
 			  ring->base,
 			  cc_list->mhi_trb_ring_base_addr);
@@ -343,7 +346,11 @@ static int populate_tre_ring(struct mhi_client_config *client_config)
 
 	chan_ctxt = &mhi_dev_ctxt->dev_space.ring_ctxt.cc_list[chan];
 	ring_local_addr =
+#ifdef CONFIG_NAPIER_X86
+		dma_alloc_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
 		dma_alloc_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
 				   nr_desc * sizeof(union mhi_xfer_pkt),
 				   &ring_dma_addr,
 				   GFP_KERNEL);
@@ -859,6 +866,11 @@ static int create_bb(struct mhi_device_ctxt *mhi_dev_ctxt,
 	struct mhi_buf_info *bb_info;
 	int r;
 	uintptr_t bb_index, ctxt_index_wp, ctxt_index_rp;
+#ifdef CONFIG_NAPIER_X86
+	struct device *dev = &mhi_dev_ctxt->pcie_device->dev;
+#else
+	struct device *dev = &mhi_dev_ctxt->plat_dev->dev;
+#endif
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_RAW,
 		"Entered chan %d\n", chan);
@@ -883,7 +895,7 @@ static int create_bb(struct mhi_device_ctxt *mhi_dev_ctxt,
 	bb_info->client_buf = buf;
 	bb_info->dir = dir;
 	bb_info->bb_p_addr = dma_map_single(
-					&mhi_dev_ctxt->plat_dev->dev,
+					dev,
 					bb_info->client_buf,
 					bb_info->buf_len,
 					bb_info->dir);
@@ -892,7 +904,7 @@ static int create_bb(struct mhi_device_ctxt *mhi_dev_ctxt,
 		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 			"Buffer outside DMA range 0x%lx, size 0x%zx\n",
 			(uintptr_t)bb_info->bb_p_addr, buf_len);
-		dma_unmap_single(&mhi_dev_ctxt->plat_dev->dev,
+		dma_unmap_single(dev,
 				bb_info->bb_p_addr,
 				bb_info->buf_len,
 				bb_info->dir);
@@ -944,7 +956,11 @@ static void free_bounce_buffer(struct mhi_device_ctxt *mhi_dev_ctxt,
 	mhi_log(mhi_dev_ctxt, MHI_MSG_RAW, "Entered\n");
 	if (!bb->bb_active)
 		/* This buffer was maped directly to device */
+#ifdef CONFIG_NAPIER_X86
+		dma_unmap_single(&mhi_dev_ctxt->pcie_device->dev,
+#else
 		dma_unmap_single(&mhi_dev_ctxt->plat_dev->dev,
+#endif
 				 bb->bb_p_addr, bb->buf_len, bb->dir);
 
 	bb->bb_active = 0;
@@ -961,8 +977,10 @@ static int mhi_queue_dma_xfer(
 	struct mhi_device_ctxt *mhi_dev_ctxt;
 
 	mhi_dev_ctxt = client_config->mhi_dev_ctxt;
+#ifndef CONFIG_NAPIER_X86
 	MHI_ASSERT(VALID_BUF(buf, buf_len, mhi_dev_ctxt),
 			"Client buffer is of invalid length\n");
+#endif
 	chan = client_config->chan_info.chan_nr;
 
 	pkt_loc = mhi_dev_ctxt->mhi_local_chan_ctxt[chan].wp;
@@ -1006,7 +1024,7 @@ int mhi_queue_xfer(struct mhi_client_handle *client_handle,
 {
 	int r;
 	enum dma_data_direction dma_dir;
-	struct mhi_buf_info *bb;
+	struct mhi_buf_info *bb = NULL;
 	struct mhi_device_ctxt *mhi_dev_ctxt;
 	u32 chan;
 	unsigned long flags;

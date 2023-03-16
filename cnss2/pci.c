@@ -688,8 +688,14 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 
 	cnss_pci_call_driver_remove(pci_priv);
 
-	cnss_request_bus_bandwidth(&plat_priv->plat_dev->dev,
-				   CNSS_BUS_WIDTH_NONE);
+#ifdef CONFIG_NAPIER_X86
+		cnss_request_bus_bandwidth(&pci_priv->pci_dev->dev,
+					   CNSS_BUS_WIDTH_NONE);
+#else
+		cnss_request_bus_bandwidth(&plat_priv->plat_dev->dev,
+					   CNSS_BUS_WIDTH_NONE);
+#endif
+
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
 	cnss_pci_set_auto_suspended(pci_priv, 0);
 
@@ -1796,7 +1802,7 @@ int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-static void cnss_pci_free_m3_mem(struct cnss_pci_data *pci_priv)
+void cnss_pci_free_m3_mem(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct cnss_fw_mem *m3_mem = &plat_priv->m3_mem;
@@ -2403,7 +2409,9 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_device *mhi_dev = &pci_priv->mhi_dev;
 
+#ifndef CONFIG_NAPIER_X86
 	mhi_dev->dev = &pci_priv->plat_priv->plat_dev->dev;
+#endif
 	mhi_dev->pci_dev = pci_dev;
 
 	mhi_dev->resources[0].start = (resource_size_t)pci_priv->bar;
@@ -2720,8 +2728,12 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	case QCN7605_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
+#ifdef CONFIG_NAPIER_X86
+		if (!mhi_is_device_ready(NULL, MHI_NODE_NAME)) {
+#else
 		if (!mhi_is_device_ready(&plat_priv->plat_dev->dev,
 					 MHI_NODE_NAME)) {
+#endif
 			cnss_pr_err("MHI driver is not ready, defer PCI probe!\n");
 			ret = -EPROBE_DEFER;
 			goto out;

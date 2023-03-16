@@ -22,6 +22,10 @@
 #include "mhi_hwio.h"
 #include "mhi_bhi.h"
 
+#ifdef CONFIG_NAPIER_X86
+static struct mhi_device_ctxt *s_mhi_dev_ctxt;
+#endif
+
 static int bhi_open(struct inode *mhi_inode, struct file *file_handle)
 {
 	struct mhi_device_ctxt *mhi_dev_ctxt;
@@ -38,14 +42,18 @@ static int bhi_alloc_bhie_xfer(struct mhi_device_ctxt *mhi_dev_ctxt,
 			       struct bhie_vec_table *vec_table)
 {
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+#ifdef CONFIG_NAPIER_X86
+	struct device *dev = &mhi_dev_ctxt->pcie_device->dev;
+#else
 	struct device *dev = &mhi_dev_ctxt->plat_dev->dev;
+#endif
 	const phys_addr_t align = bhi_ctxt->alignment - 1;
 	size_t seg_size = bhi_ctxt->firmware_info.segment_size;
 	/* We need one additional entry for Vector Table */
 	int segments = DIV_ROUND_UP(size, seg_size) + 1;
 	int i;
 	struct scatterlist *sg_list;
-	struct bhie_mem_info *bhie_mem_info, *info;
+	struct bhie_mem_info *bhie_mem_info, *info = NULL;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 		"Total size:%lu total_seg:%d seg_size:%lu\n",
@@ -114,7 +122,11 @@ static int bhi_alloc_pbl_xfer(struct mhi_device_ctxt *mhi_dev_ctxt,
 {
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
 	const phys_addr_t align_len = bhi_ctxt->alignment;
+#ifdef CONFIG_NAPIER_X86
+	struct device *dev = &mhi_dev_ctxt->pcie_device->dev;
+#else
 	struct device *dev = &mhi_dev_ctxt->plat_dev->dev;
+#endif
 
 	mem_info->size = size;
 	mem_info->alloc_size = size + (align_len - 1);
@@ -649,6 +661,10 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 	const u8 *image;
 	int id;
 
+#ifdef CONFIG_NAPIER_X86
+	s_mhi_dev_ctxt = mhi_dev_ctxt;
+#endif
+
 	/* expose dev node to userspace */
 	if (bhi_ctxt->manage_boot == false)
 		return bhi_expose_dev_bhi(mhi_dev_ctxt);
@@ -666,9 +682,15 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 		"max sbl image size:%lu segment size:%lu\n",
 		fw_info->max_sbl_len, fw_info->segment_size);
 
+#ifdef CONFIG_NAPIER_X86
+	/* Read the fw image */
+	ret = request_firmware(&firmware, fw_info->fw_image,
+			       &mhi_dev_ctxt->pcie_device->dev);
+#else
 	/* Read the fw image */
 	ret = request_firmware(&firmware, fw_info->fw_image,
 			       &mhi_dev_ctxt->plat_dev->dev);
+#endif
 	if (ret) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 			"Error request firmware for:%s ret:%d\n",
@@ -781,7 +803,11 @@ void bhi_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
 	struct bhie_vec_table *fw_table = &bhi_ctxt->fw_table;
 	struct bhie_vec_table *rddm_table = &bhi_ctxt->rddm_table;
+#ifdef CONFIG_NAPIER_X86
+	struct device *dev = &mhi_dev_ctxt->pcie_device->dev;
+#else
 	struct device *dev = &mhi_dev_ctxt->plat_dev->dev;
+#endif
 	struct bhie_mem_info *bhie_mem_info;
 	int i;
 
@@ -818,4 +844,7 @@ void bhi_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 	kfree(rddm_table->bhie_mem_info);
 	rddm_table->bhie_mem_info = NULL;
 	rddm_table->bhi_vec_entry = NULL;
+#ifdef CONFIG_NAPIER_X86
+	s_mhi_dev_ctxt = NULL;
+#endif
 }

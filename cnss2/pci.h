@@ -162,6 +162,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv);
 void cnss_pci_fw_name_add_path(struct cnss_pci_data *pci_priv,
 			       char *file_name, char *name);
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv);
+void cnss_pci_free_m3_mem(struct cnss_pci_data *pci_priv);
 int cnss_pci_get_bar_info(struct cnss_pci_data *pci_priv, void __iomem **va,
 			  phys_addr_t *pa);
 int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,

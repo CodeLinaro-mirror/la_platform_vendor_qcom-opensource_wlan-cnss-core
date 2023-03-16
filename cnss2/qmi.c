@@ -25,6 +25,7 @@
 #include "debug.h"
 #include "main.h"
 #include "qmi.h"
+#include "msm_mhi.h"
 
 #define WLFW_SERVICE_INS_ID_V01		1
 #define WLFW_CLIENT_ID			0x4b4e454c
@@ -189,6 +190,12 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	req.cal_done_valid = 1;
 	req.cal_done = plat_priv->cal_done;
 	cnss_pr_dbg("Calibration done is %d\n", plat_priv->cal_done);
+	
+#ifdef CONFIG_WLAN_INTERNAL_SLEEP_CLOCK
+	req.nm_modem_valid = 1;
+	req.nm_modem |= WLFW_HOST_CAP_INTERNAL_SLEEPCLOCK_MASK;
+	cnss_pr_err("nm_modem is %d\n", req.nm_modem);
+#endif
 
 	req_desc.max_msg_len = WLFW_HOST_CAP_REQ_MSG_V01_MAX_MSG_LEN;
 	req_desc.msg_id = QMI_WLFW_HOST_CAP_REQ_V01;
@@ -812,6 +819,7 @@ static void cnss_wlfw_bdf_get_file_name(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_BDF_ELF:
 		bdf_type = cnss_wlfw_bdf_elf_bin_override(plat_priv);
+		/*fall-through*/
 	case CNSS_BDF_BIN:
 		if (plat_priv->board_info.board_id == 0xFF) {
 			if (bdf_type == CNSS_BDF_BIN)
@@ -862,8 +870,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv, u32 bdf_type)
 	unsigned int remaining;
 	int ret = 0;
 
-	cnss_pr_dbg("Sending BDF download message, state: 0x%lx\n",
-		    plat_priv->driver_state);
+	cnss_pr_dbg("Sending BDF download message, state: 0x%lx, type: %d\n",
+		    plat_priv->driver_state, bdf_type);
 
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req) {
@@ -879,7 +887,14 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv, u32 bdf_type)
 		goto bypass_bdf;
 	}
 
+#ifdef CONFIG_NAPIER_X86
+	if (bdf_type == CNSS_BDF_REGDB)
+		ret = request_firmware_direct(&fw_entry, filename, NULL);
+	else
+		ret = request_firmware(&fw_entry, filename, NULL);
+#else
 	ret = request_firmware(&fw_entry, filename, &plat_priv->plat_dev->dev);
+#endif
 	if (ret) {
 		cnss_pr_err("Failed to load BDF: %s\n", filename);
 		goto err_req_fw;
@@ -1028,6 +1043,7 @@ int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 		cnss_pr_dbg("Recovery is in progress, ignore mode off request.\n");
 		return 0;
 	}
+
 
 	memset(&req, 0, sizeof(req));
 	memset(&resp, 0, sizeof(resp));

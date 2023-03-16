@@ -562,9 +562,10 @@ static int mhi_plat_probe(struct platform_device *pdev)
 	//int r = 0, len;
 	struct mhi_device_ctxt *mhi_dev_ctxt;
 	struct pcie_core_info *core;
-	struct device_node *of_node = pdev->dev.of_node;
 	u64 address_window[2];
 
+#ifndef CONFIG_NAPIER_X86
+	struct device_node *of_node = pdev->dev.of_node;
 	if (of_node == NULL)
 		return -ENODEV;
 
@@ -575,6 +576,9 @@ static int mhi_plat_probe(struct platform_device *pdev)
 	mhi_dev_ctxt = devm_kzalloc(&pdev->dev,
 				    sizeof(*mhi_dev_ctxt),
 				    GFP_KERNEL);
+#else
+	mhi_dev_ctxt = kzalloc(sizeof(*mhi_dev_ctxt), GFP_KERNEL);
+#endif
 	if (!mhi_dev_ctxt)
 		return -ENOMEM;
 
@@ -607,8 +611,10 @@ static int mhi_plat_probe(struct platform_device *pdev)
 
 	mhi_dev_ctxt->flags.bb_required = false;
 
+#ifndef CONFIG_NAPIER_X86
 	mhi_dev_ctxt->plat_dev = pdev;
 	platform_set_drvdata(pdev, mhi_dev_ctxt);
+#endif
 
 	/*r = dma_set_mask(&pdev->dev, MHI_DMA_MASK);
 	if (r) {
@@ -681,11 +687,15 @@ static int __init mhi_init(void)
 	mhi_dev_drv->parent = debugfs_create_dir("mhi", NULL);
 	mhi_device_drv = mhi_dev_drv;
 
+#ifdef CONFIG_NAPIER_X86
+	mhi_plat_probe(NULL);
+#else
 	r = platform_driver_register(&mhi_plat_driver);
 	if (r) {
 		pr_err("%s: Failed to probe platform ret %d\n", __func__, r);
 		goto platform_error;
 	}
+#endif
 	r = pci_register_driver(&mhi_pcie_driver);
 	if (r) {
 		pr_err("%s: Failed to register pcie drv ret %d\n", __func__, r);
@@ -694,8 +704,10 @@ static int __init mhi_init(void)
 
 	return 0;
 error:
+#ifndef CONFIG_NAPIER_X86
 	platform_driver_unregister(&mhi_plat_driver);
 platform_error:
+#endif
 	class_destroy(mhi_device_drv->mhi_bhi_class);
 
 class_error:

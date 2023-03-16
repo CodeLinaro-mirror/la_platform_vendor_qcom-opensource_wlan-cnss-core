@@ -34,6 +34,10 @@
 #include "pci.h"
 #include "ramdump.h"
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0))
+#include <linux/panic_notifier.h>
+#endif
+
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
 #define CNSS_DUMP_MAGIC_VER_V2		0x42445953
@@ -164,7 +168,10 @@ static void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv)
 	cnss_pr_dbg("PM stay awake, state: 0x%lx, count: %d\n",
 		    plat_priv->driver_state,
 		    atomic_read(&plat_priv->pm_count));
-	pm_stay_awake(&plat_priv->plat_dev->dev);
+	if (plat_priv->plat_dev)
+		pm_stay_awake(&plat_priv->plat_dev->dev);
+	else
+		printk("%s: NAP-TODO\n", __func__);
 }
 
 static void cnss_pm_relax(struct cnss_plat_data *plat_priv)
@@ -179,7 +186,10 @@ static void cnss_pm_relax(struct cnss_plat_data *plat_priv)
 	cnss_pr_dbg("PM relax, state: 0x%lx, count: %d\n",
 		    plat_priv->driver_state,
 		    atomic_read(&plat_priv->pm_count));
-	pm_relax(&plat_priv->plat_dev->dev);
+	if (plat_priv->plat_dev)
+		pm_relax(&plat_priv->plat_dev->dev);
+	else
+		printk("%s: NAP-TODO\n", __func__);
 }
 
 void cnss_lock_pm_sem(struct device *dev)
@@ -1126,7 +1136,12 @@ EXPORT_SYMBOL(cnss_device_crashed);
 #ifdef CONFIG_ARCH_QCOM
 static void cnss_subsys_crash_shutdown(const struct subsys_desc *subsys_desc)
 {
-	struct cnss_plat_data *plat_priv = dev_get_drvdata(subsys_desc->dev);
+#ifdef CONFIG_NAPIER_X86
+	struct cnss_plat_data *plat_priv = plat_env;
+#else
+	struct cnss_plat_data *plat_priv =
+		(subsys_desc ? dev_get_drvdata(subsys_desc->dev) : NULL);
+#endif
 
 	if (!plat_priv) {
 		cnss_pr_err("plat_priv is NULL!\n");
@@ -1897,10 +1912,13 @@ void cnss_unregister_subsys(struct cnss_plat_data *plat_priv) {
  */
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 {
+#ifndef CONFIG_NAPIER_X86
 	int ret = 0;
+	const char *dev_name = "wlan";
+#endif
 	struct cnss_ramdump_info_v2 *info_v2;
 	struct cnss_dump_data *dump_data;
-	const char *dev_name = "wlan";
+
 
 	info_v2 = &plat_priv->ramdump_info_v2;
 	dump_data = &info_v2->dump_data;
@@ -1915,20 +1933,21 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 	dump_data->seg_version = CNSS_DUMP_SEG_VER;
 	strlcpy(dump_data->name, CNSS_DUMP_NAME,
 		sizeof(dump_data->name));
-
+#ifndef CONFIG_NAPIER_X86
 	info_v2->ramdump_dev = create_ramdump_device(dev_name, &plat_priv->plat_dev->dev);
 	if (!info_v2->ramdump_dev) {
 		cnss_pr_err("Failed to create ramdump device!\n");
 		ret = -ENOMEM;
 		goto free_ramdump;
 	}
-
+#endif
 	return 0;
-
+#ifndef CONFIG_NAPIER_X86
 free_ramdump:
 	kfree(info_v2->dump_data_vaddr);
 	info_v2->dump_data_vaddr = NULL;
 	return ret;
+#endif
 }
 
 void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
@@ -1937,8 +1956,10 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
 
 	info_v2 = &plat_priv->ramdump_info_v2;
 
+#ifndef CONFIG_NAPIER_X86
 	if (info_v2->ramdump_dev)
 		destroy_ramdump_device(info_v2->ramdump_dev);
+#endif
 
 	kfree(info_v2->dump_data_vaddr);
 	info_v2->dump_data_vaddr = NULL;
@@ -2048,7 +2069,17 @@ static int cnss_create_sysfs(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
 
+#ifdef CONFIG_NAPIER_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+
+	if (!pci_priv || !pci_priv->pci_dev) {
+		cnss_pr_err("PCI device not probed yet\n");
+		goto out;
+	}
+	ret = device_create_file(&pci_priv->pci_dev->dev, &dev_attr_fs_ready);
+#else
 	ret = device_create_file(&plat_priv->plat_dev->dev, &dev_attr_fs_ready);
+#endif
 	if (ret) {
 		cnss_pr_err("Failed to create device file, err = %d\n", ret);
 		goto out;
@@ -2061,15 +2092,30 @@ out:
 
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
+#ifdef CONFIG_NAPIER_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	device_remove_file(&pci_priv->pci_dev->dev, &dev_attr_fs_ready);
+#else
 	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_fs_ready);
+#endif
 }
 
 static int cnss_create_sysfs_wl_pwr(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
+#ifdef CONFIG_NAPIER_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	if (!pci_priv || !pci_priv->pci_dev) {
+		cnss_pr_err("PCI device not probed yet\n");
+		goto out;
+	}
 
+	ret = device_create_file(&pci_priv->pci_dev->dev, 
+				 &dev_attr_wl_pwr_on);
+#else
 	ret = device_create_file(&plat_priv->plat_dev->dev,
 				 &dev_attr_wl_pwr_on);
+#endif
 	if (ret) {
 		cnss_pr_err("Failed to create device file, err = %d\n", ret);
 		goto out;
@@ -2172,6 +2218,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 {
 	int ret = 0;
 	struct cnss_plat_data *plat_priv;
+#ifndef CONFIG_NAPIER_X86 
 	const struct of_device_id *of_id;
 	const struct platform_device_id *device_id;
 	int retry = 0;
@@ -2201,11 +2248,32 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->plat_dev = plat_dev;
 	plat_priv->device_id = device_id->driver_data;
 	plat_priv->is_converged_dt = cnss_is_converged_dt(plat_priv);
+	
+#else /* CONFIG_NAPIER_X86 */
+
+	cnss_pr_err("Enter %s NAPIER_X86!\n", __func__);
+	if (plat_env) {
+		cnss_pr_err("Driver is already initialized!\n");
+		ret = -EEXIST;
+		goto out;
+	}
+
+	plat_priv = kzalloc(sizeof(*plat_priv),GFP_KERNEL);
+
+	if (!plat_priv) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	plat_priv->device_id = QCA6490_DEVICE_ID;
+#endif /* CONFIG_NAPIER_X86 */
+
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv);
 	cnss_pr_dbg("bus type selected  %d\n", plat_priv->bus_type);
 	cnss_set_plat_priv(plat_dev, plat_priv);
+#ifndef CONFIG_NAPIER_X86 
 	platform_set_drvdata(plat_dev, plat_priv);
-
+#endif
 	ret = cnss_get_resources(plat_priv);
 	if (ret)
 		goto reset_ctx;
@@ -2311,16 +2379,25 @@ power_off:
 free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
+#ifndef CONFIG_NAPIER_X86 
 	platform_set_drvdata(plat_dev, NULL);
 	cnss_set_plat_priv(plat_dev, NULL);
+#else
+	if(plat_env)
+	    kfree(plat_env);
+	cnss_set_plat_priv(plat_dev,NULL);
+#endif
 out:
 	return ret;
 }
 
 static int cnss_remove(struct platform_device *plat_dev)
 {
+#ifdef CONFIG_NAPIER_X86
+	struct cnss_plat_data *plat_priv = plat_env;
+#else
 	struct cnss_plat_data *plat_priv = platform_get_drvdata(plat_dev);
-
+#endif
 	complete_all(&plat_priv->rddm_complete);
 	complete_all(&plat_priv->power_up_complete);
 #ifdef CONFIG_ARCH_QCOM
@@ -2337,12 +2414,14 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_unregister_esoc(plat_priv);
 	cnss_bus_deinit(plat_priv);
 	cnss_put_resources(plat_priv);
+#ifndef CONFIG_NAPIER_X86
 	platform_set_drvdata(plat_dev, NULL);
+#endif
 	plat_env = NULL;
 
 	return 0;
 }
-
+#ifndef CONFIG_NAPIER_X86
 static struct platform_driver cnss_platform_driver = {
 	.probe  = cnss_probe,
 	.remove = cnss_remove,
@@ -2355,7 +2434,7 @@ static struct platform_driver cnss_platform_driver = {
 #endif
 	},
 };
-
+#endif
 #ifdef CONFIG_WLAN_CNSS_CORE
 int cnss_initialize(void)
 #else
@@ -2365,7 +2444,11 @@ static int __init cnss_initialize(void)
 	int ret = 0;
 
 	cnss_debug_init();
+#ifdef CONFIG_NAPIER_X86 
+	ret = cnss_probe(NULL);
+#else
 	ret = platform_driver_register(&cnss_platform_driver);
+#endif
 	if (ret)
 		cnss_debug_deinit();
 
@@ -2378,7 +2461,11 @@ void cnss_exit(void)
 static void __exit cnss_exit(void)
 #endif
 {
+#ifdef CONFIG_NAPIER_X86
+	cnss_remove(NULL);
+#else
 	platform_driver_unregister(&cnss_platform_driver);
+#endif
 	cnss_debug_deinit();
 }
 

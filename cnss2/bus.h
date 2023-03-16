@@ -54,6 +54,7 @@ void cnss_bus_deinit(struct cnss_plat_data *plat_priv);
 void cnss_bus_fw_name_add_path(struct cnss_plat_data *plat_priv,
 			       char *file_name, char *name);
 int cnss_bus_load_m3(struct cnss_plat_data *plat_priv);
+int cnss_bus_free_m3(struct cnss_plat_data *plat_priv);
 int cnss_bus_alloc_fw_mem(struct cnss_plat_data *plat_priv);
 int cnss_bus_get_wake_irq(struct cnss_plat_data *plat_priv);
 int cnss_bus_force_fw_assert_hdlr(struct cnss_plat_data *plat_priv);
