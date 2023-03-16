@@ -171,6 +171,15 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv);
 void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv);
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv);
 void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv);
+void cnss_pci_dump_qdss_reg(struct cnss_pci_data *pci_priv);
+#ifdef DUMP_TO_FS
+int cnss_pci_fw_sram_dump_to_file(struct cnss_pci_data *pci_priv,
+		uint32_t fw_sram_start,
+		uint32_t fw_sram_end,
+		const char *fw_sram_dump_path);
+int cnss_pci_dump_fw_remote_mem_to_file(struct cnss_pci_data *pci_priv);
+int cnss_pci_dump_fw_paging_to_file(struct cnss_pci_data *pci_priv);
+#endif
 int cnss_pm_request_resume(struct cnss_pci_data *pci_priv);
 u32 cnss_pci_get_wake_msi(struct cnss_pci_data *pci_priv);
 int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv);

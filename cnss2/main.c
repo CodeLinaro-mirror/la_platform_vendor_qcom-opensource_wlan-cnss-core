@@ -33,6 +33,7 @@
 #include "debug.h"
 #include "pci.h"
 #include "ramdump.h"
+#include "mhi.h"
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0))
 #include <linux/panic_notifier.h>
@@ -50,6 +51,13 @@
 #define FW_ASSERT_TIMEOUT		5000
 #define CNSS_EVENT_PENDING		2989
 #define CE_MSI_NAME			"CE"
+
+#ifdef DUMP_TO_FS
+#define FW_SRAM_START_QCA6390		0x01400000
+#define FW_SRAM_END_QCA6390			0x0171ffff
+#define FW_SRAM_START_QCA6490		0x01400000
+#define FW_SRAM_END_QCA6490			0x0177ffff
+#endif
 
 static struct cnss_plat_data *plat_env;
 
@@ -1334,6 +1342,58 @@ int cnss_force_fw_assert(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_force_fw_assert);
 
+#ifdef DUMP_TO_FS
+int cnss_dump_fw_sram_to_file(struct cnss_plat_data *plat_priv)
+{
+	uint32_t fw_sram_start;
+	uint32_t fw_sram_end;
+	int ret;
+	uint32_t len;
+	char time_buf[24];
+	char fw_sram_dump_path[64];
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	switch(plat_priv->device_id) {
+		case QCA6490_DEVICE_ID:
+			fw_sram_start = FW_SRAM_START_QCA6490;
+			fw_sram_end = FW_SRAM_END_QCA6490;
+			break;
+		case QCA6390_DEVICE_ID:
+			fw_sram_start = FW_SRAM_START_QCA6390;
+			fw_sram_end = FW_SRAM_END_QCA6390;
+			break;
+		default:
+			cnss_pr_err("FW sram dump not support: device %04lx\n",
+				plat_priv->device_id);
+			return -ENOTSUPP;
+	}
+
+	len = get_time_of_the_day_in_hr_min_sec(time_buf, sizeof(time_buf));
+	len = scnprintf(fw_sram_dump_path,
+			sizeof(fw_sram_dump_path),
+			"/var/crash/%s",
+			time_buf);
+	scnprintf(fw_sram_dump_path + len,
+		  sizeof(fw_sram_dump_path) - len,
+		  "q6-sram.bin");
+
+	cnss_pr_info("FW sram dump start %s ...\n", fw_sram_dump_path);
+
+	ret = cnss_bus_fw_sram_dump_to_file(plat_priv,
+			fw_sram_start,
+			fw_sram_end,
+			fw_sram_dump_path);
+
+	cnss_pr_info("FW sram dump end, status %d\n", ret);
+
+	return ret;
+}
+#endif
+
 #ifdef CONFIG_ARCH_QCOM
 int cnss_force_collect_rddm(struct device *dev)
 {
@@ -2218,10 +2278,10 @@ static int cnss_probe(struct platform_device *plat_dev)
 {
 	int ret = 0;
 	struct cnss_plat_data *plat_priv;
+	int retry = 0;
 #ifndef CONFIG_NAPIER_X86 
 	const struct of_device_id *of_id;
 	const struct platform_device_id *device_id;
-	int retry = 0;
 
 	if (cnss_get_plat_priv(plat_dev)) {
 		cnss_pr_err("Driver is already initialized!\n");

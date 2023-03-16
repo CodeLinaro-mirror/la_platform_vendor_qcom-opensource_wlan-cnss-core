@@ -17,12 +17,14 @@
 #include "mhi_bhi.h"
 #include "mhi_sys.h"
 
+
+#ifdef DUMP_TO_FS
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 #define vfs_write kernel_write
 #endif
 
-#ifdef DUMP_TO_FS
-static int get_time_of_the_day_in_hr_min_sec(char *tbuf, int len)
+int get_time_of_the_day_in_hr_min_sec(char *tbuf, int len)
 {
 	struct timespec64 tv;
 	struct rtc_time tm;
@@ -31,7 +33,11 @@ static int get_time_of_the_day_in_hr_min_sec(char *tbuf, int len)
 	ktime_get_real_ts64(&tv);
 	/* Convert rtc to local time */
 	tv.tv_sec -= sys_tz.tz_minuteswest * 60;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0))
 	rtc_time64_to_tm(tv.tv_sec, &tm);
+#else
+	rtc_time_to_tm(tv.tv_sec, &tm);
+#endif
 	time_len = scnprintf(tbuf, len,
 		"%04d-%02d-%02d-%02d-%02d-%02d-",
 		tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
@@ -45,7 +51,9 @@ static int firmware_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			 char *file_full_path)
 {
 	struct file *fp = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	mm_segment_t fs;
+#endif
 	loff_t pos = 0;
 	int seg = 0;
 	int status = 0;
@@ -53,8 +61,10 @@ static int firmware_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 	unsigned int size = 0;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "enter\n");
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 		"to create file:%s\n", file_full_path);
@@ -91,7 +101,9 @@ static int firmware_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			"close file: %s, error\n", file_full_path);
 		return status;
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	set_fs(fs);
+#endif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "exit\n");
 	return status;
 }
@@ -103,7 +115,9 @@ static int extract_fw_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			 unsigned int target_size)
 {
 	struct file *fp = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	mm_segment_t fs;
+#endif
 	loff_t pos = 0;
 	int seg = 0;
 	int status = 0;
@@ -115,9 +129,10 @@ static int extract_fw_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 	bool complete = false;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "enter\n");
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-
+#endif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 		"to create file:%s\n", file_full_path);
 	fp = filp_open(file_full_path, O_RDWR | O_CREAT, 0644);
@@ -180,17 +195,113 @@ static int extract_fw_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			"close file: %s, error\n", file_full_path);
 		return status;
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	set_fs(fs);
+#endif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "exit\n");
 	return status;
 }
+
+struct paging_header_t {
+	u64 version;   /* dump version */
+	u64 seg_num;   /* paging seg num */
+};
+static struct paging_header_t paging_header;
+
+/*paging dump 1 seg for header, save version, seg_num, each seg address, size*/
+static char paging_dump_header[512];
+
+int fw_paging_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
+		   struct bhie_vec_table *fw_table,
+		   char *file_full_path)
+{
+	struct file *fp = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
+	mm_segment_t fs;
+#endif
+	loff_t pos = 0;
+	int seg = 0;
+	int status = 0;
+	char *buf = NULL;
+	unsigned int size = 0;
+
+	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "enter\n");
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
+	fs = get_fs();
+	set_fs(KERNEL_DS);
+#endif
+	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+		"to create file:%s\n", file_full_path);
+
+	fp = filp_open(file_full_path, O_RDWR | O_CREAT, 0644);
+	if (IS_ERR(fp)) {
+		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR, "create file:%s error\n",
+			file_full_path);
+		return -EIO;
+	}
+
+	pos = 0;
+	paging_header.version = 0;
+	paging_header.seg_num = fw_table->segment_count-1;
+	memcpy(paging_dump_header, &paging_header, sizeof(paging_header));
+	buf = fw_table->bhie_mem_info[paging_header.seg_num].aligned;
+	size = fw_table->bhie_mem_info[paging_header.seg_num].size;
+	memcpy(paging_dump_header+sizeof(paging_header), buf, size);
+	status = vfs_write(fp,
+			paging_dump_header,
+			sizeof(paging_dump_header),
+			&pos);
+	if (status < 0) {
+		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+			"write file:%s error\n", file_full_path);
+		return status;
+	}
+	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+			"to write file:%s, mem: 0x%p, size: 0x%x\n",
+			file_full_path,
+			paging_dump_header,
+			(unsigned int)sizeof(paging_dump_header));
+	for (seg = 0; seg < fw_table->segment_count-1; seg++) {
+		buf = fw_table->bhie_mem_info[seg].aligned;
+		size = fw_table->bhie_mem_info[seg].size;
+		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+			"to write file:%s, mem: 0x%p, size: 0x%x\n",
+			file_full_path,
+			buf,
+			size);
+		status = vfs_write(fp, buf, size, &pos);
+		if (status < 0) {
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+				"write file:%s error\n", file_full_path);
+			return status;
+		}
+	}
+
+	/* flush write to file */
+	vfs_fsync(fp, 0);
+
+	status = filp_close(fp, NULL);
+	if (status < 0) {
+		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+			"close file: %s, error\n", file_full_path);
+		return status;
+	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
+	set_fs(fs);
+#endif
+	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "exit\n");
+	return status;
+}
+
 
 int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 		       struct fw_remote_mem *fw_mem,
 		       char *file_full_path)
 {
 	struct file *fp;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	mm_segment_t fs;
+#endif
 	loff_t pos;
 	int status = 0;
 
@@ -202,8 +313,10 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			file_full_path);
 		return -EIO;
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
 	pos = 0;
 	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 		"to write file:%s, mem: 0x%p, size: 0x%x\n",
@@ -211,9 +324,9 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 		fw_mem->vaddr,
 		(unsigned int)(fw_mem->size));
 	status = vfs_write(fp,
-			  (const char __user *)(fw_mem->vaddr),
-			  fw_mem->size,
-			  &pos);
+			   (const char __user *)(fw_mem->vaddr),
+			   fw_mem->size,
+			   &pos);
 	if (status < 0) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 			"write file:%s error\n",
@@ -231,12 +344,13 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			file_full_path);
 		return status;
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	set_fs(fs);
+#endif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "exit\n");
 	return status;
 
 }
-#endif /*DUMP_TO_FS*/
 #define MAX_RAMDUMP_TABLE_SIZE  6
 
 typedef struct
@@ -255,7 +369,6 @@ typedef struct
 	ramdump_entry ramdump_table[MAX_RAMDUMP_TABLE_SIZE];
 }ramdump_header_t;
 
-#ifdef DUMP_TO_FS
 void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	int ret = 0;
@@ -281,7 +394,7 @@ void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt)
 	len_left =  sizeof(file_full_path)-len;
 
 	len = scnprintf(p, len_left, "paging.bin");
-	ret = firmware_dump(mhi_dev_ctxt, fw_table, file_full_path);
+	ret = fw_paging_dump(mhi_dev_ctxt, fw_table, file_full_path);
 
 	len = scnprintf(p, len_left, "remote.bin");
 	ret = fw_remote_mem_dump(mhi_dev_ctxt, fw_mem, file_full_path);
@@ -305,7 +418,27 @@ void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt)
 		offset += entry->size;
 	}
 }
-#endif
+
+bool is_ramdump_all_zero(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+	struct bhie_vec_table *rddm_table = &bhi_ctxt->rddm_table;
+	int seg = 0;
+	char *buf = NULL;
+	unsigned head_len;
+
+	head_len = sizeof(ramdump_header_t);
+
+	for (seg = 0; seg < rddm_table->segment_count; seg++) {
+		buf = rddm_table->bhie_mem_info[seg].aligned;
+
+		if (buf[head_len+1]+buf[head_len+3]+buf[head_len+5]
+			+buf[head_len+7]+buf[head_len+9] != 0) {
+			return false;
+		}
+	}
+	return true;
+}
 
 #define FW_DUMP_INFO_FORMAT_STR \
 	"[%s] to write file:none, mem: 0x%p, size: 0x%x\n"
@@ -327,7 +460,16 @@ void dump_fw_info_to_kmsg(struct mhi_device_ctxt *mhi_dev_ctxt)
 	}
 
 	/* fw_paging_dump */
-	for (seg = 0; seg < fw_table->segment_count; seg++) {
+	paging_header.version = 0;
+	paging_header.seg_num = fw_table->segment_count-1;
+	memcpy(paging_dump_header, &paging_header, sizeof(paging_header));
+	buf = fw_table->bhie_mem_info[paging_header.seg_num].aligned;
+	size = fw_table->bhie_mem_info[paging_header.seg_num].size;
+	memcpy(paging_dump_header+sizeof(paging_header), buf, size);
+
+	pr_alert(FW_DUMP_INFO_FORMAT_STR, "fw_paging_dump", paging_dump_header,
+			(unsigned int)sizeof(paging_dump_header));
+	for (seg = 0; seg < fw_table->segment_count-1; seg++) {
 		buf = fw_table->bhie_mem_info[seg].aligned;
 		size = fw_table->bhie_mem_info[seg].size;
 		pr_alert(FW_DUMP_INFO_FORMAT_STR, "fw_paging_dump", buf, size);
@@ -337,6 +479,7 @@ void dump_fw_info_to_kmsg(struct mhi_device_ctxt *mhi_dev_ctxt)
 	pr_alert(FW_DUMP_INFO_FORMAT_STR, "fw_remote_mem_dump",
 		fw_mem->vaddr, (unsigned int)(fw_mem->size));
 }
+#endif
 
 void mhi_set_fw_remote_mem(struct mhi_device *mhi_device,
 			   void *vaddr,

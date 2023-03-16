@@ -201,6 +201,10 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 	} else if (sysfs_streq(cmd, "assert")) {
 		struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 		ret = cnss_force_fw_assert(&pci_priv->pci_dev->dev);
+#ifdef DUMP_TO_FS
+	} else if (sysfs_streq(cmd, "dump_fw_sram")) {
+		ret = cnss_dump_fw_sram_to_file(plat_priv);
+#endif
 	} else {
 		cnss_pr_err("Device boot debugfs command is invalid\n");
 		ret = -EINVAL;

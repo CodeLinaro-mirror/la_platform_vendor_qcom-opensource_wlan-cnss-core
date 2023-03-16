@@ -277,13 +277,15 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 
 	if (!in_panic) {
 		ret = bhi_rddm_graceful(mhi_dev_ctxt);
-#if 0
-		if (!ret)
+#ifdef DUMP_TO_FS
+		if (!ret) {
 			dump_fw_to_file(mhi_dev_ctxt);
+			if (is_ramdump_all_zero(mhi_dev_ctxt))
+				ret = -EINVAL;
+		}
 #endif
 		return ret;
 	}
-
 	/*
 	 * Below code should only be executed during kernel panic,
 	 * we expect other cores to be shutting down while we're
@@ -394,7 +396,7 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 		    (current_seq == rx_sequence)) {
 			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 				"rddm transfer completed\n");
-#ifdef CONFIG_HST_IMX
+#ifdef DUMP_TO_FS
 			dump_fw_info_to_kmsg(mhi_dev_ctxt);
 #endif
 			return 0;

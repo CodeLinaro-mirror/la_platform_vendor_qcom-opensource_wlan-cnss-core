@@ -126,6 +126,10 @@ ifeq ($(CONFIG_PCI_RC_SUPPORT_PM),y)
     KBUILD_CPPFLAGS += -DPCI_RC_SUPPORT_PM
 endif
 
+ifeq ($(DUMP_TO_FS),y)
+    KBUILD_CPPFLAGS += -DDUMP_TO_FS
+endif 
+
 CDEFINES :=	-Wall\
 		-Werror
 KBUILD_CPPFLAGS += $(CDEFINES)

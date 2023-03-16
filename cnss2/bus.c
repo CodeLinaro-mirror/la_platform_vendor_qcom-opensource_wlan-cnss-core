@@ -308,6 +308,11 @@ void cnss_bus_collect_dump_info(struct cnss_plat_data *plat_priv)
 					     CNSS_MHI_RDDM);
 		if (ret) {
 			cnss_pr_err("Failed to complete RDDM, err = %d\n", ret);
+#ifdef DUMP_TO_FS
+			cnss_dump_fw_sram_to_file(plat_priv);
+			cnss_pci_dump_fw_remote_mem_to_file(plat_priv->bus_priv);
+			cnss_pci_dump_fw_paging_to_file(plat_priv->bus_priv);
+#endif
 			break;
 		}
 		return cnss_pci_collect_dump_info(plat_priv->bus_priv);
@@ -494,3 +499,35 @@ int cnss_bus_recovery_update_status(struct cnss_plat_data *plat_priv)
 		return -EINVAL;
 	}
 }
+
+#ifdef DUMP_TO_FS
+int cnss_bus_fw_sram_dump_to_file(struct cnss_plat_data *plat_priv,
+		uint32_t fw_sram_start,
+		uint32_t fw_sram_end,
+		const char *fw_sram_dump_path)
+{
+	int ret = 0;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	switch (cnss_get_bus_type(plat_priv)) {
+		case CNSS_BUS_PCI:
+			ret = cnss_pci_fw_sram_dump_to_file(
+					plat_priv->bus_priv,
+					fw_sram_start,
+					fw_sram_end,
+					fw_sram_dump_path);
+			break;
+		case CNSS_BUS_SDIO:
+		case CNSS_BUS_USB:
+		default:
+			ret = -ENOTSUPP;
+			break;
+	}
+
+	return ret;
+}
+#endif
