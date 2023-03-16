@@ -38,7 +38,7 @@ enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 {
 	int ret;
 	struct device *dev;
-	enum cnss_dev_bus_type bus_type = CNSS_BUS_NONE;
+	//enum cnss_dev_bus_type bus_type = CNSS_BUS_NONE;
 	u32 bus_type_dt = CNSS_BUS_NONE;
 
 	if (plat_priv->is_converged_dt) {

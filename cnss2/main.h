@@ -298,5 +298,4 @@ u32 cnss_get_wake_msi(struct cnss_plat_data *plat_priv);
 bool *cnss_get_qmi_bypass(void);
 bool is_qcn7605_device(u16 device_id);
 void cnss_set_wlan_chip_to_host_wakeup(unsigned int wakeup_gpio_num);
-int cnss_enable_wow_wake(const char *val, const struct kernel_param *kp);
 #endif /* _CNSS_MAIN_H */

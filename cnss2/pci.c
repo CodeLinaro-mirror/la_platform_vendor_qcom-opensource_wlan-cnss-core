@@ -1373,14 +1373,7 @@ int cnss_wlan_pm_control(struct device *dev, bool vote)
 EXPORT_SYMBOL(cnss_wlan_pm_control);
 
 #else /* CONFIG_PCI_MSM */
-static int cnss_reg_pci_event(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
 
-static void cnss_dereg_pci_event(struct cnss_pci_data *pci_priv)
-{
-}
 #endif /* CONFIG_PCI_MSM */
 
 int cnss_auto_suspend(struct device *dev)
@@ -2713,7 +2706,9 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	int ret = 0;
 	struct cnss_pci_data *pci_priv;
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(NULL);
+#ifdef CONFIG_ARCH_QCOM
 	struct resource *res;
+#endif
 	u8 aspm_state;
 
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",

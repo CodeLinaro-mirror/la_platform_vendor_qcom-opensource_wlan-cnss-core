@@ -21,6 +21,7 @@
 #define vfs_write kernel_write
 #endif
 
+#ifdef DUMP_TO_FS
 static int get_time_of_the_day_in_hr_min_sec(char *tbuf, int len)
 {
 	struct timespec64 tv;
@@ -38,7 +39,6 @@ static int get_time_of_the_day_in_hr_min_sec(char *tbuf, int len)
 	return time_len;
 }
 
-#ifdef DUMP_TO_FS
 #define BUF_SIZE 64
 static int firmware_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			 struct bhie_vec_table *rddm_table,

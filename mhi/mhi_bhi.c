@@ -536,7 +536,11 @@ int bhi_expose_dev_bhi(struct mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "Creating dev node\n");
 
 	ret_val = alloc_chrdev_region(&bhi_ctxt->bhi_dev, 0, 1, "bhi");
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+	if (IS_ERR_VALUE((unsigned long)ret_val)) {
+#else
 	if (IS_ERR_VALUE(ret_val)) {
+#endif
 		mhi_log(mhi_dev_ctxt, MHI_MSG_CRITICAL,
 			"Failed to alloc char device %d\n", ret_val);
 		return -EIO;

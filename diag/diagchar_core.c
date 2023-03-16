@@ -166,7 +166,7 @@ int diagchar_init(void)
 static int __init diagchar_init(void)
 #endif
 {
-	int ret = 0;
+	//int ret = 0;
 
 	printk("diagchar initializing ..\n");
 	driver = kzalloc(sizeof(struct diagchar_dev) + 5, GFP_KERNEL);
