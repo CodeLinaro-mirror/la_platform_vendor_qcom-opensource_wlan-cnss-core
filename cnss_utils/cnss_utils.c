@@ -1,13 +1,7 @@
-/* Copyright (c) 2017 The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2017, 2019, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "cnss_utils: " fmt
@@ -17,9 +11,14 @@
 #include <linux/slab.h>
 #include <linux/etherdevice.h>
 #include <linux/debugfs.h>
+#include <linux/of.h>
+#ifdef CONFIG_CNSS_OUT_OF_TREE
 #include "cnss_utils.h"
+#else
+#include <net/cnss_utils.h>
+#endif
 
-#define CNSS_MAX_CH_NUM 45
+#define CNSS_MAX_CH_NUM 157
 struct cnss_unsafe_channel_list {
 	u16 unsafe_ch_count;
 	u16 unsafe_ch_list[CNSS_MAX_CH_NUM];
@@ -65,7 +64,7 @@ int cnss_utils_set_wlan_unsafe_channel(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&priv->unsafe_channel_list_lock);
-	if ((!unsafe_ch_list) || (ch_count > CNSS_MAX_CH_NUM)) {
+	if (!unsafe_ch_list || ch_count > CNSS_MAX_CH_NUM) {
 		mutex_unlock(&priv->unsafe_channel_list_lock);
 		return -EINVAL;
 	}
@@ -129,11 +128,10 @@ int cnss_utils_wlan_set_dfs_nol(struct device *dev,
 	if (!info || !info_len)
 		return -EINVAL;
 
-	temp = kmalloc(info_len, GFP_ATOMIC);
+	temp = kmemdup(info, info_len, GFP_ATOMIC);
 	if (!temp)
 		return -ENOMEM;
 
-	memcpy(temp, info, info_len);
 	spin_lock_bh(&priv->dfs_nol_info_lock);
 	dfs_info = &priv->dfs_nol_info;
 	old_nol_info = dfs_info->dfs_nol_info;
@@ -252,8 +250,8 @@ int cnss_utils_set_wlan_mac_address(const u8 *mac_list, const uint32_t len)
 }
 EXPORT_SYMBOL(cnss_utils_set_wlan_mac_address);
 
-int cnss_utils_set_wlan_derived_mac_address(
-				const u8 *mac_list, const uint32_t len)
+int cnss_utils_set_wlan_derived_mac_address(const u8 *mac_list,
+					    const uint32_t len)
 {
 	return set_wlan_mac_address(mac_list, len, CNSS_MAC_DERIVED);
 }
@@ -291,8 +289,8 @@ u8 *cnss_utils_get_wlan_mac_address(struct device *dev, uint32_t *num)
 }
 EXPORT_SYMBOL(cnss_utils_get_wlan_mac_address);
 
-u8 *cnss_utils_get_wlan_derived_mac_address(
-			struct device *dev, uint32_t *num)
+u8 *cnss_utils_get_wlan_derived_mac_address(struct device *dev,
+					    uint32_t *num)
 {
 	return get_wlan_mac_address(dev, num, CNSS_MAC_DERIVED);
 }
@@ -331,7 +329,7 @@ static ssize_t cnss_utils_mac_write(struct file *fp,
 	char *input, *mac_type, *mac_address;
 	u8 *dest_mac;
 	u8 val;
-	const char *delim = " \n";
+	const char *delim = "\n";
 	size_t len = 0;
 	char temp[3] = "";
 
@@ -351,7 +349,7 @@ static ssize_t cnss_utils_mac_write(struct file *fp,
 	mac_address = strsep(&input, delim);
 	if (!mac_address)
 		return -EINVAL;
-	if (strncmp("0x", mac_address, MAC_PREFIX_LEN)) {
+	if (strcmp("0x", mac_address)) {
 		pr_err("Invalid MAC prefix\n");
 		return -EINVAL;
 	}
@@ -452,6 +450,31 @@ out:
 	return ret;
 }
 
+#ifndef CONFIG_CNSS2_X86
+/**
+ * cnss_utils_is_valid_dt_node_found - Check if valid device tree node present
+ *
+ * Valid device tree node means a node with "qcom,wlan" property present and
+ * "status" property not disabled.
+ *
+ * Return: true if valid device tree node found, false if not found
+ */
+static bool cnss_utils_is_valid_dt_node_found(void)
+{
+	struct device_node *dn = NULL;
+
+	for_each_node_with_property(dn, "qcom,wlan") {
+		if (of_device_is_available(dn))
+			break;
+	}
+
+	if (dn)
+		return true;
+
+	return false;
+}
+#endif
+
 #ifdef CONFIG_WLAN_CNSS_CORE
 int cnss_utils_init(void)
 #else
@@ -459,6 +482,11 @@ static int __init cnss_utils_init(void)
 #endif
 {
 	struct cnss_utils_priv *priv = NULL;
+
+#ifndef CONFIG_CNSS2_X86
+	if (!cnss_utils_is_valid_dt_node_found())
+		return -ENODEV;
+#endif
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -489,5 +517,5 @@ module_init(cnss_utils_init);
 module_exit(cnss_utils_exit);
 
 MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION(DEVICE "CNSS Utilities Driver");
+MODULE_DESCRIPTION("CNSS Utilities Driver");
 #endif

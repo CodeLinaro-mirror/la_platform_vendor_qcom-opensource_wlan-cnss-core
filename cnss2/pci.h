@@ -1,54 +1,54 @@
-/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CNSS_PCI_H
 #define _CNSS_PCI_H
 
-#ifdef CONFIG_ARCH_QCOM
-#include <asm/dma-iommu.h>
-#include <linux/msm_pcie.h>
-#include <linux/msm_mhi.h>
-#else
-#include "msm_mhi.h"
-#endif
 #include <linux/iommu.h>
+#include <linux/mhi.h>
+#if IS_ENABLED(CONFIG_MHI_BUS_MISC)
+#include <linux/mhi_misc.h>
+#endif
+#if IS_ENABLED(CONFIG_PCI_MSM)
+#include <linux/msm_pcie.h>
+#endif
 #include <linux/pci.h>
 
 #include "main.h"
 
-#define QCA6174_VENDOR_ID		0x168C
-#define QCA6174_DEVICE_ID		0x003E
-#define QCA6174_REV_ID_OFFSET		0x08
-#define QCA6174_REV3_VERSION		0x5020000
-#define QCA6174_REV3_2_VERSION		0x5030000
-#define QCA6290_VENDOR_ID		0x17CB
-#define QCA6290_DEVICE_ID		0x1100
-#define QCA6390_VENDOR_ID               0x17CB
-#define QCA6390_DEVICE_ID               0x1101
-#define QCA6290_EMULATION_VENDOR_ID	0x168C
-#define QCA6290_EMULATION_DEVICE_ID	0xABCD
-
 enum cnss_mhi_state {
 	CNSS_MHI_INIT,
 	CNSS_MHI_DEINIT,
+	CNSS_MHI_POWER_ON,
+	CNSS_MHI_POWERING_OFF,
+	CNSS_MHI_POWER_OFF,
+	CNSS_MHI_FORCE_POWER_OFF,
 	CNSS_MHI_SUSPEND,
 	CNSS_MHI_RESUME,
-	CNSS_MHI_POWER_OFF,
-	CNSS_MHI_POWER_ON,
 	CNSS_MHI_TRIGGER_RDDM,
 	CNSS_MHI_RDDM,
-	CNSS_MHI_RDDM_KERNEL_PANIC,
-	CNSS_MHI_NOTIFY_LINK_ERROR,
 	CNSS_MHI_RDDM_DONE,
+};
+
+enum pci_link_status {
+	PCI_GEN1,
+	PCI_GEN2,
+	PCI_DEF,
+};
+
+enum  cnss_rtpm_id {
+	RTPM_ID_CNSS,
+	RTPM_ID_MHI,
+	RTPM_ID_MAX,
+};
+
+enum cnss_pci_reg_dev_mask {
+	REG_MASK_QCA6390,
+	REG_MASK_QCA6490,
+	REG_MASK_KIWI,
 };
 
 struct cnss_msi_user {
@@ -63,33 +63,86 @@ struct cnss_msi_config {
 	struct cnss_msi_user *users;
 };
 
+struct cnss_pci_reg {
+	char *name;
+	u32 offset;
+};
+
+struct cnss_pci_debug_reg {
+	u32 offset;
+	u32 val;
+};
+
+struct cnss_misc_reg {
+	unsigned long dev_mask;
+	u8 wr;
+	u32 offset;
+	u32 val;
+};
+
+struct cnss_pm_stats {
+	atomic_t runtime_get;
+	atomic_t runtime_put;
+	atomic_t runtime_get_id[RTPM_ID_MAX];
+	atomic_t runtime_put_id[RTPM_ID_MAX];
+	u64 runtime_get_timestamp_id[RTPM_ID_MAX];
+	u64 runtime_put_timestamp_id[RTPM_ID_MAX];
+};
+
 struct cnss_pci_data {
 	struct pci_dev *pci_dev;
 	struct cnss_plat_data *plat_priv;
 	const struct pci_device_id *pci_device_id;
 	u32 device_id;
 	u16 revision_id;
+	u64 dma_bit_mask;
 	struct cnss_wlan_driver *driver_ops;
-	bool pci_link_state;
-	bool pci_link_down_ind;
+	u8 pci_link_state;
+	u8 pci_link_down_ind;
 	struct pci_saved_state *saved_state;
 	struct pci_saved_state *default_state;
-#ifdef CONFIG_ARCH_QCOM
+#if IS_ENABLED(CONFIG_PCI_MSM)
 	struct msm_pcie_register_event msm_pci_event;
 #endif
+	struct cnss_pm_stats pm_stats;
 	atomic_t auto_suspended;
+	atomic_t drv_connected;
 	u8 drv_connected_last;
-	bool monitor_wake_intr;
-	struct dma_iommu_mapping *smmu_mapping;
+	u32 qmi_send_usage_count;
+	u16 def_link_speed;
+	u16 def_link_width;
+	u16 cur_link_speed;
+	int wake_gpio;
+	int wake_irq;
+	u32 wake_counter;
+	u8 monitor_wake_intr;
+	struct iommu_domain *iommu_domain;
+	u8 smmu_s1_enable;
 	dma_addr_t smmu_iova_start;
 	size_t smmu_iova_len;
 	dma_addr_t smmu_iova_ipa_start;
+	dma_addr_t smmu_iova_ipa_current;
 	size_t smmu_iova_ipa_len;
 	void __iomem *bar;
 	struct cnss_msi_config *msi_config;
 	u32 msi_ep_base_data;
-	struct mhi_device mhi_dev;
+	struct mhi_controller *mhi_ctrl;
 	unsigned long mhi_state;
+	u32 remap_window;
+	struct timer_list dev_rddm_timer;
+	struct timer_list boot_debug_timer;
+	struct delayed_work time_sync_work;
+	u8 disable_pc;
+	struct mutex bus_lock; /* mutex for suspend and resume bus */
+	struct cnss_pci_debug_reg *debug_reg;
+	struct cnss_misc_reg *wcss_reg;
+	struct cnss_misc_reg *pcie_reg;
+	struct cnss_misc_reg *wlaon_reg;
+	struct cnss_misc_reg *syspm_reg;
+	unsigned long misc_reg_dev_mask;
+	u8 iommu_geometry;
+	bool drv_supported;
+	struct work_struct rddm_worker;
 };
 
 static inline void cnss_set_pci_priv(struct pci_dev *pci_dev, void *data)
@@ -137,41 +190,41 @@ static inline int cnss_pci_get_auto_suspended(void *bus_priv)
 	return atomic_read(&pci_priv->auto_suspended);
 }
 
-#if defined(CONFIG_PCI_MSM) || defined(PCI_RC_SUPPORT_PM)
+static inline void cnss_pci_set_drv_connected(void *bus_priv, int val)
+{
+	struct cnss_pci_data *pci_priv = bus_priv;
+
+	atomic_set(&pci_priv->drv_connected, val);
+}
+
+static inline int cnss_pci_get_drv_connected(void *bus_priv)
+{
+	struct cnss_pci_data *pci_priv = bus_priv;
+
+	return atomic_read(&pci_priv->drv_connected);
+}
+
+int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv);
 int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv);
 int cnss_resume_pci_link(struct cnss_pci_data *pci_priv);
-#else /* CONFIG_PCI_MSM */
-static inline int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-
-static inline int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-#endif /* CONFIG_PCI_MSM */
-
+int cnss_pci_recover_link_down(struct cnss_pci_data *pci_priv);
 int cnss_pci_init(struct cnss_plat_data *plat_priv);
 void cnss_pci_deinit(struct cnss_plat_data *plat_priv);
+void cnss_pci_add_fw_prefix_name(struct cnss_pci_data *pci_priv,
+				 char *prefix_name, char *name);
 int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv);
-void cnss_pci_fw_name_add_path(struct cnss_pci_data *pci_priv,
-			       char *file_name, char *name);
+int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv);
+void cnss_pci_free_qdss_mem(struct cnss_pci_data *pci_priv);
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv);
-int cnss_pci_get_bar_info(struct cnss_pci_data *pci_priv, void __iomem **va,
-			  phys_addr_t *pa);
-int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
-			   enum cnss_mhi_state state);
 int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv);
-void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv);
-void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv);
+void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic);
+void cnss_pci_device_crashed(struct cnss_pci_data *pci_priv);
 void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv);
-int cnss_pm_request_resume(struct cnss_pci_data *pci_priv);
 u32 cnss_pci_get_wake_msi(struct cnss_pci_data *pci_priv);
 int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv);
+int cnss_pci_qmi_send_get(struct cnss_pci_data *pci_priv);
+int cnss_pci_qmi_send_put(struct cnss_pci_data *pci_priv);
 void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv);
-int cnss_pci_call_driver_uevent(struct cnss_pci_data *pci_priv,
-				enum cnss_driver_status status, void *data);
 int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv);
 int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv);
 int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv);
@@ -182,6 +235,103 @@ int cnss_pci_register_driver_hdlr(struct cnss_pci_data *pci_priv, void *data);
 int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv);
 int cnss_pci_call_driver_modem_status(struct cnss_pci_data *pci_priv,
 				      int modem_current_status);
-int cnss_pci_recovery_update_status(struct cnss_pci_data *pci_priv);
-void cnss_pci_shutdown(struct pci_dev *pci_dev);
+void cnss_pci_pm_runtime_show_usage_count(struct cnss_pci_data *pci_priv);
+int cnss_pci_pm_request_resume(struct cnss_pci_data *pci_priv);
+int cnss_pci_pm_runtime_resume(struct cnss_pci_data *pci_priv);
+int cnss_pci_pm_runtime_get(struct cnss_pci_data *pci_priv,
+			    enum cnss_rtpm_id id);
+int cnss_pci_pm_runtime_get_sync(struct cnss_pci_data *pci_priv,
+				 enum cnss_rtpm_id id);
+void cnss_pci_pm_runtime_get_noresume(struct cnss_pci_data *pci_priv,
+				      enum cnss_rtpm_id id);
+int cnss_pci_pm_runtime_put_autosuspend(struct cnss_pci_data *pci_priv,
+					enum cnss_rtpm_id id);
+void cnss_pci_pm_runtime_put_noidle(struct cnss_pci_data *pci_priv,
+				    enum cnss_rtpm_id id);
+void cnss_pci_pm_runtime_mark_last_busy(struct cnss_pci_data *pci_priv);
+int cnss_pci_update_status(struct cnss_pci_data *pci_priv,
+			   enum cnss_driver_status status);
+int cnss_pci_call_driver_uevent(struct cnss_pci_data *pci_priv,
+				enum cnss_driver_status status, void *data);
+int cnss_pcie_is_device_down(struct cnss_pci_data *pci_priv);
+int cnss_pci_suspend_bus(struct cnss_pci_data *pci_priv);
+int cnss_pci_resume_bus(struct cnss_pci_data *pci_priv);
+int cnss_pci_debug_reg_read(struct cnss_pci_data *pci_priv, u32 offset,
+			    u32 *val, bool raw_access);
+int cnss_pci_debug_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
+			     u32 val, bool raw_access);
+int cnss_pci_get_iova(struct cnss_pci_data *pci_priv, u64 *addr, u64 *size);
+int cnss_pci_get_iova_ipa(struct cnss_pci_data *pci_priv, u64 *addr,
+			  u64 *size);
+
+void cnss_pci_sw_reset(struct pci_dev *pdev, bool power_on);
+void cnss_pci_show_hw_revision(struct cnss_pci_data *pci_priv);
+
+#define PCIE_TXVECDB (0x360)
+#define PCIE_TXVECSTATUS (0x368)
+#define PCIE_RXVECDB (0x394)
+#define PCIE_RXVECSTATUS (0x39C)
+
+#define PCIE_SOC_GLOBAL_RESET (0x3008)
+#define PCIE_SOC_GLOBAL_RESET_V (1 << 0)
+
+#define ACCESS_ALWAYS_OFF 0xFE0
+#define PCIE_REMAP_1M_BAR_CTRL (0x310c)
+
+#define MHISTATUS (0x48)
+#define MHISTATUS_MHISTATE_MASK 0x0000ff00
+#define MHISTATUS_MHISTATE_SHIFT 0x8
+#define MHISTATUS_SYSERR_MASK 0x4
+#define MHISTATUS_SYSERR_SHIFT 0x2
+#define MHISTATUS_READY_MASK 0x1
+#define MHISTATUS_READY_SHIFT 0x0
+
+#define MHICTRL (0x38)
+#define MHICTRL_MHISTATE_MASK 0x0000FF00
+#define MHICTRL_MHISTATE_SHIFT 0x8
+#define MHICTRL_RESET_MASK 0x2
+#define MHICTRL_RESET_SHIFT 0x1
+
+#define PCIE_Q6_COOKIE_ADDR         (0x01F80500)
+#define PCIE_Q6_COOKIE_DATA         (0xC0000000)
+
+#define HOST_RESET_REG                    0x1E40314
+#define GCC_PRE_ARES_DEBUG_TIMER_VAL      0x01E40270
+#define HOST_RESET_ADDR                   0xB0
+#define HOST_RESET_PATTERN                0XFFFFFFFF
+#define PCIE_PCIE_PARF_LTSSM              0X1E081B0
+#define PARM_LTSSM_VALUE                  0x111
+
+#define PCIE_SOC_WAKE_PCIE_LOCAL_REG 0x3004
+
+#define GCC_GCC_PCIE_HOT_RST              0X1E402BC
+#define GCC_GCC_PCIE_HOT_RST_VAL          0x10
+
+#define PCIE_PCIE_INT_ALL_CLEAR           0X1E08228
+#define PCIE_SMLH_REQ_RST_LINK_DOWN       0x2
+#define PCIE_INT_CLEAR_ALL                0xFFFFFFFF
+
+#define PCIE_PCIE_INT_ALL_CLEAR           0X1E08228
+#define PCIE_SMLH_REQ_RST_LINK_DOWN       0x2
+#define PCIE_INT_CLEAR_ALL                0xFFFFFFFF
+
+#define QFPROM_PWR_CTRL_VDD4BLOW_MASK     0x4
+#define QFPROM_PWR_CTRL_SHUTDOWN_MASK     0x1
+
+#define PCIE_QSERDES_COM_SYSCLK_EN_SEL_REG      0x01E0C0AC
+#define PCIE_QSERDES_COM_SYSCLK_EN_SEL_VAL      0x10
+#define PCIE_QSERDES_COM_SYSCLK_EN_SEL_MSK      0xFFFFFFFF
+#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG1_REG 0x01E0C628
+#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG1_VAL 0x02
+#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG2_REG 0x01E0C62C
+#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG2_VAL 0x52
+#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG4_REG 0x01E0C634
+#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG4_VAL 0xFF
+#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG_MSK  0x000000FF
+
+#define PCIE_HW_REVISION_REG 0x01A10010
+
+int cnss_pci_set_therm_cdev_state(struct cnss_pci_data *pci_priv,
+				  unsigned long thermal_state,
+				  int tcdev_id);
 #endif /* _CNSS_PCI_H */

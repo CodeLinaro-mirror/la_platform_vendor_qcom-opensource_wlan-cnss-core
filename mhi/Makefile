@@ -1,15 +1,6 @@
-# Makefile for MHI driver
-obj-y += mhi_main.o
-obj-y += mhi_iface.o
-obj-y += mhi_init.o
-obj-y += mhi_isr.o
-obj-y += mhi_mmio_ops.o
-obj-y += mhi_ring_ops.o
-obj-y += mhi_states.o
-obj-y += mhi_sys.o
-obj-y += mhi_bhi.o
-obj-y += mhi_pm.o
-obj-y += mhi_ssr.o
-obj-y += mhi_event.o
-obj-$(CONFIG_HST_IMX) += mhi_fw_dump.o
-CFLAGS_mhi_iface.o := -I$(src)
+# core layer
+obj-y += core/
+
+obj-$(CONFIG_MHI_BUS_PCI_GENERIC) += mhi_pci_generic.o
+mhi_pci_generic-y += pci_generic.o
+
