@@ -149,6 +149,20 @@ struct cnss_plat_data *cnss_get_plat_priv(struct platform_device
 	return NULL;
 }
 
+struct cnss_plat_data *cnss_get_first_plat_priv(struct platform_device
+						 *plat_dev)
+{
+	int i;
+
+	if (!plat_dev) {
+		for (i = 0; i < plat_env_count; i++) {
+			if (plat_env[i])
+				return plat_env[i];
+		}
+	}
+	return NULL;
+}
+
 static void cnss_clear_plat_priv(struct cnss_plat_data *plat_priv)
 {
 	cnss_pr_dbg("Clear plat_priv at %d", plat_priv->plat_idx);
@@ -4519,8 +4533,16 @@ end:
 
 int cnss_wlan_hw_enable(void)
 {
-	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(NULL);
+	struct cnss_plat_data *plat_priv;
 	int ret = 0;
+
+	if (cnss_is_dual_wlan_enabled())
+		plat_priv = cnss_get_first_plat_priv(NULL);
+	else
+		plat_priv = cnss_get_plat_priv(NULL);
+
+	if (!plat_priv)
+		return -ENODEV;
 
 	clear_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state);
 
