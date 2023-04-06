@@ -103,7 +103,7 @@ enum cnss_tcs_seq {
 };
 
 
-#ifndef CONFIG_CNSS2_X86
+#if !defined(CONFIG_CNSS2_X86) && defined(SUPPORT_WLAN_EN)
 static int cnss_get_vreg_single(struct cnss_plat_data *plat_priv,
 				struct cnss_vreg_info *vreg)
 {

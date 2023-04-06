@@ -15,7 +15,7 @@
 #endif
 #include <linux/etherdevice.h>
 #include <linux/firmware.h>
-#if !defined(CONFIG_CNSS2_X86) && IS_ENABLED(CONFIG_INTERCONNECT)
+#if !defined(CONFIG_CNSS2_X86) && defined(CONFIG_INTERCONNECT)
 #include <linux/interconnect.h>
 #endif
 #include <linux/mailbox_client.h>
@@ -163,7 +163,7 @@ struct cnss_esoc_info {
 };
 #endif
 
-#if !defined(CONFIG_CNSS2_X86) && IS_ENABLED(CONFIG_INTERCONNECT)
+#if !defined(CONFIG_CNSS2_X86) && defined(CONFIG_INTERCONNECT)
 /**
  * struct cnss_bus_bw_cfg - Interconnect vote data
  * @avg_bw: Vote for average bandwidth
@@ -552,6 +552,8 @@ struct cnss_plat_data {
 	bool cbc_enabled;
 	u8 use_pm_domain;
 	u8 use_nv_mac;
+	u32 is_converged_dt;
+	struct device_node *dev_node;
 	u8 set_wlaon_pwr_ctrl;
 	struct cnss_tcs_info tcs_info;
 	bool fw_pcie_gen_switch;

@@ -52,7 +52,7 @@
 #define PHY_UCODE_V2_FILE_NAME		"phy_ucode20.elf"
 #define DEFAULT_FW_FILE_NAME		"amss.bin"
 #define FW_V2_FILE_NAME			"amss20.bin"
-#define FW_V2_FTM_FILE_NAME		"amss20_ftm.bin"
+#define FW_V2_FTM_FILE_NAME		"amss20.bin"
 #define DEVICE_MAJOR_VERSION_MASK	0xF
 
 #define WAKE_MSI_NAME			"WAKE"
@@ -1059,7 +1059,7 @@ static int cnss_pci_force_wake_put(struct cnss_pci_data *pci_priv)
 	return ret;
 }
 
-#if !defined(CONFIG_CNSS2_X86) && IS_ENABLED(CONFIG_INTERCONNECT)
+#if !defined(CONFIG_CNSS2_X86) && defined(CONFIG_INTERCONNECT)
 /**
  * cnss_setup_bus_bandwidth() - Setup interconnect vote for given bandwidth
  * @plat_priv: Platform private data struct
@@ -1385,6 +1385,7 @@ static void cnss_pci_soc_scratch_reg_dump(struct cnss_pci_data *pci_priv)
 	}
 }
 
+#ifdef PCI_SUPPORT_SUSPEND_RESUME
 int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -1471,6 +1472,7 @@ int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
 out:
 	return ret;
 }
+#endif
 
 int cnss_pci_recover_link_down(struct cnss_pci_data *pci_priv)
 {
@@ -6164,7 +6166,7 @@ static void cnss_pci_config_regs(struct cnss_pci_data *pci_priv)
 	}
 }
 
-#if !IS_ENABLED(CONFIG_ARCH_QCOM) && !defined(CONFIG_CNSS2_X86)
+#if !defined(CONFIG_CNSS2_X86) && defined(CONFIG_PCI_WAKE) 
 static irqreturn_t cnss_pci_wake_handler(int irq, void *data)
 {
 	struct cnss_pci_data *pci_priv = data;
@@ -6333,6 +6335,53 @@ static struct dev_pm_domain cnss_pm_domain = {
 	}
 };
 
+static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
+{
+	struct device_node *child;
+	u32 id, i;
+	int id_n, ret;
+	
+	if (!plat_priv->is_converged_dt) {
+		plat_priv->dev_node = plat_priv->plat_dev->dev.of_node;
+		return 0;
+	}
+
+	if (!plat_priv->device_id) {
+		cnss_pr_err("Invalid device id\n");
+		return -EINVAL;
+	}
+
+	for_each_available_child_of_node(plat_priv->plat_dev->dev.of_node,
+					 child) {
+		if (strcmp(child->name, "chip_cfg"))
+			continue;
+
+		id_n = of_property_count_u32_elems(child, "supported-ids");
+		if (id_n <= 0) {
+			cnss_pr_err("Device id is NOT set\n");
+			return -EINVAL;
+		}
+
+		for (i = 0; i < id_n; i++) {
+			ret = of_property_read_u32_index(child,
+							 "supported-ids",
+							 i, &id);
+			if (ret) {
+				cnss_pr_err("Failed to read supported ids\n");
+				return -EINVAL;
+			}
+
+			if (id == plat_priv->device_id) {
+				plat_priv->dev_node = child;
+				cnss_pr_dbg("got node[%s@%d] for device[0x%x]\n",
+					    child->name, i, id);
+				return 0;
+			}
+		}
+	}
+
+	return -EINVAL;
+}
 static int cnss_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
 {
@@ -6362,6 +6411,11 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (plat_priv->use_pm_domain)
 		dev->pm_domain = &cnss_pm_domain;
 
+	ret = cnss_pci_get_dev_cfg_node(plat_priv);
+	if (ret) {
+		cnss_pr_err("Failed to get device cfg node, err = %d\n", ret);
+		goto reset_ctx;
+	}
 	cnss_pci_of_reserved_mem_device_init(pci_priv);
 
 	ret = cnss_register_subsys(plat_priv);
@@ -6372,7 +6426,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (ret)
 		goto unregister_subsys;
 
-#ifndef CONFIG_CNSS2_X86
+#if !defined(CONFIG_CNSS2_X86) && defined(CONFIG_ARM_DMA_USE_IOMMU)
 	ret = cnss_pci_init_smmu(pci_priv);
 	if (ret)
 		goto unregister_ramdump;
@@ -6997,7 +7051,7 @@ out:
 
 int cnss_pci_init(struct cnss_plat_data *plat_priv)
 {
-#ifndef CONFIG_CNSS2_X86
+#if !defined(CONFIG_CNSS2_X86) && defined(SUPPORT_PCIE_ENUMERATE)
 	struct device *dev = &plat_priv->plat_dev->dev;
 	const __be32 *prop;
 	int ret = 0, prop_len = 0, rc_count, i;

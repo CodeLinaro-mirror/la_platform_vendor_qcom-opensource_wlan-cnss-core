@@ -1229,7 +1229,7 @@ skip_wait:
 }
 EXPORT_SYMBOL(cnss_idle_shutdown);
 
-#ifndef CONFIG_CNSS2_X86
+#if !defined(CONFIG_CNSS2_X86) && defined(SUPPORT_WLAN_EN)
 static int cnss_get_resources(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -3088,7 +3088,7 @@ int cnss_request_firmware_direct(struct cnss_plat_data *plat_priv,
 #endif
 }
 
-#if !defined(CONFIG_CNSS2_X86) && IS_ENABLED(CONFIG_INTERCONNECT)
+#if !defined(CONFIG_CNSS2_X86) && defined(CONFIG_INTERCONNECT)
 /**
  * cnss_register_bus_scale() - Setup interconnect voting data
  * @plat_priv: Platform data structure
@@ -3110,8 +3110,8 @@ static int cnss_register_bus_scale(struct cnss_plat_data *plat_priv)
 				   "qcom,icc-path-count",
 				   &plat_priv->icc.path_count);
 	if (ret) {
-		cnss_pr_err("Platform Bus Interconnect path not configured\n");
-		return -EINVAL;
+		cnss_pr_dbg("Platform Bus Interconnect path not configured\n");
+		return 0;
 	}
 	ret = of_property_read_u32(plat_priv->plat_dev->dev.of_node,
 				   "qcom,bus-bw-cfg-count",
@@ -3682,7 +3682,8 @@ static const struct platform_device_id cnss_platform_id_table[] = {
 	{ .name = "qca6390", .driver_data = QCA6390_DEVICE_ID, },
 	{ .name = "qca6490", .driver_data = QCA6490_DEVICE_ID, },
 	{ .name = "kiwi", .driver_data = KIWI_DEVICE_ID, },
-	{ },
+	{ .name = "qcaconv", .driver_data = 0, },
+	{ }, 
 };
 
 static const struct of_device_id cnss_of_match_table[] = {
@@ -3701,6 +3702,9 @@ static const struct of_device_id cnss_of_match_table[] = {
 	{
 		.compatible = "qcom,cnss-kiwi",
 		.data = (void *)&cnss_platform_id_table[4]},
+	{
+		.compatible = "qcom,cnss-qca-converged",
+		.data = (void *)&cnss_platform_id_table[5]},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, cnss_of_match_table);
@@ -3731,6 +3735,13 @@ int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
 	return ret;
 }
 EXPORT_SYMBOL(cnss_set_wfc_mode);
+
+static inline bool
+cnss_is_converged_dt(struct cnss_plat_data *plat_priv)
+{
+	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
+		"qcom,converged-dt");
+}
 
 static int cnss_tcdev_get_max_state(struct thermal_cooling_device *tcdev,
 				    unsigned long *thermal_state)
@@ -3937,6 +3948,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 		goto out;
 	}
 
+
 	of_id = of_match_device(cnss_of_match_table, &plat_dev->dev);
 	if (!of_id || !of_id->data) {
 		cnss_pr_err("Failed to find of match device!\n");
@@ -3954,8 +3966,14 @@ static int cnss_probe(struct platform_device *plat_dev)
 	}
 
 	plat_priv->plat_dev = plat_dev;
+	plat_priv->dev_node = NULL;
 	plat_priv->device_id = device_id->driver_data;
-	plat_priv->bus_type = cnss_get_bus_type(plat_priv->device_id);
+
+	plat_priv->is_converged_dt = cnss_is_converged_dt(plat_priv);
+	cnss_pr_dbg("Probing platform driver from %s DT\n",
+		    plat_priv->is_converged_dt ? "converged" : "single");
+	
+	plat_priv->bus_type = cnss_get_bus_type(plat_priv);
 	plat_priv->driver_mode = CNSS_DRIVER_MODE_MAX;
 	plat_priv->use_nv_mac = cnss_use_nv_mac(plat_priv);
 	plat_priv->use_fw_path_with_prefix =

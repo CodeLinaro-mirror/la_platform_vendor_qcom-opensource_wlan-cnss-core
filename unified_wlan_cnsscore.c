@@ -63,18 +63,20 @@ static int unified_pdrv_init(void)
 		printk("%s: updrv: failed to register cnss\n", __func__);
 		goto fail5;
 	}
-
+#ifdef CONFIG_CNSS_PREALLOC
 	/* cnss prealloc initialise */
 	ret = cnss_prealloc_init();
 	if (ret) {
 		printk("%s: updrv: failed to pre alloc memory\n", __func__);
 		goto fail6;
 	}
-
+#endif
 	return 0;
 
+#ifdef CONFIG_CNSS_PREALLOC
 fail6:
 	cnss_exit();
+#endif
 fail5:
 #ifdef CONFIG_CNSS_UTILS
 	cnss_utils_exit();
@@ -101,7 +103,9 @@ fail:
 
 static void unified_pdrv_deinit(void)
 {
+#ifdef CONFIG_CNSS_PREALLOC
 	cnss_prealloc_exit();
+#endif
 	cnss_exit();
 #ifdef CONFIG_CNSS_UTILS
 	cnss_utils_exit();

@@ -22,19 +22,37 @@ enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev)
 		return CNSS_BUS_NONE;
 }
 
-enum cnss_dev_bus_type cnss_get_bus_type(unsigned long device_id)
+enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 {
-	switch (device_id) {
+
+	int ret;
+	struct device *dev;
+	u32 bus_type = CNSS_BUS_NONE;
+
+	if (plat_priv->is_converged_dt) {
+		dev = &plat_priv->plat_dev->dev;
+		ret = of_property_read_u32(dev->of_node, "qcom,bus-type",
+					   &bus_type);
+		if (!ret)
+			cnss_pr_dbg("Got bus type[%u] from dt\n", bus_type);
+		else
+			cnss_pr_err("No bus type for converged dt\n");
+
+		return bus_type;
+	}
+
+	switch (plat_priv->device_id) {
 	case QCA6174_DEVICE_ID:
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
-		return CNSS_BUS_PCI;
+		bus_type = CNSS_BUS_PCI;
 	default:
-		cnss_pr_err("Unknown device_id: 0x%lx\n", device_id);
-		return CNSS_BUS_NONE;
+		cnss_pr_err("Unknown device_id: 0x%lx\n", plat_priv->device_id);
+		bus_type = CNSS_BUS_NONE;
 	}
+	return bus_type;
 }
 
 void *cnss_bus_dev_to_bus_priv(struct device *dev)
