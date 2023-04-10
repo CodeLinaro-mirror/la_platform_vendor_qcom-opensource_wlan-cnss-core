@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved. */
-/* Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #ifndef WLAN_FIRMWARE_SERVICE_V01_H
 #define WLAN_FIRMWARE_SERVICE_V01_H
@@ -18,14 +18,17 @@
 #define QMI_WLFW_CAL_REPORT_REQ_V01 0x0026
 #define QMI_WLFW_M3_INFO_RESP_V01 0x003C
 #define QMI_WLFW_CAL_REPORT_RESP_V01 0x0026
+#define QMI_WLFW_PCIE_LINK_CTRL_RESP_V01 0x0059
 #define QMI_WLFW_MAC_ADDR_RESP_V01 0x0033
 #define QMI_WLFW_DYNAMIC_FEATURE_MASK_RESP_V01 0x003B
 #define QMI_WLFW_IND_REGISTER_REQ_V01 0x0020
 #define QMI_WLFW_DYNAMIC_FEATURE_MASK_REQ_V01 0x003B
 #define QMI_WLFW_QDSS_TRACE_MODE_RESP_V01 0x0045
+#define QMI_WLFW_AUX_UC_INFO_REQ_V01 0x005A
 #define QMI_WLFW_FW_READY_IND_V01 0x0021
 #define QMI_WLFW_QDSS_TRACE_MEM_INFO_RESP_V01 0x0040
 #define QMI_WLFW_CAL_UPDATE_REQ_V01 0x0029
+#define QMI_WLFW_PHY_CAP_REQ_V01 0x0057
 #define QMI_WLFW_REQUEST_MEM_IND_V01 0x0035
 #define QMI_WLFW_QDSS_TRACE_DATA_RESP_V01 0x0042
 #define QMI_WLFW_RESPOND_MEM_RESP_V01 0x0036
@@ -34,6 +37,7 @@
 #define QMI_WLFW_CAL_DOWNLOAD_REQ_V01 0x0027
 #define QMI_WLFW_IND_REGISTER_RESP_V01 0x0020
 #define QMI_WLFW_CAL_UPDATE_RESP_V01 0x0029
+#define QMI_WLFW_AUX_UC_INFO_RESP_V01 0x005A
 #define QMI_WLFW_M3_INFO_REQ_V01 0x003C
 #define QMI_WLFW_PCIE_GEN_SWITCH_REQ_V01 0x0053
 #define QMI_WLFW_ANTENNA_GRANT_RESP_V01 0x0048
@@ -54,11 +58,13 @@
 #define QMI_WLFW_MSA_INFO_RESP_V01 0x002D
 #define QMI_WLFW_SHUTDOWN_REQ_V01 0x0043
 #define QMI_WLFW_VBATT_REQ_V01 0x0032
+#define QMI_WLFW_PCIE_LINK_CTRL_REQ_V01 0x0059
 #define QMI_WLFW_MAC_ADDR_REQ_V01 0x0033
 #define QMI_WLFW_WLAN_CFG_REQ_V01 0x0023
 #define QMI_WLFW_ANTENNA_GRANT_REQ_V01 0x0048
 #define QMI_WLFW_BDF_DOWNLOAD_REQ_V01 0x0025
 #define QMI_WLFW_FW_MEM_READY_IND_V01 0x0037
+#define QMI_WLFW_WLAN_HW_INIT_CFG_REQ_V01 0x0058
 #define QMI_WLFW_RESPOND_GET_INFO_IND_V01 0x004B
 #define QMI_WLFW_QDSS_TRACE_DATA_REQ_V01 0x0042
 #define QMI_WLFW_CAL_DOWNLOAD_RESP_V01 0x0027
@@ -68,6 +74,7 @@
 #define QMI_WLFW_QDSS_TRACE_REQ_MEM_IND_V01 0x003F
 #define QMI_WLFW_INITIATE_CAL_DOWNLOAD_IND_V01 0x0028
 #define QMI_WLFW_ATHDIAG_WRITE_RESP_V01 0x0031
+#define QMI_WLFW_PHY_CAP_RESP_V01 0x0057
 #define QMI_WLFW_QDSS_TRACE_CONFIG_DOWNLOAD_RESP_V01 0x0044
 #define QMI_WLFW_SOC_WAKE_RESP_V01 0x004F
 #define QMI_WLFW_GET_INFO_RESP_V01 0x004A
@@ -98,6 +105,7 @@
 #define QMI_WLFW_WFC_CALL_STATUS_REQ_V01 0x0049
 #define QMI_WLFW_DEVICE_INFO_RESP_V01 0x004C
 #define QMI_WLFW_MSA_READY_RESP_V01 0x002E
+#define QMI_WLFW_WLAN_HW_INIT_CFG_RESP_V01 0x0058
 #define QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01 0x0056
 #define QMI_WLFW_QDSS_TRACE_FREE_IND_V01 0x0046
 #define QMI_WLFW_QDSS_MEM_READY_IND_V01 0x0052
@@ -108,6 +116,7 @@
 #define QMI_WLFW_MAX_NUM_SHADOW_REG_V01 24
 #define QMI_WLFW_MAX_BUILD_ID_LEN_V01 128
 #define QMI_WLFW_MAX_DEV_MEM_NUM_V01 4
+#define QMI_WLFW_MAX_NUM_SHARE_MEM_V01 8
 #define QMI_WLFW_MAX_NUM_MLO_LINKS_PER_CHIP_V01 2
 #define QMI_WLFW_MAX_NUM_SVC_V01 24
 #define QMI_WLFW_MAX_NUM_MEMORY_REGIONS_V01 2
@@ -178,6 +187,16 @@ enum wlfw_mem_type_enum_v01 {
 	QMI_WLFW_PAGEABLE_MEM_V01 = 9,
 	QMI_WLFW_AFC_MEM_V01 = 10,
 	WLFW_MEM_TYPE_ENUM_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_share_mem_type_enum_v01 {
+	WLFW_SHARE_MEM_TYPE_ENUM_MIN_VAL_V01 = INT_MIN,
+	QMI_WLFW_SHARE_MEM_CRASHDBG_V01 = 0,
+	QMI_WLFW_SHARE_MEM_TXSAR_V01 = 1,
+	QMI_WLFW_SHARE_MEM_AFC_V01 = 2,
+	QMI_WLFW_SHARE_MEM_REMOTE_COPY_V01 = 3,
+	QMI_WLFW_SHARE_MEM_MAX_V01 = 8,
+	WLFW_SHARE_MEM_TYPE_ENUM_MAX_VAL_V01 = INT_MAX,
 };
 
 enum wlfw_qdss_trace_mode_enum_v01 {
@@ -263,6 +282,7 @@ enum cnss_feature_v01 {
 	CNSS_QDSS_CFG_MISS_V01 = 3,
 	CNSS_PCIE_PERST_NO_PULL_V01 = 4,
 	CNSS_RC_EP_ULTRASHORT_CHANNEL_V01 = 5,
+	CNSS_AUX_UC_SUPPORT_V01 = 6,
 	CNSS_MAX_FEATURE_V01 = 64,
 	CNSS_FEATURE_MAX_VAL_V01 = INT_MAX,
 };
@@ -291,6 +311,20 @@ enum wlfw_ini_file_type_v01 {
 	WLFW_INI_FILE_TYPE_MAX_VAL_V01 = INT_MAX,
 };
 
+enum wlfw_wlan_rf_subtype_v01 {
+	WLFW_WLAN_RF_SUBTYPE_MIN_VAL_V01 = INT_MIN,
+	WLFW_WLAN_RF_SLATE_V01 = 0,
+	WLFW_WLAN_RF_APACHE_V01 = 1,
+	WLFW_WLAN_RF_SUBTYPE_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_pcie_link_state_enum_v01 {
+	WLFW_PCIE_LINK_STATE_ENUM_MIN_VAL_V01 = INT_MIN,
+	QMI_WLFW_PCIE_ALLOW_LOW_PWR_V01 = 0,
+	QMI_WLFW_PCIE_PREVENT_LOW_PWR_V01 = 1,
+	WLFW_PCIE_LINK_STATE_ENUM_MAX_VAL_V01 = INT_MAX,
+};
+
 #define QMI_WLFW_CE_ATTR_FLAGS_V01 ((u32)0x00)
 #define QMI_WLFW_CE_ATTR_NO_SNOOP_V01 ((u32)0x01)
 #define QMI_WLFW_CE_ATTR_BYTE_SWAP_DATA_V01 ((u32)0x02)
@@ -310,6 +344,8 @@ enum wlfw_ini_file_type_v01 {
 #define QMI_WLFW_CBC_FILE_DOWNLOAD_V01 ((u64)0x02ULL)
 
 #define QMI_WLFW_HOST_PCIE_GEN_SWITCH_V01 ((u64)0x01ULL)
+#define QMI_WLFW_DIRECT_LINK_SUPPORT_V01 ((u64)0x02ULL)
+#define QMI_WLFW_AUX_UC_SUPPORT_V01 ((u64)0x04ULL)
 
 struct wlfw_ce_tgt_pipe_cfg_s_v01 {
 	u32 pipe_num;
@@ -429,6 +465,12 @@ struct wlfw_shadow_reg_v3_cfg_s_v01 {
 	u32 addr;
 };
 
+struct wlfw_share_mem_info_s_v01 {
+	enum wlfw_share_mem_type_enum_v01 type;
+	u64 start;
+	u64 size;
+};
+
 struct wlfw_ind_register_req_msg_v01 {
 	u8 fw_ready_enable_valid;
 	u8 fw_ready_enable;
@@ -517,7 +559,6 @@ struct wlfw_wlan_mode_req_msg_v01 {
 	u8 wlan_en_delay_valid;
 	u32 wlan_en_delay;
 };
-
 #define WLFW_WLAN_MODE_REQ_MSG_V01_MAX_MSG_LEN 22
 extern struct qmi_elem_info wlfw_wlan_mode_req_msg_v01_ei[];
 
@@ -610,9 +651,10 @@ struct wlfw_cap_resp_msg_v01 {
 	u8 regdb_mandatory;
 	u8 regdb_support_valid;
 	u8 regdb_support;
+	u8 rxgainlut_support_valid;
+	u8 rxgainlut_support;
 };
-
-#define WLFW_CAP_RESP_MSG_V01_MAX_MSG_LEN 1142
+#define WLFW_CAP_RESP_MSG_V01_MAX_MSG_LEN 1146
 extern struct qmi_elem_info wlfw_cap_resp_msg_v01_ei[];
 
 struct wlfw_bdf_download_req_msg_v01 {
@@ -919,8 +961,11 @@ extern struct qmi_elem_info wlfw_respond_mem_req_msg_v01_ei[];
 
 struct wlfw_respond_mem_resp_msg_v01 {
 	struct qmi_response_type_v01 resp;
+	u8 share_mem_valid;
+	u32 share_mem_len;
+	struct wlfw_share_mem_info_s_v01 share_mem[QMI_WLFW_MAX_NUM_SHARE_MEM_V01];
 };
-#define WLFW_RESPOND_MEM_RESP_MSG_V01_MAX_MSG_LEN 7
+#define WLFW_RESPOND_MEM_RESP_MSG_V01_MAX_MSG_LEN 171
 extern struct qmi_elem_info wlfw_respond_mem_resp_msg_v01_ei[];
 
 struct wlfw_fw_mem_ready_ind_msg_v01 {
@@ -1019,7 +1064,6 @@ struct wlfw_qdss_trace_mem_info_req_msg_v01 {
 	u8 end_valid;
 	u8 end;
 };
-
 #define WLFW_QDSS_TRACE_MEM_INFO_REQ_MSG_V01_MAX_MSG_LEN 892
 extern struct qmi_elem_info wlfw_qdss_trace_mem_info_req_msg_v01_ei[];
 
@@ -1343,5 +1387,59 @@ struct wlfw_ini_file_download_resp_msg_v01 {
 };
 #define WLFW_INI_FILE_DOWNLOAD_RESP_MSG_V01_MAX_MSG_LEN 7
 extern struct qmi_elem_info wlfw_ini_file_download_resp_msg_v01_ei[];
+
+struct wlfw_phy_cap_req_msg_v01 {
+	char placeholder;
+};
+#define WLFW_PHY_CAP_REQ_MSG_V01_MAX_MSG_LEN 0
+extern struct qmi_elem_info wlfw_phy_cap_req_msg_v01_ei[];
+
+struct wlfw_phy_cap_resp_msg_v01 {
+	struct qmi_response_type_v01 resp;
+	u8 num_phy_valid;
+	u8 num_phy;
+	u8 board_id_valid;
+	u32 board_id;
+};
+#define WLFW_PHY_CAP_RESP_MSG_V01_MAX_MSG_LEN 18
+extern struct qmi_elem_info wlfw_phy_cap_resp_msg_v01_ei[];
+
+struct wlfw_wlan_hw_init_cfg_req_msg_v01 {
+	u8 rf_subtype_valid;
+	enum wlfw_wlan_rf_subtype_v01 rf_subtype;
+};
+#define WLFW_WLAN_HW_INIT_CFG_REQ_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info wlfw_wlan_hw_init_cfg_req_msg_v01_ei[];
+
+struct wlfw_wlan_hw_init_cfg_resp_msg_v01 {
+	struct qmi_response_type_v01 resp;
+};
+#define WLFW_WLAN_HW_INIT_CFG_RESP_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info wlfw_wlan_hw_init_cfg_resp_msg_v01_ei[];
+
+struct wlfw_pcie_link_ctrl_req_msg_v01 {
+	enum wlfw_pcie_link_state_enum_v01 link_state_req;
+};
+#define WLFW_PCIE_LINK_CTRL_REQ_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info wlfw_pcie_link_ctrl_req_msg_v01_ei[];
+
+struct wlfw_pcie_link_ctrl_resp_msg_v01 {
+	struct qmi_response_type_v01 resp;
+};
+#define WLFW_PCIE_LINK_CTRL_RESP_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info wlfw_pcie_link_ctrl_resp_msg_v01_ei[];
+
+struct wlfw_aux_uc_info_req_msg_v01 {
+	u64 addr;
+	u32 size;
+};
+#define WLFW_AUX_UC_INFO_REQ_MSG_V01_MAX_MSG_LEN 18
+extern struct qmi_elem_info wlfw_aux_uc_info_req_msg_v01_ei[];
+
+struct wlfw_aux_uc_info_resp_msg_v01 {
+	struct qmi_response_type_v01 resp;
+};
+#define WLFW_AUX_UC_INFO_RESP_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info wlfw_aux_uc_info_resp_msg_v01_ei[];
 
 #endif

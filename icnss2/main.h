@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2020, 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __MAIN_H__
@@ -21,7 +22,6 @@
 
 #define WCN6750_DEVICE_ID 0x6750
 #define ADRASTEA_DEVICE_ID 0xabcd
-#define QMI_WLFW_MAX_NUM_MEM_SEG 32
 #define THERMAL_NAME_LENGTH 20
 #define ICNSS_SMEM_VALUE_MASK 0xFFFFFFFF
 #define ICNSS_SMEM_SEQ_NO_POS 16
@@ -31,6 +31,8 @@
 #define ICNSS_PCI_EP_WAKE_OFFSET 4
 #define ICNSS_DISABLE_M3_SSR 0
 #define ICNSS_ENABLE_M3_SSR 1
+#define WLAN_RF_SLATE 0
+#define WLAN_RF_APACHE 1
 
 extern uint64_t dynamic_feature_mask;
 
@@ -123,6 +125,8 @@ enum icnss_driver_state {
 	ICNSS_DEL_SERVER,
 	ICNSS_COLD_BOOT_CAL,
 	ICNSS_QMI_DMS_CONNECTED,
+	ICNSS_SLATE_SSR_REGISTERED,
+	ICNSS_SLATE_UP,
 };
 
 struct ce_irq_list {
@@ -426,6 +430,8 @@ struct icnss_priv {
 	struct notifier_block modem_ssr_nb;
 	struct notifier_block wpss_ssr_nb;
 	struct notifier_block wpss_early_ssr_nb;
+	void *slate_notify_handler;
+	struct notifier_block slate_ssr_nb;
 	uint32_t diag_reg_read_addr;
 	uint32_t diag_reg_read_mem_type;
 	uint32_t diag_reg_read_len;
@@ -455,7 +461,7 @@ struct icnss_priv {
 	struct rproc *rproc;
 	atomic_t is_shutdown;
 	u32 qdss_mem_seg_len;
-	struct icnss_fw_mem qdss_mem[QMI_WLFW_MAX_NUM_MEM_SEG];
+	struct icnss_fw_mem qdss_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
 	void *get_info_cb_ctx;
 	int (*get_info_cb)(void *ctx, void *event, int event_len);
 	atomic_t soc_wake_ref_count;
@@ -491,6 +497,10 @@ struct icnss_priv {
 	struct workqueue_struct *soc_update_wq;
 	unsigned long device_config;
 	bool wpss_supported;
+	bool is_rf_subtype_valid;
+	u32 rf_subtype;
+	u8 is_slate_rfa;
+	struct completion slate_boot_complete;
 };
 
 struct icnss_reg_info {
