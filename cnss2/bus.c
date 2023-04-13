@@ -272,6 +272,18 @@ void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *t)
 		return;
 	}
 }
+
+void cnss_cssr_timeout_hdlr(struct timer_list *t)
+{
+	struct cnss_plat_data *plat_priv =
+		from_timer(plat_priv, t, cssr_timer);
+
+	if (!plat_priv)
+		return;
+
+	plat_priv->cssr_count = 0;
+}
+
 #else
 void cnss_bus_fw_boot_timeout_hdlr(unsigned long data)
 {
@@ -292,6 +304,17 @@ void cnss_bus_fw_boot_timeout_hdlr(unsigned long data)
 			    plat_priv->bus_type);
 		return;
 	}
+}
+
+void cnss_cssr_timeout_hdlr(unsigned long data)
+{
+	struct cnss_plat_data *plat_priv =
+		(struct cnss_plat_data *)data;
+
+	if (!plat_priv)
+		return;
+
+	plat_priv->cssr_count = 0;
 }
 #endif
 

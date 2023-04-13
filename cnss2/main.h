@@ -250,6 +250,10 @@ struct cnss_plat_data {
 	struct dentry *root_dentry;
 	atomic_t pm_count;
 	struct timer_list fw_boot_timer;
+	int cssr_count;
+	unsigned int cssr_timeout;
+	int cssr_detected;
+	struct timer_list cssr_timer;
 	struct completion power_up_complete;
 	struct mutex dev_lock; /* mutex for register access through debugfs */
 	u32 diag_reg_read_addr;
