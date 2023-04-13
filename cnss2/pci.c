@@ -35,7 +35,7 @@
 
 #define PCI_DMA_MASK_32_BIT		DMA_BIT_MASK(32)
 #define PCI_DMA_MASK_36_BIT		DMA_BIT_MASK(36)
-#define PCI_DMA_MASK_64_BIT		~0ULL
+#define PCI_DMA_MASK_64_BIT		DMA_BIT_MASK(64)
 
 #define MHI_NODE_NAME			"qcom,mhi"
 #define MHI_MSI_NAME			"MHI"
@@ -774,6 +774,7 @@ static struct cnss_print_optimize print_optimize;
 
 static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv);
 static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev);
+static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev);
 
 
 #if IS_ENABLED(CONFIG_MHI_BUS_MISC)
@@ -1920,6 +1921,18 @@ static void cnss_pci_set_mhi_state_bit(struct cnss_pci_data *pci_priv,
 	}
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+static int cnss_mhi_pm_force_resume(struct cnss_pci_data *pci_priv)
+{
+	return mhi_pm_resume_force(pci_priv->mhi_ctrl);
+}
+#else
+static int cnss_mhi_pm_force_resume(struct cnss_pci_data *pci_priv)
+{
+	return mhi_pm_resume(pci_priv->mhi_ctrl);
+}
+#endif
+
 static int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 				  enum cnss_mhi_state mhi_state)
 {
@@ -1993,7 +2006,7 @@ retry_mhi_suspend:
 			cnss_pci_allow_l1(&pci_priv->pci_dev->dev);
 		} else {
 			if (pci_priv->device_id == QCA6390_DEVICE_ID)
-				ret = mhi_pm_resume_force(pci_priv->mhi_ctrl);
+				ret = cnss_mhi_pm_force_resume(pci_priv);
 			else
 				ret = mhi_pm_resume(pci_priv->mhi_ctrl);
 		}
@@ -3703,7 +3716,8 @@ out:
 static int cnss_pci_suspend(struct device *dev)
 {
 	int ret = 0;
-	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
 	struct cnss_plat_data *plat_priv;
 
 	if (!pci_priv)
@@ -3715,6 +3729,25 @@ static int cnss_pci_suspend(struct device *dev)
 
 	if (!cnss_is_device_powered_on(plat_priv))
 		goto out;
+
+	/* No mhi state bit set if only finish pcie enumeration,
+	 * so test_bit is not applicable to check if it is INIT state.
+	 */
+	if (pci_priv->mhi_state == CNSS_MHI_INIT) {
+		bool suspend = cnss_should_suspend_pwroff(pci_dev);
+
+		/* Do PCI link suspend and power off in the LPM case
+		 * if chipset didn't do that after pcie enumeration.
+		 */
+		if (!suspend) {
+			ret = cnss_suspend_pci_link(pci_priv);
+			if (ret)
+				cnss_pr_err("Failed to suspend PCI link, err = %d\n",
+					    ret);
+			cnss_power_off_device(plat_priv);
+			goto out;
+		}
+	}
 
 	if (!test_bit(DISABLE_DRV, &plat_priv->ctrl_params.quirks) &&
 	    pci_priv->drv_supported) {
@@ -5133,6 +5166,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 
 	switch (device_id) {
 	case QCA6174_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
 		break;
 	case QCA6390_DEVICE_ID:
@@ -5141,9 +5175,6 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	case MANGO_DEVICE_ID:
 	case PEACH_DEVICE_ID:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_36_BIT;
-		break;
-	case QCN7605_DEVICE_ID:
-		pci_priv->dma_bit_mask = PCI_DMA_MASK_64_BIT;
 		break;
 	default:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
