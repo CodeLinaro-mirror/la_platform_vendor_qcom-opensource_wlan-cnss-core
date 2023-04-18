@@ -2935,7 +2935,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 #endif
 	u8 aspm_state;
 
-	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
+	cnss_pr_info("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
 
 	switch (pci_dev->device) {

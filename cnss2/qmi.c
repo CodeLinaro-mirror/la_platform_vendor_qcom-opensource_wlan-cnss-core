@@ -484,7 +484,7 @@ int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv)
 			goto out;
 		}
 
-		cnss_pr_dbg("Memory for FW, va: 0x%pK, pa: %pa, size: 0x%zx, type: %u\n",
+		cnss_pr_info("Memory for FW, va: 0x%pK, pa: %pa, size: 0x%zx, type: %u\n",
 			    fw_mem[i].va, &fw_mem[i].pa,
 			    fw_mem[i].size, fw_mem[i].type);
 
@@ -588,7 +588,7 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 		}
 	}
 
-	cnss_pr_dbg("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, fw_version: 0x%x, fw_build_timestamp: %s",
+	cnss_pr_info("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, fw_version: 0x%x, fw_build_timestamp: %s",
 		    plat_priv->chip_info.chip_id,
 		    plat_priv->chip_info.chip_family,
 		    plat_priv->board_info.board_id, plat_priv->soc_info.soc_id,
@@ -904,7 +904,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv, u32 bdf_type)
 	remaining = fw_entry->size;
 
 bypass_bdf:
-	cnss_pr_dbg("Downloading BDF: %s, type %d size: %u\n", filename,
+	cnss_pr_info("Downloading BDF: %s, type %d size: %u\n", filename,
 		    bdf_type, remaining);
 
 	memset(&resp, 0, sizeof(resp));
@@ -984,7 +984,7 @@ int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv)
 		goto out;
 	}
 
-	cnss_pr_dbg("M3 memory, va: 0x%pK, pa: %pa, size: 0x%zx\n",
+	cnss_pr_info("M3 memory, va: 0x%pK, pa: %pa, size: 0x%zx\n",
 		    m3_mem->va, &m3_mem->pa, m3_mem->size);
 
 	memset(&req, 0, sizeof(req));
@@ -1035,7 +1035,7 @@ int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 	if (!plat_priv)
 		return -ENODEV;
 
-	cnss_pr_dbg("Sending mode message, mode: %s(%d), state: 0x%lx\n",
+	cnss_pr_info("Sending mode message, mode: %s(%d), state: 0x%lx\n",
 		    cnss_qmi_mode_to_str(mode), mode, plat_priv->driver_state);
 
 	if (mode == QMI_WLFW_OFF_V01 &&
