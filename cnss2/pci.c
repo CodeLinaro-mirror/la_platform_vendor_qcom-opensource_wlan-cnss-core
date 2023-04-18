@@ -25,6 +25,7 @@
 #include "bus.h"
 #include "debug.h"
 #include "pci.h"
+#include "mhi.h"
 
 #define PCI_LINK_UP			1
 #define PCI_LINK_DOWN			0
@@ -58,6 +59,21 @@
 
 #define FW_ASSERT_TIMEOUT		5000
 
+#define QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET	0x310c
+
+#define QDSS_APB_DEC_CSR_BASE			0x1C01000
+#define QDSS_APB_DEC_CSR_ETRIRQCTRL_OFFSET	0x6C
+#define QDSS_APB_DEC_CSR_PRESERVEETF_OFFSET	0x70
+#define QDSS_APB_DEC_CSR_PRESERVEETR0_OFFSET	0x74
+#define QDSS_APB_DEC_CSR_PRESERVEETR1_OFFSET	0x78
+
+#define MAX_UNWINDOWED_ADDRESS			0x80000
+#define WINDOW_ENABLE_BIT			0x40000000
+#define WINDOW_SHIFT				19
+#define WINDOW_VALUE_MASK			0x3F
+#define WINDOW_START				MAX_UNWINDOWED_ADDRESS
+#define WINDOW_RANGE_MASK			0x7FFFF
+
 #ifdef CONFIG_PCI_MSM
 static DEFINE_SPINLOCK(pci_link_down_lock);
 #endif
@@ -76,6 +92,96 @@ MODULE_PARM_DESC(fbc_bypass,
 		 "Bypass firmware download when loading WLAN driver");
 #endif
 
+static bool rddm_support = 1;
+module_param(rddm_support, bool, 0600);
+MODULE_PARM_DESC(rddm_support, "RDDM support or not");
+
+struct cnss_pci_reg {
+	char *name;
+	u32 offset;
+};
+
+static struct cnss_pci_reg qdss_csr[] = {
+	{ "QDSSCSR_ETRIRQCTRL", QDSS_APB_DEC_CSR_ETRIRQCTRL_OFFSET },
+	{ "QDSSCSR_PRESERVEETF", QDSS_APB_DEC_CSR_PRESERVEETF_OFFSET },
+	{ "QDSSCSR_PRESERVEETR0", QDSS_APB_DEC_CSR_PRESERVEETR0_OFFSET },
+	{ "QDSSCSR_PRESERVEETR1", QDSS_APB_DEC_CSR_PRESERVEETR1_OFFSET },
+	{ NULL },
+};
+/* For reg out of BAR's basic range */
+static u32 cnss_pci_window_reg_read(struct cnss_pci_data *pci_priv, u32 offset)
+{
+	if (offset < MAX_UNWINDOWED_ADDRESS) {
+		return readl_relaxed(pci_priv->bar + offset);
+	}
+	else {
+		u32 window = (offset >> WINDOW_SHIFT) & WINDOW_VALUE_MASK;
+
+		writel_relaxed(WINDOW_ENABLE_BIT | window,
+			       QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET +
+			       pci_priv->bar);
+		cnss_pr_dbg("Config PCIe remap window register to 0x%x\n",
+			    WINDOW_ENABLE_BIT | window);
+
+		return readl_relaxed(pci_priv->bar + WINDOW_START +
+				     (offset & WINDOW_RANGE_MASK));
+	}
+}
+
+void cnss_pci_dump_qdss_reg(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	int i, array_size = ARRAY_SIZE(qdss_csr) - 1;
+	gfp_t gfp = GFP_KERNEL;
+	u32 reg_offset;
+
+	if (in_interrupt() || irqs_disabled())
+		gfp = GFP_ATOMIC;
+
+	if (!plat_priv->qdss_reg)
+		plat_priv->qdss_reg = devm_kzalloc(&pci_priv->pci_dev->dev,
+						   sizeof(*plat_priv->qdss_reg)
+						   * array_size, gfp);
+
+	for (i = 0; qdss_csr[i].name; i++) {
+		reg_offset = QDSS_APB_DEC_CSR_BASE + qdss_csr[i].offset;
+		plat_priv->qdss_reg[i] = cnss_pci_window_reg_read(pci_priv,
+								  reg_offset);
+		cnss_pr_err("%s[0x%x] = 0x%x\n", qdss_csr[i].name, reg_offset,
+			    plat_priv->qdss_reg[i]);
+	}
+}
+#if 0
+void cnss_pci_enable_l1(struct cnss_pci_data *pci_priv)
+{
+	struct pci_dev *pdev = pci_priv->pci_dev;
+	u32 lnkctl_offset;
+	u32 val;
+
+	lnkctl_offset = pdev->pcie_cap + PCI_EXP_LNKCTL;
+	pci_read_config_dword(pdev, lnkctl_offset, &val);
+	cnss_pr_dbg("lnkctl 0x%x\n", val);
+
+	val |= PCI_EXP_LNKCTL_ASPM_L1;
+	pci_write_config_dword(pdev, lnkctl_offset, val);
+	pci_read_config_dword(pdev, lnkctl_offset, &val);
+	cnss_pr_dbg("after enable l1 lnkctl 0x%x\n", val);
+}
+
+static void cnss_pci_disable_l1(struct cnss_pci_data *pci_priv)
+{
+	struct pci_dev *pdev = pci_priv->pci_dev;
+	u32 lnkctl_offset;
+	u32 val;
+
+	lnkctl_offset = pdev->pcie_cap + PCI_EXP_LNKCTL;
+	pci_read_config_dword(pdev, lnkctl_offset, &val);
+	cnss_pr_dbg("lnkctl 0x%x\n", val);
+
+	val &= ~PCI_EXP_LNKCTL_ASPM_L1;
+	pci_write_config_dword(pdev, lnkctl_offset, val);
+}
+#endif
 static int cnss_set_pci_config_space(struct cnss_pci_data *pci_priv, bool save)
 {
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
@@ -279,12 +385,12 @@ int cnss_pci_link_down(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_pci_link_down);
 #elif defined(PCI_RC_SUPPORT_PM)
-int imx6_rc_pm_control(void *endpoint, int op);
+int platform_rc_pm_control(void *endpoint, int op);
 static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
 {
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 
-	imx6_rc_pm_control(pci_dev, link_up);
+	platform_rc_pm_control(pci_dev, link_up);
 	return 0;
 }
 
@@ -688,8 +794,14 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 
 	cnss_pci_call_driver_remove(pci_priv);
 
-	cnss_request_bus_bandwidth(&plat_priv->plat_dev->dev,
-				   CNSS_BUS_WIDTH_NONE);
+#ifdef CONFIG_NAPIER_X86
+		cnss_request_bus_bandwidth(&pci_priv->pci_dev->dev,
+					   CNSS_BUS_WIDTH_NONE);
+#else
+		cnss_request_bus_bandwidth(&plat_priv->plat_dev->dev,
+					   CNSS_BUS_WIDTH_NONE);
+#endif
+
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
 	cnss_pci_set_auto_suspended(pci_priv, 0);
 
@@ -728,6 +840,8 @@ static void cnss_qca6290_crash_shutdown(struct cnss_pci_data *pci_priv)
 	ret = cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RDDM_KERNEL_PANIC);
 	if (ret) {
 		cnss_pr_err("Fail to complete RDDM, err = %d\n", ret);
+		/* Try to dump QDSS reg after RDDM dump fail */
+		cnss_pci_dump_qdss_reg(pci_priv);
 		return;
 	}
 
@@ -1373,14 +1487,7 @@ int cnss_wlan_pm_control(struct device *dev, bool vote)
 EXPORT_SYMBOL(cnss_wlan_pm_control);
 
 #else /* CONFIG_PCI_MSM */
-static int cnss_reg_pci_event(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
 
-static void cnss_dereg_pci_event(struct cnss_pci_data *pci_priv)
-{
-}
 #endif /* CONFIG_PCI_MSM */
 
 int cnss_auto_suspend(struct device *dev)
@@ -1803,7 +1910,7 @@ int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-static void cnss_pci_free_m3_mem(struct cnss_pci_data *pci_priv)
+void cnss_pci_free_m3_mem(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct cnss_fw_mem *m3_mem = &plat_priv->m3_mem;
@@ -1858,8 +1965,23 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 
 void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 {
+	struct cnss_plat_data *plat_priv;
+	struct mhi_device_ctxt *mhi_dev_ctxt;
+
 	if (!pci_priv)
 		return;
+
+	plat_priv = pci_priv->plat_priv;
+	mhi_dev_ctxt = pci_priv->mhi_dev.mhi_dev_ctxt;
+
+	mhi_dump_irq(mhi_dev_ctxt);
+	mhi_dump_event_ring(mhi_dev_ctxt);
+	
+#ifdef DUMP_TO_FS	
+	cnss_dump_fw_sram_to_file(plat_priv);
+	cnss_pci_dump_fw_remote_mem_to_file(plat_priv->bus_priv);
+	cnss_pci_dump_fw_paging_to_file(plat_priv->bus_priv);
+#endif
 
 	cnss_pr_err("Timeout waiting for FW ready indication\n");
 
@@ -2368,6 +2490,9 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv)
 
 	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RDDM_DONE);
 	complete(&plat_priv->rddm_complete);
+
+	/* Dump QDSS reg after RDDM dump complete */
+	cnss_pci_dump_qdss_reg(pci_priv);
 }
 
 void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv)
@@ -2377,6 +2502,96 @@ void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv)
 	plat_priv->ramdump_info_v2.dump_data.nentries = 0;
 	plat_priv->ramdump_info_v2.dump_data_valid = false;
 }
+
+#ifdef DUMP_TO_FS
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+#define vfs_write kernel_write
+#endif
+
+int cnss_pci_fw_sram_dump_to_file(struct cnss_pci_data *pci_priv,
+		uint32_t fw_sram_start,
+		uint32_t fw_sram_end,
+		const char *fw_sram_dump_path)
+{
+	struct mhi_device_ctxt *mhi_dev_ctxt;
+	struct file *fp = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
+	mm_segment_t fs;
+#endif
+	uint32_t offset;
+	loff_t pos = 0;
+	int status;
+
+	if (!pci_priv) {
+		cnss_pr_err("FW sram dump pci_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	mhi_dev_ctxt = pci_priv->mhi_dev.mhi_dev_ctxt;
+	if (!mhi_dev_ctxt) {
+		cnss_pr_err("FW sram dump pci_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	fp = filp_open(fw_sram_dump_path, O_RDWR | O_CREAT, 0644);
+	if (IS_ERR(fp)) {
+		cnss_pr_err("FW sram dump create file %s failed\n",
+				fw_sram_dump_path);
+		return -EACCES;
+	}
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
+	fs = get_fs();
+	set_fs(KERNEL_DS);
+#endif
+	pos = 0;
+
+	for (offset = fw_sram_start; offset < fw_sram_end; offset += 4) {
+		uint32_t val = mhi_reg_read_remap(mhi_dev_ctxt,
+				mhi_dev_ctxt->mmio_info.mmio_addr, offset);
+
+		status = vfs_write(fp, (char *)&val, sizeof(uint32_t), &pos);
+		if (status < 0) {
+			cnss_pr_err("FW sram dump write file %s failed: %d\n",
+					fw_sram_dump_path, status);
+			goto out;
+		}
+	}
+
+	vfs_fsync(fp, 0);
+
+out:
+	status = filp_close(fp, NULL);
+	if (status < 0) {
+		cnss_pr_err("FW sram dump close file %s failed: %d\n",
+				fw_sram_dump_path, status);
+		return status;
+	}
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
+	set_fs(fs);
+#endif
+
+	return status;
+}
+
+int cnss_pci_dump_fw_remote_mem_to_file(struct cnss_pci_data *pci_priv)
+{
+	struct mhi_device_ctxt *mhi_dev_ctxt = pci_priv->mhi_dev.mhi_dev_ctxt;
+	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+
+	return fw_remote_mem_dump(mhi_dev_ctxt, &bhi_ctxt->fw_mem, "/var/crash/remote.bin");
+}
+
+int cnss_pci_dump_fw_paging_to_file(struct cnss_pci_data *pci_priv)
+{
+	struct mhi_device_ctxt *mhi_dev_ctxt = pci_priv->mhi_dev.mhi_dev_ctxt;
+	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+	struct bhie_vec_table *fw_table = &bhi_ctxt->fw_table;
+
+	return fw_paging_dump(mhi_dev_ctxt, fw_table, "/var/crash/paging.bin");
+}
+#endif
 
 static void cnss_mhi_notify_status(enum MHI_CB_REASON reason, void *priv)
 {
@@ -2410,7 +2625,9 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_device *mhi_dev = &pci_priv->mhi_dev;
 
+#ifndef CONFIG_NAPIER_X86
 	mhi_dev->dev = &pci_priv->plat_priv->plat_dev->dev;
+#endif
 	mhi_dev->pci_dev = pci_dev;
 
 	mhi_dev->resources[0].start = (resource_size_t)pci_priv->bar;
@@ -2713,7 +2930,9 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	int ret = 0;
 	struct cnss_pci_data *pci_priv;
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(NULL);
+#ifdef CONFIG_ARCH_QCOM
 	struct resource *res;
+#endif
 	u8 aspm_state;
 
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
@@ -2725,8 +2944,12 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	case QCN7605_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
+#ifdef CONFIG_NAPIER_X86
+		if (!mhi_is_device_ready(NULL, MHI_NODE_NAME)) {
+#else
 		if (!mhi_is_device_ready(&plat_priv->plat_dev->dev,
 					 MHI_NODE_NAME)) {
+#endif
 			cnss_pr_err("MHI driver is not ready, defer PCI probe!\n");
 			ret = -EPROBE_DEFER;
 			goto out;
@@ -2970,46 +3193,57 @@ struct pci_driver cnss_pci_driver = {
 	},
 };
 
-#ifdef CONFIG_PCI_MSM
-static inline int cnss_msm_pcie_enumerate(struct cnss_plat_data *plat_priv)
+static inline int cnss_pcie_get_rc_index(struct device *dev, u32 *p_rc_num)
 {
-	int ret;
-	struct device *dev = &plat_priv->plat_dev->dev;
-	u32 rc_num;
+	int ret = 0;
 
-	ret = of_property_read_u32(dev->of_node, "qcom,wlan-rc-num", &rc_num);
-	if (ret) {
+	ret = of_property_read_u32(dev->of_node, "qcom,wlan-rc-num", p_rc_num);
+	if (ret)
 		cnss_pr_err("Failed to find PCIe RC number, err = %d\n", ret);
-		goto out;
-	}
 
-	ret = msm_pcie_enumerate(rc_num);
-	if (ret) {
-		cnss_pr_err("Failed to enable PCIe RC%x, err = %d\n",
-			    rc_num, ret);
-		goto out;
-	}
-
-	return 0;
-out:
 	return ret;
 }
-#else /* CONFIG_PCI_MSM */
-static inline int cnss_msm_pcie_enumerate(struct cnss_plat_data *plat_priv)
+
+#if defined(CONFIG_PCI_MSM)
+static inline int cnss_pcie_enumerate(struct cnss_plat_data *plat_priv)
+{
+	int ret;
+	u32 rc_num;
+	struct device *dev = &plat_priv->plat_dev->dev;
+
+	ret = cnss_pcie_get_rc_index(dev, &rc_num);
+	if (!ret)
+		return msm_pcie_enumerate(rc_num);
+	else
+		return ret;
+}
+#elif defined(CONFIG_PCI_QC_ENHANCE)
+static inline int cnss_pcie_enumerate(struct cnss_plat_data *plat_priv)
+{
+	int ret;
+	u32 rc_num;
+	struct device *dev = &plat_priv->plat_dev->dev;
+
+	ret = cnss_pcie_get_rc_index(dev, &rc_num);
+	if (!ret)
+		return platform_pcie_enumerate(rc_num);
+	else
+		return ret;
+}
+#else
+static inline int cnss_pcie_enumerate(struct cnss_plat_data *plat_priv)
 {
 	return 0;
 }
-#endif /* CONFIG_PCI_MSM */
+#endif /* CONFIG_PCI_MSM || CONFIG_PCI_QC_ENHANCE */
 
 int cnss_pci_init(struct cnss_plat_data *plat_priv)
 {
 	int ret;
 
-#ifdef CONFIG_ARCH_QCOM
-	ret = cnss_msm_pcie_enumerate(plat_priv);
+	ret = cnss_pcie_enumerate(plat_priv);
 	if (ret)
 		goto out;
-#endif
 
 	ret = pci_register_driver(&cnss_pci_driver);
 	if (ret) {

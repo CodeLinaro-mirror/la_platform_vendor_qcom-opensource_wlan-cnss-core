@@ -148,7 +148,11 @@ int init_mhi_dev_mem(struct mhi_device_ctxt *mhi_dev_ctxt)
 					calculate_mhi_space(mhi_dev_ctxt);
 
 	mhi_dev_ctxt->dev_space.dev_mem_start =
+#ifdef CONFIG_NAPIER_X86
+		dma_alloc_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
 		dma_alloc_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
 				    mhi_dev_ctxt->dev_space.dev_mem_len,
 				   &mhi_dev_ctxt->dev_space.dma_dev_mem_start,
 				    GFP_KERNEL);
@@ -214,7 +218,11 @@ int init_mhi_dev_mem(struct mhi_device_ctxt *mhi_dev_ctxt)
 		ring_len = sizeof(union mhi_event_pkt) *
 					mhi_dev_ctxt->ev_ring_props[i].nr_desc;
 		ring_addr = dma_alloc_coherent(
+#ifdef CONFIG_NAPIER_X86
+				&mhi_dev_ctxt->pcie_device->dev,
+#else
 				&mhi_dev_ctxt->plat_dev->dev,
+#endif
 				ring_len, &ring_dma_addr, GFP_KERNEL);
 		if (!ring_addr)
 			goto err_ev_alloc;
@@ -236,15 +244,26 @@ err_ev_alloc:
 		dev_ev_ctxt = &mhi_dev_ctxt->dev_space.ring_ctxt.ec_list[i];
 		ev_ctxt = &mhi_dev_ctxt->mhi_local_event_ctxt[i];
 
+#ifdef CONFIG_NAPIER_X86
+		dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
 		dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
 				  ev_ctxt->len,
 				  ev_ctxt->base,
 				  dev_ev_ctxt->mhi_event_ring_base_addr);
+		ev_ctxt->base = NULL;
 	}
+#ifdef CONFIG_NAPIER_X86
+	dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
 	dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
 			   mhi_dev_ctxt->dev_space.dev_mem_len,
 			   mhi_dev_ctxt->dev_space.dev_mem_start,
 			   mhi_dev_ctxt->dev_space.dma_dev_mem_start);
+	mhi_dev_ctxt->dev_space.dev_mem_start = NULL;
+
 	return -EFAULT;
 }
 
@@ -391,7 +410,11 @@ error_during_thread_init:
 	kfree(mhi_dev_ctxt->mhi_ev_wq.m3_event);
 	kfree(mhi_dev_ctxt->mhi_ev_wq.bhi_event);
 error_wq_init:
+#ifdef CONFIG_NAPIER_X86
+	dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
+#else
 	dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+#endif
 		   mhi_dev_ctxt->dev_space.dev_mem_len,
 		   mhi_dev_ctxt->dev_space.dev_mem_start,
 		   mhi_dev_ctxt->dev_space.dma_dev_mem_start);

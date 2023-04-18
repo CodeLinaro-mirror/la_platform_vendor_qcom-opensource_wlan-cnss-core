@@ -54,6 +54,7 @@ void cnss_bus_deinit(struct cnss_plat_data *plat_priv);
 void cnss_bus_fw_name_add_path(struct cnss_plat_data *plat_priv,
 			       char *file_name, char *name);
 int cnss_bus_load_m3(struct cnss_plat_data *plat_priv);
+int cnss_bus_free_m3(struct cnss_plat_data *plat_priv);
 int cnss_bus_alloc_fw_mem(struct cnss_plat_data *plat_priv);
 int cnss_bus_get_wake_irq(struct cnss_plat_data *plat_priv);
 int cnss_bus_force_fw_assert_hdlr(struct cnss_plat_data *plat_priv);
@@ -74,4 +75,10 @@ int cnss_bus_unregister_driver_hdlr(struct cnss_plat_data *plat_priv);
 int cnss_bus_call_driver_modem_status(struct cnss_plat_data *plat_priv,
 				      int modem_current_status);
 int cnss_bus_recovery_update_status(struct cnss_plat_data *plat_priv);
+#ifdef DUMP_TO_FS
+int cnss_bus_fw_sram_dump_to_file(struct cnss_plat_data *plat_priv,
+		uint32_t fw_sram_start,
+		uint32_t fw_sram_end,
+		const char *fw_sram_dump_path);
+#endif
 #endif /* _CNSS_BUS_H */

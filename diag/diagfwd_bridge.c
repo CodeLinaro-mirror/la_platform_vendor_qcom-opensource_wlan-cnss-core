@@ -100,9 +100,10 @@ int diagfwd_bridge_init()
 	int err = 0;
 
 	err = diag_mhi_init();
-	if (err)
+	if (err){
 		goto fail;
-		return 0;
+	}
+	return 0;
 
 fail:
 	pr_err("diag: Unable to initialze diagfwd bridge, err: %d\n", err);

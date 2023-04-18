@@ -4330,10 +4330,10 @@ void msm_ipc_router_xprt_notify(struct msm_ipc_router_xprt *xprt,
  */
 int parse_devicetree(struct device_node *node)
 {
+#ifdef CONFIG_ARCH_QCOM
 	char *key;
 	const char *peripheral = NULL;
 
-#ifdef CONFIG_ARCH_QCOM
 	key = "qcom,default-peripheral";
 	peripheral = of_get_property(node, key, NULL);
 	if (peripheral)

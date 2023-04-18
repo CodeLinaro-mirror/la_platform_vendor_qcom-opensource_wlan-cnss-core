@@ -23,6 +23,10 @@
 #include <linux/iommu.h>
 #include <linux/pci.h>
 
+#if defined(CONFIG_PCI_QC_ENHANCE)
+#include <linux/pci_rc_api.h>
+#endif
+
 #include "main.h"
 
 #define QCA6174_VENDOR_ID		0x168C
@@ -158,6 +162,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv);
 void cnss_pci_fw_name_add_path(struct cnss_pci_data *pci_priv,
 			       char *file_name, char *name);
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv);
+void cnss_pci_free_m3_mem(struct cnss_pci_data *pci_priv);
 int cnss_pci_get_bar_info(struct cnss_pci_data *pci_priv, void __iomem **va,
 			  phys_addr_t *pa);
 int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
@@ -166,6 +171,15 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv);
 void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv);
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv);
 void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv);
+void cnss_pci_dump_qdss_reg(struct cnss_pci_data *pci_priv);
+#ifdef DUMP_TO_FS
+int cnss_pci_fw_sram_dump_to_file(struct cnss_pci_data *pci_priv,
+		uint32_t fw_sram_start,
+		uint32_t fw_sram_end,
+		const char *fw_sram_dump_path);
+int cnss_pci_dump_fw_remote_mem_to_file(struct cnss_pci_data *pci_priv);
+int cnss_pci_dump_fw_paging_to_file(struct cnss_pci_data *pci_priv);
+#endif
 int cnss_pm_request_resume(struct cnss_pci_data *pci_priv);
 u32 cnss_pci_get_wake_msi(struct cnss_pci_data *pci_priv);
 int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv);
