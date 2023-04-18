@@ -343,7 +343,7 @@ int cnss_wlan_enable(struct device *dev,
 		return -EINVAL;
 	}
 
-	cnss_pr_dbg("Mode: %d, config: %pK, host_version: %s\n",
+	cnss_pr_info("Mode: %d, config: %pK, host_version: %s\n",
 		    mode, config, host_version);
 
 	if (mode == CNSS_WALTEST || mode == CNSS_CCPM)
@@ -761,7 +761,7 @@ int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 	if (!plat_priv)
 		return -ENODEV;
 
-	cnss_pr_dbg("Posting event: %s(%d)%s, state: 0x%lx flags: 0x%0x\n",
+	cnss_pr_info("Posting event: %s(%d)%s, state: 0x%lx flags: 0x%0x\n",
 		    cnss_driver_event_to_str(type), type,
 		    flags ? "-sync" : "", plat_priv->driver_state, flags);
 
@@ -1543,7 +1543,7 @@ static void cnss_driver_event_work(struct work_struct *work)
 		list_del(&event->list);
 		spin_unlock_irqrestore(&plat_priv->event_lock, flags);
 
-		cnss_pr_dbg("Processing driver event: %s%s(%d), state: 0x%lx\n",
+		cnss_pr_info("Processing driver event: %s%s(%d), state: 0x%lx\n",
 			    cnss_driver_event_to_str(event->type),
 			    event->sync ? "-sync" : "", event->type,
 			    plat_priv->driver_state);

@@ -543,7 +543,7 @@ static void mhi_xprt_read_data(struct work_struct *work)
 
 		/* Packet is completely read, so notify to router */
 		if (!mhi_xprtp->ch_hndl.bytes_to_rx) {
-			printk("%s: Packet size read %d\n",
+			D("%s: Packet size read %d\n",
 			  __func__, mhi_xprtp->in_pkt->length);
 			msm_ipc_router_xprt_notify(&mhi_xprtp->xprt,
 						IPC_ROUTER_XPRT_EVENT_DATA,
