@@ -35,7 +35,7 @@
 
 #define PCI_DMA_MASK_32_BIT		DMA_BIT_MASK(32)
 #define PCI_DMA_MASK_36_BIT		DMA_BIT_MASK(36)
-#define PCI_DMA_MASK_64_BIT		~0ULL
+#define PCI_DMA_MASK_64_BIT		DMA_BIT_MASK(64)
 
 #define MHI_NODE_NAME			"qcom,mhi"
 #define MHI_MSI_NAME			"MHI"
@@ -5166,6 +5166,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 
 	switch (device_id) {
 	case QCA6174_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
 		break;
 	case QCA6390_DEVICE_ID:
@@ -5174,9 +5175,6 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	case MANGO_DEVICE_ID:
 	case PEACH_DEVICE_ID:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_36_BIT;
-		break;
-	case QCN7605_DEVICE_ID:
-		pci_priv->dma_bit_mask = PCI_DMA_MASK_64_BIT;
 		break;
 	default:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
@@ -6324,8 +6322,13 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	if (cnss_pci_get_drv_supported(pci_priv))
 		cnss_mhi_controller_set_base(pci_priv, bar_start);
 
+	cnss_get_bwscal_info(plat_priv);
+	cnss_pr_dbg("no_bwscale: %d\n", plat_priv->no_bwscale);
+
 	/* BW scale CB needs to be set after registering MHI per requirement */
-	cnss_mhi_controller_set_bw_scale_cb(pci_priv, cnss_mhi_bw_scale);
+	if (!plat_priv->no_bwscale)
+		cnss_mhi_controller_set_bw_scale_cb(pci_priv,
+						    cnss_mhi_bw_scale);
 
 	ret = cnss_pci_update_fw_name(pci_priv);
 	if (ret)
