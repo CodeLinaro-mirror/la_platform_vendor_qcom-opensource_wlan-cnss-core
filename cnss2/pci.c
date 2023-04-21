@@ -25,6 +25,7 @@
 #include "bus.h"
 #include "debug.h"
 #include "pci.h"
+#include "reg.h"
 #include "mhi.h"
 
 #define PCI_LINK_UP			1
@@ -58,21 +59,6 @@
 #define WAKE_MSI_NAME			"WAKE"
 
 #define FW_ASSERT_TIMEOUT		5000
-
-#define QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET	0x310c
-
-#define QDSS_APB_DEC_CSR_BASE			0x1C01000
-#define QDSS_APB_DEC_CSR_ETRIRQCTRL_OFFSET	0x6C
-#define QDSS_APB_DEC_CSR_PRESERVEETF_OFFSET	0x70
-#define QDSS_APB_DEC_CSR_PRESERVEETR0_OFFSET	0x74
-#define QDSS_APB_DEC_CSR_PRESERVEETR1_OFFSET	0x78
-
-#define MAX_UNWINDOWED_ADDRESS			0x80000
-#define WINDOW_ENABLE_BIT			0x40000000
-#define WINDOW_SHIFT				19
-#define WINDOW_VALUE_MASK			0x3F
-#define WINDOW_START				MAX_UNWINDOWED_ADDRESS
-#define WINDOW_RANGE_MASK			0x7FFFF
 
 #ifdef CONFIG_PCI_MSM
 static DEFINE_SPINLOCK(pci_link_down_lock);
@@ -2021,6 +2007,219 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
+static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 offset)
+{
+        struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+        u32 window = (offset >> WINDOW_SHIFT) & WINDOW_VALUE_MASK;
+        u32 window_enable = WINDOW_ENABLE_BIT | window;
+        u32 val;
+
+        if (plat_priv->device_id == PEACH_DEVICE_ID) {
+                writel_relaxed(window_enable, pci_priv->bar +
+                               PEACH_PCIE_REMAP_BAR_CTRL_OFFSET);
+        } else {
+                writel_relaxed(window_enable, pci_priv->bar +
+                               QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET);
+        }
+
+        if (plat_priv->device_id == QCN7605_DEVICE_ID)
+                window_enable = QCN7605_WINDOW_ENABLE_BIT | window;
+
+        if (window != pci_priv->remap_window) {
+                pci_priv->remap_window = window;
+                cnss_pr_dbg("Config PCIe remap window register to 0x%x\n",
+                            window_enable);
+        }
+
+        /* Read it back to make sure the write has taken effect */
+        if (plat_priv->device_id == PEACH_DEVICE_ID) {
+                val = readl_relaxed(pci_priv->bar +
+                        PEACH_PCIE_REMAP_BAR_CTRL_OFFSET);
+        } else {
+                val = readl_relaxed(pci_priv->bar +
+                        QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET);
+        }
+        if (val != window_enable) {
+                cnss_pr_err("Failed to config window register to 0x%x, current value: 0x%x\n",
+                            window_enable, val);
+#if defined(CONFIG_PCI_MSM)
+                if (!cnss_pci_check_link_status(pci_priv) &&
+                    !test_bit(CNSS_IN_PANIC, &plat_priv->driver_state))
+                        CNSS_ASSERT(0);
+#endif
+        }
+}
+
+static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
+                             u32 offset, u32 *val)
+{
+        int ret;
+        struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+#if defined(CONFIG_PCI_MSM)
+        if (!in_interrupt() && !irqs_disabled()) {
+                ret = cnss_pci_check_link_status(pci_priv);
+                if (ret)
+                        return ret;
+        }
+#endif
+        if (pci_priv->pci_dev->device == QCA6174_DEVICE_ID ||
+            offset < MAX_UNWINDOWED_ADDRESS) {
+                *val = readl_relaxed(pci_priv->bar + offset);
+                return 0;
+        }
+
+        /* If in panic, assumption is kernel panic handler will hold all threads
+         * and interrupts. Further pci_reg_window_lock could be held before
+         * panic. So only lock during normal operation.
+         */
+        if (test_bit(CNSS_IN_PANIC, &plat_priv->driver_state)) {
+                cnss_pci_select_window(pci_priv, offset);
+                *val = readl_relaxed(pci_priv->bar + WINDOW_START +
+                                     (offset & WINDOW_RANGE_MASK));
+        } else {
+                spin_lock_bh(&pci_reg_window_lock);
+                cnss_pci_select_window(pci_priv, offset);
+                *val = readl_relaxed(pci_priv->bar + WINDOW_START +
+                                     (offset & WINDOW_RANGE_MASK));
+                spin_unlock_bh(&pci_reg_window_lock);
+        }
+
+        return 0;
+}
+
+static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
+                              u32 val)
+{
+        int ret;
+        struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+#if defined(CONFIG_PCI_MSM)
+        if (!in_interrupt() && !irqs_disabled()) {
+                ret = cnss_pci_check_link_status(pci_priv);
+                if (ret)
+                        return ret;
+        }
+#endif
+        if (pci_priv->pci_dev->device == QCA6174_DEVICE_ID ||
+            offset < MAX_UNWINDOWED_ADDRESS) {
+                writel_relaxed(val, pci_priv->bar + offset);
+                return 0;
+        }
+
+        /* Same constraint as PCI register read in panic */
+        if (test_bit(CNSS_IN_PANIC, &plat_priv->driver_state)) {
+                cnss_pci_select_window(pci_priv, offset);
+                writel_relaxed(val, pci_priv->bar + WINDOW_START +
+                          (offset & WINDOW_RANGE_MASK));
+        } else {
+                spin_lock_bh(&pci_reg_window_lock);
+                cnss_pci_select_window(pci_priv, offset);
+                writel_relaxed(val, pci_priv->bar + WINDOW_START +
+                          (offset & WINDOW_RANGE_MASK));
+                spin_unlock_bh(&pci_reg_window_lock);
+        }
+
+        return 0;
+}
+
+/**
+ * cnss_pci_dump_bl_sram_mem - Dump WLAN device bootloader debug log
+ * @pci_priv: driver PCI bus context pointer
+ *
+ * Dump primary and secondary bootloader debug log data. For SBL check the
+ * log struct address and size for validity.
+ *
+ * Return: None
+ */
+static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
+{
+        u32 mem_addr, val, pbl_log_max_size, sbl_log_max_size;
+        u32 bhi_errcode;
+        u32 pbl_log_sram_start;
+        u32 pbl_stage, sbl_log_start, sbl_log_size;
+        u32 pbl_wlan_boot_cfg, pbl_bootstrap_status;
+        u32 pbl_bootstrap_status_reg = PBL_BOOTSTRAP_STATUS;
+        u32 sbl_log_def_start = SRAM_START;
+        u32 sbl_log_def_end = SRAM_END;
+        int i;
+
+        switch (pci_priv->device_id) {
+        case QCA6390_DEVICE_ID:
+                pbl_log_sram_start = QCA6390_DEBUG_PBL_LOG_SRAM_START;
+                pbl_log_max_size = QCA6390_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
+                sbl_log_max_size = QCA6390_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
+                break;
+        case QCA6490_DEVICE_ID:
+                pbl_log_sram_start = QCA6490_DEBUG_PBL_LOG_SRAM_START;
+                pbl_log_max_size = QCA6490_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
+                sbl_log_max_size = QCA6490_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
+                break;
+        case KIWI_DEVICE_ID:
+                pbl_bootstrap_status_reg = KIWI_PBL_BOOTSTRAP_STATUS;
+                pbl_log_sram_start = KIWI_DEBUG_PBL_LOG_SRAM_START;
+                pbl_log_max_size = KIWI_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
+                sbl_log_max_size = KIWI_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
+                break;
+        case MANGO_DEVICE_ID:
+                pbl_bootstrap_status_reg = MANGO_PBL_BOOTSTRAP_STATUS;
+                pbl_log_sram_start = MANGO_DEBUG_PBL_LOG_SRAM_START;
+                pbl_log_max_size = MANGO_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
+                sbl_log_max_size = MANGO_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
+                break;
+        case PEACH_DEVICE_ID:
+                pbl_bootstrap_status_reg = PEACH_PBL_BOOTSTRAP_STATUS;
+                pbl_log_sram_start = PEACH_DEBUG_PBL_LOG_SRAM_START;
+                pbl_log_max_size = PEACH_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
+                sbl_log_max_size = PEACH_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
+                break;
+        default:
+                return;
+        }
+
+#if defined(CONFIG_PCI_MSM)
+        if (cnss_pci_check_link_status(pci_priv))
+                return;
+#endif
+        cnss_pci_reg_read(pci_priv, PCIE_BHI_ERRCODE_REG, &bhi_errcode);
+        cnss_pci_reg_read(pci_priv, TCSR_PBL_LOGGING_REG, &pbl_stage);
+        cnss_pci_reg_read(pci_priv, PCIE_BHI_ERRDBG2_REG, &sbl_log_start);
+        cnss_pci_reg_read(pci_priv, PCIE_BHI_ERRDBG3_REG, &sbl_log_size);
+        cnss_pci_reg_read(pci_priv, PBL_WLAN_BOOT_CFG, &pbl_wlan_boot_cfg);
+        cnss_pci_reg_read(pci_priv, pbl_bootstrap_status_reg,
+                          &pbl_bootstrap_status);
+        cnss_pr_info("PCIE_BHI_ERRCODE: 0x%08x\n", bhi_errcode);
+        cnss_pr_info("TCSR_PBL_LOGGING: 0x%08x PCIE_BHI_ERRDBG: Start: 0x%08x Size:0x%08x\n",
+                    pbl_stage, sbl_log_start, sbl_log_size);
+        cnss_pr_info("PBL_WLAN_BOOT_CFG: 0x%08x PBL_BOOTSTRAP_STATUS: 0x%08x\n",
+                    pbl_wlan_boot_cfg, pbl_bootstrap_status);
+
+        cnss_pr_info("Dumping PBL log data\n");
+        for (i = 0; i < pbl_log_max_size; i += sizeof(val)) {
+                mem_addr = pbl_log_sram_start + i;
+                if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
+                        break;
+                cnss_pr_info("SRAM[0x%x] = 0x%x\n", mem_addr, val);
+        }
+
+        sbl_log_size = (sbl_log_size > sbl_log_max_size ?
+                        sbl_log_max_size : sbl_log_size);
+        if (sbl_log_start < sbl_log_def_start ||
+            sbl_log_start > sbl_log_def_end ||
+            (sbl_log_start + sbl_log_size) > sbl_log_def_end) {
+                cnss_pr_err("Invalid SBL log data\n");
+                return;
+        }
+
+        cnss_pr_dbg("Dumping SBL log data\n");
+        for (i = 0; i < sbl_log_size; i += sizeof(val)) {
+                mem_addr = sbl_log_start + i;
+                if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
+                        break;
+                cnss_pr_info("SRAM[0x%x] = 0x%x\n", mem_addr, val);
+        }
+}
+
 void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv;
@@ -2040,7 +2239,7 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 	cnss_pci_dump_fw_remote_mem_to_file(plat_priv->bus_priv);
 	cnss_pci_dump_fw_paging_to_file(plat_priv->bus_priv);
 #endif
-
+	cnss_pci_dump_bl_sram_mem(pci_priv);
 	cnss_pr_err("Timeout waiting for FW ready indication\n");
 
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev,

@@ -904,8 +904,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv, u32 bdf_type)
 	remaining = fw_entry->size;
 
 bypass_bdf:
-	cnss_pr_info("Downloading BDF: %s, type %d size: %u\n", filename,
-		    bdf_type, remaining);
+	cnss_pr_info("Downloading BDF: %s, type %s size: %u\n", filename,
+		    BDFSTR(bdf_type), remaining);
 
 	memset(&resp, 0, sizeof(resp));
 
@@ -948,8 +948,8 @@ bypass_bdf:
 		}
 
 		if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-			cnss_pr_err("BDF download request failed, result: %d,"
-				    "err: %d\n", resp.resp.result, resp.resp.error);
+			cnss_pr_err("%s download request failed, result: %d,"
+				    "err: %d\n", BDFSTR(bdf_type), resp.resp.result, resp.resp.error);
 			ret = resp.resp.result;
 			goto err_send;
 		}

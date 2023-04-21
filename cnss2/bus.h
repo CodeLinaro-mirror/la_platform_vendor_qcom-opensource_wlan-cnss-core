@@ -32,6 +32,12 @@
 #define QCN7605_DEVICE_ID		0x1102
 #define QCN7605_SDIO_VENDOR_ID		0x70
 #define QCN7605_SDIO_DEVICE_ID		0x400B
+#define PEACH_VENDOR_ID                 0x17CB
+#define PEACH_DEVICE_ID                 0x110E
+#define KIWI_VENDOR_ID                  0x17CB
+#define KIWI_DEVICE_ID                  0x1107
+#define MANGO_VENDOR_ID                 0x17CB
+#define MANGO_DEVICE_ID                 0x110A
 
 #define QCN7605_USB_VENDOR_ID             0x05C6
 #define QCN7605_COMPOSITE_DEVICE_ID     QCN7605_COMPOSITE_PRODUCT_ID
