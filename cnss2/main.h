@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CNSS_MAIN_H
@@ -39,7 +39,7 @@
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/subsystem_restart.h>
 #endif
-
+#include <linux/iommu.h>
 #include "qmi.h"
 
 #define MAX_NO_OF_MAC_ADDR		4
@@ -55,7 +55,17 @@
 #define CNSS_RAMDUMP_VERSION		0
 #define MAX_FIRMWARE_NAME_LEN		40
 #define FW_V2_NUMBER                    2
+#ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
+#define POWER_ON_RETRY_MAX_TIMES	2
+#else
 #define POWER_ON_RETRY_MAX_TIMES        4
+#endif
+#define POWER_ON_RETRY_DELAY_MS         500
+#define CNSS_FS_NAME			"cnss"
+#define CNSS_FS_NAME_SIZE		15
+#define CNSS_DEVICE_NAME_SIZE		16
+#define QRTR_NODE_FW_ID_BASE		7
+
 #define POWER_ON_RETRY_DELAY_MS         500
 #define WLFW_MAX_HANG_EVENT_DATA_SIZE   384
 
@@ -274,6 +284,14 @@ struct cnss_dump_meta_info {
 	u32 chipset;
 	u32 total_entries;
 	struct cnss_dump_entry entry[CNSS_FW_DUMP_TYPE_MAX];
+};
+
+struct cnss_host_dump_meta_info {
+	u32 magic;
+	u32 version;
+	u32 chipset;
+	u32 total_entries;
+	struct cnss_dump_entry entry[CNSS_HOST_DUMP_TYPE_MAX];
 };
 
 enum cnss_driver_event_type {
@@ -546,7 +564,9 @@ struct cnss_plat_data {
 	u8 set_wlaon_pwr_ctrl;
 	struct cnss_tcs_info tcs_info;
 	bool fw_pcie_gen_switch;
+	u64 fw_caps;
 	u8 pcie_gen_speed;
+	struct iommu_domain *audio_iommu_domain;
 	struct cnss_dms_data dms;
 	int power_up_error;
 	u32 hw_trc_override;
@@ -568,6 +588,14 @@ struct cnss_plat_data {
 	uint32_t num_shadow_regs_v3;
 	bool sec_peri_feature_disable;
 	struct device_node *dev_node;
+	char device_name[CNSS_DEVICE_NAME_SIZE];
+	u32 plat_idx;
+	bool enumerate_done;
+	int qrtr_node_id;
+	unsigned int wlfw_service_instance_id;
+	const char *pld_bus_ops_name;
+	bool no_bwscale;
+	bool sleep_clk;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
@@ -593,8 +621,16 @@ static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)
 int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv);
 int cnss_wlan_hw_enable(void);
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
+struct cnss_plat_data *cnss_get_first_plat_priv(struct platform_device *plat_dev);
 void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv);
 void cnss_pm_relax(struct cnss_plat_data *plat_priv);
+struct cnss_plat_data *cnss_get_plat_priv_by_rc_num(int rc_num);
+int cnss_get_plat_env_count(void);
+struct cnss_plat_data *cnss_get_plat_env(int index);
+void cnss_get_qrtr_info(struct cnss_plat_data *plat_priv);
+void cnss_get_sleep_clk_supported(struct cnss_plat_data *plat_priv);
+void cnss_get_bwscal_info(struct cnss_plat_data *plat_priv);
+bool cnss_is_dual_wlan_enabled(void);
 int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 			   enum cnss_driver_event_type type,
 			   u32 flags, void *data);
@@ -612,7 +648,7 @@ int cnss_vreg_unvote_type(struct cnss_plat_data *plat_priv,
 			  enum cnss_vreg_type type);
 int cnss_get_pinctrl(struct cnss_plat_data *plat_priv);
 int cnss_get_wlan_sw_ctrl(struct cnss_plat_data *plat_priv);
-int cnss_power_on_device(struct cnss_plat_data *plat_priv);
+int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset);
 void cnss_power_off_device(struct cnss_plat_data *plat_priv);
 bool cnss_is_device_powered_on(struct cnss_plat_data *plat_priv);
 int cnss_enable_dev_sol_irq(struct cnss_plat_data *plat_priv);
@@ -628,6 +664,9 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv);
 void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv);
 int cnss_do_ramdump(struct cnss_plat_data *plat_priv);
 int cnss_do_elf_ramdump(struct cnss_plat_data *plat_priv);
+int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
+			 struct cnss_ssr_driver_dump_entry *ssr_entry,
+			 size_t num_entries_loaded);
 void cnss_set_pin_connect_status(struct cnss_plat_data *plat_priv);
 int cnss_get_cpr_info(struct cnss_plat_data *plat_priv);
 int cnss_update_cpr_info(struct cnss_plat_data *plat_priv);
