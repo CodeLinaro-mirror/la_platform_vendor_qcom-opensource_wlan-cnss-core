@@ -594,6 +594,8 @@ struct cnss_plat_data {
 	int qrtr_node_id;
 	unsigned int wlfw_service_instance_id;
 	const char *pld_bus_ops_name;
+	bool no_bwscale;
+	bool sleep_clk;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
@@ -619,12 +621,15 @@ static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)
 int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv);
 int cnss_wlan_hw_enable(void);
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
+struct cnss_plat_data *cnss_get_first_plat_priv(struct platform_device *plat_dev);
 void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv);
 void cnss_pm_relax(struct cnss_plat_data *plat_priv);
 struct cnss_plat_data *cnss_get_plat_priv_by_rc_num(int rc_num);
 int cnss_get_plat_env_count(void);
 struct cnss_plat_data *cnss_get_plat_env(int index);
 void cnss_get_qrtr_info(struct cnss_plat_data *plat_priv);
+void cnss_get_sleep_clk_supported(struct cnss_plat_data *plat_priv);
+void cnss_get_bwscal_info(struct cnss_plat_data *plat_priv);
 bool cnss_is_dual_wlan_enabled(void);
 int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 			   enum cnss_driver_event_type type,
