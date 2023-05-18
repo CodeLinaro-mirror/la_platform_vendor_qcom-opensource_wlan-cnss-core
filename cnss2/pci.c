@@ -528,6 +528,64 @@ void cnss_pci_unlock_reg_window(struct device *dev, unsigned long *flags)
 }
 EXPORT_SYMBOL(cnss_pci_unlock_reg_window);
 
+int cnss_get_pci_slot(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_get_pci_slot);
+
+struct kobject *cnss_get_wifi_kobj(struct device *dev)
+{
+	return NULL;
+}
+EXPORT_SYMBOL(cnss_get_wifi_kobj);
+
+int cnss_thermal_cdev_register(struct device *dev, unsigned long max_state,
+			       int tcdev_id)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_thermal_cdev_register);
+
+void cnss_thermal_cdev_unregister(struct device *dev, int tcdev_id)
+{
+}
+EXPORT_SYMBOL(cnss_thermal_cdev_unregister);
+
+int cnss_get_curr_therm_cdev_state(struct device *dev,
+				   unsigned long *thermal_state,
+				   int tcdev_id)
+{
+	return 0;
+}		   
+EXPORT_SYMBOL(cnss_get_curr_therm_cdev_state);
+
+bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_get_fw_cap);
+
+int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
+			dma_addr_t iova, size_t size)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_audio_smmu_map);
+
+void cnss_audio_smmu_unmap(struct device *dev, dma_addr_t iova, size_t size)
+{
+	return;
+}
+EXPORT_SYMBOL(cnss_audio_smmu_unmap);
+
+int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_set_wfc_mode);
+
+
 int cnss_pci_recovery_update_status(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv;
@@ -1974,7 +2032,7 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 	plat_priv = pci_priv->plat_priv;
 	mhi_dev_ctxt = pci_priv->mhi_dev.mhi_dev_ctxt;
 
-	mhi_dump_irq(mhi_dev_ctxt);
+	//mhi_dump_irq(mhi_dev_ctxt);
 	mhi_dump_event_ring(mhi_dev_ctxt);
 	
 #ifdef DUMP_TO_FS	
@@ -2254,14 +2312,21 @@ u32 cnss_pci_get_wake_msi(struct cnss_pci_data *pci_priv)
 static inline int cnss_pci_set_dma_mask(struct pci_dev *pci_dev)
 {
 	int ret;
-
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0))
+	ret = dma_set_mask(&pci_dev->dev, DMA_BIT_MASK(PCI_DMA_MASK));
+#else
 	ret = pci_set_dma_mask(pci_dev, DMA_BIT_MASK(PCI_DMA_MASK));
+#endif
 	if (ret) {
 		cnss_pr_err("PCI DMA mask: %d, err: %d\n", PCI_DMA_MASK, ret);
 		return ret;
 	}
-
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0))
+	ret = dma_set_coherent_mask(&pci_dev->dev, DMA_BIT_MASK(PCI_DMA_MASK));
+#else
 	ret = pci_set_consistent_dma_mask(pci_dev, DMA_BIT_MASK(PCI_DMA_MASK));
+#endif
+
 	if (ret)
 		cnss_pr_err("PCI consistent DMA mask: %d, err: %d\n",
 			    PCI_DMA_MASK, ret);

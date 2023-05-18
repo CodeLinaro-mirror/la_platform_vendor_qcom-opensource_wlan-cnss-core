@@ -838,6 +838,6 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 #endif
 void mhi_dump_event_ring(struct mhi_device_ctxt *mhi_dev_ctxt);
 
-void mhi_dump_irq(struct mhi_device_ctxt *mhi_dev_ctxt);
+//void mhi_dump_irq(struct mhi_device_ctxt *mhi_dev_ctxt);
 
 #endif

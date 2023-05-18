@@ -13,6 +13,7 @@
 #include <linux/irqreturn.h>
 #include <linux/irq.h>
 
+
 #include "mhi_sys.h"
 #include "mhi_trace.h"
 
@@ -371,7 +372,7 @@ void mhi_dump_event_ring(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	__mhi_dump_event_ring(mhi_dev_ctxt, 0, U32_MAX);
 }
-
+/*
 void mhi_dump_irq(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	int irq;
@@ -388,6 +389,7 @@ void mhi_dump_irq(struct mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 		"MSI1 irq=%d, depth=%d\n", irq, desc->depth);
 }
+*/
 void mhi_ev_task(unsigned long data)
 {
 	struct mhi_ring *mhi_ring = (struct mhi_ring *)data;
