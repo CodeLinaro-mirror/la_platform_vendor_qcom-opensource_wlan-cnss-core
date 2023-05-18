@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/netlink.h>
@@ -1046,9 +1046,12 @@ static int qrtr_recvmsg(struct socket *sock, struct msghdr *msg,
 		release_sock(sk);
 		return -EADDRNOTAVAIL;
 	}
-
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 6))
+	skb = skb_recv_datagram(sk, flags, &rc);
+#else
 	skb = skb_recv_datagram(sk, flags & ~MSG_DONTWAIT,
 				flags & MSG_DONTWAIT, &rc);
+#endif
 	if (!skb) {
 		release_sock(sk);
 		return rc;

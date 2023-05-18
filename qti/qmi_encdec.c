@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  * Copyright (C) 2017 Linaro Ltd.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/slab.h>
 #include <linux/uaccess.h>
@@ -11,6 +11,13 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/soc/qcom/qmi.h>
+#include <linux/version.h>
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+#define CONST const
+#else
+#define CONST
+#endif
 
 #define QMI_ENCDEC_ENCODE_TLV(type, length, p_dst) do { \
 	*p_dst++ = type; \
@@ -58,11 +65,11 @@ do { \
 #define TLV_TYPE_SIZE sizeof(u8)
 #define OPTIONAL_TLV_TYPE_START 0x10
 
-static int qmi_encode(struct qmi_elem_info *ei_array, void *out_buf,
+static int qmi_encode(CONST struct qmi_elem_info *ei_array, void *out_buf,
 		      const void *in_c_struct, u32 out_buf_len,
 		      int enc_level);
 
-static int qmi_decode(struct qmi_elem_info *ei_array, void *out_c_struct,
+static int qmi_decode(CONST struct qmi_elem_info *ei_array, void *out_c_struct,
 		      const void *in_buf, u32 in_buf_len, int dec_level);
 
 /**
@@ -77,10 +84,10 @@ static int qmi_decode(struct qmi_elem_info *ei_array, void *out_c_struct,
  *
  * Return: struct info of the next element that can be encoded.
  */
-static struct qmi_elem_info *skip_to_next_elem(struct qmi_elem_info *ei_array,
+static CONST struct qmi_elem_info *skip_to_next_elem(CONST struct qmi_elem_info *ei_array,
 					       int level)
 {
-	struct qmi_elem_info *temp_ei = ei_array;
+	CONST struct qmi_elem_info *temp_ei = ei_array;
 	u8 tlv_type;
 
 	if (level > 1) {
@@ -102,11 +109,11 @@ static struct qmi_elem_info *skip_to_next_elem(struct qmi_elem_info *ei_array,
  *
  * Return: Expected minimum length of the QMI message or 0 on error.
  */
-static int qmi_calc_min_msg_len(struct qmi_elem_info *ei_array,
+static int qmi_calc_min_msg_len(CONST struct qmi_elem_info *ei_array,
 				int level)
 {
 	int min_msg_len = 0;
-	struct qmi_elem_info *temp_ei = ei_array;
+	CONST struct qmi_elem_info *temp_ei = ei_array;
 
 	if (!ei_array)
 		return min_msg_len;
@@ -195,13 +202,13 @@ static int qmi_encode_basic_elem(void *buf_dst, const void *buf_src,
  * Return: The number of bytes of encoded information on success or negative
  * errno on error.
  */
-static int qmi_encode_struct_elem(struct qmi_elem_info *ei_array,
+static int qmi_encode_struct_elem(CONST struct qmi_elem_info *ei_array,
 				  void *buf_dst, const void *buf_src,
 				  u32 elem_len, u32 out_buf_len,
 				  int enc_level)
 {
 	int i, rc, encoded_bytes = 0;
-	struct qmi_elem_info *temp_ei = ei_array;
+	CONST struct qmi_elem_info *temp_ei = ei_array;
 
 	for (i = 0; i < elem_len; i++) {
 		rc = qmi_encode(temp_ei->ei_array, buf_dst, buf_src,
@@ -234,13 +241,13 @@ static int qmi_encode_struct_elem(struct qmi_elem_info *ei_array,
  * Return: The number of bytes of encoded information on success or negative
  * errno on error.
  */
-static int qmi_encode_string_elem(struct qmi_elem_info *ei_array,
+static int qmi_encode_string_elem(CONST struct qmi_elem_info *ei_array,
 				  void *buf_dst, const void *buf_src,
 				  u32 out_buf_len, int enc_level)
 {
 	int rc;
 	int encoded_bytes = 0;
-	struct qmi_elem_info *temp_ei = ei_array;
+	CONST struct qmi_elem_info *temp_ei = ei_array;
 	u32 string_len = 0;
 	u32 string_len_sz = 0;
 
@@ -290,11 +297,11 @@ static int qmi_encode_string_elem(struct qmi_elem_info *ei_array,
  * Return: The number of bytes of encoded information on success or negative
  * errno on error.
  */
-static int qmi_encode(struct qmi_elem_info *ei_array, void *out_buf,
+static int qmi_encode(CONST struct qmi_elem_info *ei_array, void *out_buf,
 		      const void *in_c_struct, u32 out_buf_len,
 		      int enc_level)
 {
-	struct qmi_elem_info *temp_ei = ei_array;
+	CONST struct qmi_elem_info *temp_ei = ei_array;
 	u8 opt_flag_value = 0;
 	u32 data_len_value = 0, data_len_sz;
 	u8 *buf_dst = (u8 *)out_buf;
@@ -469,13 +476,13 @@ static int qmi_decode_basic_elem(void *buf_dst, const void *buf_src,
  * Return: The total size of the decoded data elements on success, negative
  * errno on error.
  */
-static int qmi_decode_struct_elem(struct qmi_elem_info *ei_array,
+static int qmi_decode_struct_elem(CONST struct qmi_elem_info *ei_array,
 				  void *buf_dst, const void *buf_src,
 				  u32 elem_len, u32 tlv_len,
 				  int dec_level)
 {
 	int i, rc, decoded_bytes = 0;
-	struct qmi_elem_info *temp_ei = ei_array;
+	CONST struct qmi_elem_info *temp_ei = ei_array;
 
 	for (i = 0; i < elem_len && decoded_bytes < tlv_len; i++) {
 		rc = qmi_decode(temp_ei->ei_array, buf_dst, buf_src,
@@ -515,7 +522,7 @@ static int qmi_decode_struct_elem(struct qmi_elem_info *ei_array,
  * Return: The total size of the decoded data elements on success, negative
  * errno on error.
  */
-static int qmi_decode_string_elem(struct qmi_elem_info *ei_array,
+static int qmi_decode_string_elem(CONST struct qmi_elem_info *ei_array,
 				  void *buf_dst, const void *buf_src,
 				  u32 tlv_len, int dec_level)
 {
@@ -523,7 +530,7 @@ static int qmi_decode_string_elem(struct qmi_elem_info *ei_array,
 	int decoded_bytes = 0;
 	u32 string_len = 0;
 	u32 string_len_sz = 0;
-	struct qmi_elem_info *temp_ei = ei_array;
+	CONST struct qmi_elem_info *temp_ei = ei_array;
 
 	if (dec_level == 1) {
 		string_len = tlv_len;
@@ -565,10 +572,10 @@ static int qmi_decode_string_elem(struct qmi_elem_info *ei_array,
  *
  * Return: Pointer to struct info, if found
  */
-static struct qmi_elem_info *find_ei(struct qmi_elem_info *ei_array,
+static CONST struct qmi_elem_info *find_ei(CONST struct qmi_elem_info *ei_array,
 				     u32 type)
 {
-	struct qmi_elem_info *temp_ei = ei_array;
+	CONST struct qmi_elem_info *temp_ei = ei_array;
 
 	while (temp_ei->data_type != QMI_EOTI) {
 		if (temp_ei->tlv_type == (u8)type)
@@ -591,11 +598,11 @@ static struct qmi_elem_info *find_ei(struct qmi_elem_info *ei_array,
  * Return: The number of bytes of decoded information on success, negative
  * errno on error.
  */
-static int qmi_decode(struct qmi_elem_info *ei_array, void *out_c_struct,
+static int qmi_decode(CONST struct qmi_elem_info *ei_array, void *out_c_struct,
 		      const void *in_buf, u32 in_buf_len,
 		      int dec_level)
 {
-	struct qmi_elem_info *temp_ei = ei_array;
+	CONST struct qmi_elem_info *temp_ei = ei_array;
 	u8 opt_flag_value = 1;
 	u32 data_len_value = 0, data_len_sz = 0;
 	u8 *buf_dst = out_c_struct;
@@ -714,7 +721,7 @@ static int qmi_decode(struct qmi_elem_info *ei_array, void *out_c_struct,
  * Return: Buffer with encoded message, or negative ERR_PTR() on error
  */
 void *qmi_encode_message(int type, unsigned int msg_id, size_t *len,
-			 unsigned int txn_id, struct qmi_elem_info *ei,
+			 unsigned int txn_id, CONST struct qmi_elem_info *ei,
 			 const void *c_struct)
 {
 	struct qmi_header *hdr;
@@ -768,7 +775,7 @@ EXPORT_SYMBOL(qmi_encode_message);
  * errno on error.
  */
 int qmi_decode_message(const void *buf, size_t len,
-		       struct qmi_elem_info *ei, void *c_struct)
+		       CONST struct qmi_elem_info *ei, void *c_struct)
 {
 	if (!ei)
 		return -EINVAL;
@@ -782,7 +789,7 @@ int qmi_decode_message(const void *buf, size_t len,
 EXPORT_SYMBOL(qmi_decode_message);
 
 /* Common header in all QMI responses */
-struct qmi_elem_info qmi_response_type_v01_ei[] = {
+CONST struct qmi_elem_info qmi_response_type_v01_ei[] = {
 	{
 		.data_type	= QMI_SIGNED_2_BYTE_ENUM,
 		.elem_len	= 1,
