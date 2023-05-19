@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021,2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -964,7 +964,8 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv, char *file_n
 		     resp->total_size == total_size) &&
 		   (resp->seg_id_valid == 1 && resp->seg_id == req->seg_id) &&
 		   (resp->data_valid == 1 &&
-		    resp->data_len <= QMI_WLFW_MAX_DATA_SIZE_V01)) {
+		    resp->data_len <= QMI_WLFW_MAX_DATA_SIZE_V01) &&
+		    resp->data_len <= remaining) {
 			memcpy(p_qdss_trace_data_temp,
 			       resp->data, resp->data_len);
 		} else {
