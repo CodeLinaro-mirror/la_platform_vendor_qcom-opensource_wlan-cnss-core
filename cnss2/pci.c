@@ -3215,9 +3215,17 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 void cnss_pci_shutdown(struct pci_dev *pci_dev)
 {
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
+	struct cnss_plat_data *plat_priv;
+
 	if (pci_priv) {
 		struct mhi_device *mhi_dev = &pci_priv->mhi_dev;
-		mhi_pcie_sw_soc_reset(mhi_dev);
+		plat_priv = pci_priv->plat_priv;
+		set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
+		/*
+		 * global reset will be called in
+		 * mhi_pm_slave_mode_power_off
+		 */
+		cnss_bus_dev_shutdown(plat_priv);
 	}
 }
 #else
