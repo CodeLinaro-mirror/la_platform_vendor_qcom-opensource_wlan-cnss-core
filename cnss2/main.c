@@ -75,13 +75,9 @@ static struct cnss_plat_data *plat_env;
 
 static DECLARE_RWSEM(cnss_pm_sem);
 
-#ifdef CONFIG_CNSS2_X86
 unsigned long quirks;
-#ifdef CONFIG_CNSS2_DEBUG
 module_param(quirks, ulong, 0600);
 MODULE_PARM_DESC(quirks, "Debug quirks for the driver");
-#endif
-#endif
 
 static struct cnss_fw_files FW_FILES_QCA6174_FW_3_0 = {
 	"qwlan30.bin", "bdwlan30.bin", "otp30.bin", "utf30.bin",
@@ -3638,7 +3634,7 @@ static void cnss_init_control_params(struct cnss_plat_data *plat_priv)
 #else
 static void cnss_init_control_params(struct cnss_plat_data *plat_priv)
 {
-	plat_priv->ctrl_params.quirks = CNSS_QUIRKS_DEFAULT;
+	plat_priv->ctrl_params.quirks = quirks;
 
 	plat_priv->cbc_enabled = !IS_ENABLED(CONFIG_CNSS_EMULATION) &&
 		of_property_read_bool(plat_priv->plat_dev->dev.of_node,
