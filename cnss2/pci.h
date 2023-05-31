@@ -142,7 +142,9 @@ struct cnss_pci_data {
 	unsigned long misc_reg_dev_mask;
 	u8 iommu_geometry;
 	bool drv_supported;
+#ifdef CONFIG_RDDM_WORKER
 	struct work_struct rddm_worker;
+#endif
 };
 
 static inline void cnss_set_pci_priv(struct pci_dev *pci_dev, void *data)

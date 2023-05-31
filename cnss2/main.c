@@ -30,7 +30,7 @@
 #include "bus.h"
 #include "debug.h"
 #include "genl.h"
-#ifdef CONFIG_CNSS2_X86
+#ifdef CONFIG_DUMP_FW_TO_FILE
 #include "coredump.h"
 #endif
 
@@ -2619,7 +2619,15 @@ static bool cnss_dump_enabled(void)
 
 int cnss_do_elf_ramdump(struct cnss_plat_data *plat_priv)
 {
-#ifndef CONFIG_CNSS2_X86
+#ifdef CONFIG_DUMP_FW_TO_FILE
+	if (!dump_enabled()) {
+		cnss_pr_info("Dump collection is not enabled\n");
+		return 0;
+	}
+
+	cnss_rddm_submit(plat_priv->bus_priv);
+	return 0;
+#else
 	struct cnss_ramdump_info_v2 *info_v2 = &plat_priv->ramdump_info_v2;
 	struct cnss_dump_data *dump_data = &info_v2->dump_data;
 	struct cnss_dump_seg *dump_seg = info_v2->dump_data_vaddr;
@@ -2681,14 +2689,6 @@ do_elf_dump:
 	}
 
 	return ret;
-#else
-	if (!dump_enabled()) {
-		cnss_pr_info("Dump collection is not enabled\n");
-		return 0;
-	}
-
-	cnss_rddm_submit(plat_priv->bus_priv);
-	return 0;
 #endif
 
 }

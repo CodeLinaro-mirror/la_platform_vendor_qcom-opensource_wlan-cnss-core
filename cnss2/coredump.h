@@ -41,7 +41,10 @@ struct cnss_dump_file_data {
 	u8 data[0];
 } __packed;
 
+#ifdef CONFIG_RDDM_WORKER
 void cnss_mhi_pm_rddm_worker(struct work_struct *work);
+#endif
+
 void cnss_rddm_collect(void *bus_priv);
 void cnss_rddm_submit(void *bus_priv);
 #endif

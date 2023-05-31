@@ -47,7 +47,7 @@ static int cnss_coredump_remote_dump(struct cnss_plat_data *plat_priv)
 
 	for (i = 0; i < BHI_WLFW_MAX_NUM_MEM_SEG_V01; i++) {
 		if (fw_mem[i].vaddr && fw_mem[i].size) {
-			cnss_pr_err("remote mem: 0x%p, size: 0x%lx\n",
+			cnss_pr_info("remote mem: 0x%p, size: 0x%lx\n",
 				    fw_mem[i].vaddr,
 				    fw_mem[i].size);
 			memcpy(crash_data->remote_buf + offset,
@@ -334,7 +334,7 @@ void cnss_rddm_collect(void *bus_priv)
 	cnss_coredump_fw_paging_dump(pci_priv);
 	cnss_coredump_remote_dump(pci_priv->plat_priv);
 }
-
+#ifdef CONFIG_RDDM_WORKER
 void cnss_mhi_pm_rddm_worker(struct work_struct *work)
 {
 	struct cnss_pci_data *pci_priv = container_of(work,
@@ -351,3 +351,4 @@ void cnss_mhi_pm_rddm_worker(struct work_struct *work)
 	cnss_coredump_buf_release(pci_priv);
 }
 EXPORT_SYMBOL(cnss_mhi_pm_rddm_worker);
+#endif

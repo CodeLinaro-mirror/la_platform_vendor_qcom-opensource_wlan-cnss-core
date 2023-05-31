@@ -5159,7 +5159,11 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+#ifdef CONFIG_CNSS2_X86
+		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
+#else
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_36_BIT;
+#endif
 		break;
 	default:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
@@ -5452,7 +5456,7 @@ static void cnss_pci_send_hang_event(struct cnss_pci_data *pci_priv)
 		offset = HSP_HANG_DATA_OFFSET;
 		break;
 	default:
-		cnss_pr_err("Skip Hang Event Data as unsupported Device ID received: %d\n",
+		cnss_pr_err("Skip Hang Event Data as unsupported Device ID received: 0x%x\n",
 			    pci_priv->device_id);
 		return;
 	}
@@ -5590,7 +5594,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	if (dump_data->nentries > 0)
 		plat_priv->ramdump_info_v2.dump_data_valid = true;
-#ifdef CONFIG_CNSS2_X86
+#ifdef CONFIG_DUMP_FW_TO_FILE
 	cnss_rddm_collect(pci_priv);
 #endif
 	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RDDM_DONE);
@@ -5889,7 +5893,7 @@ static void cnss_boot_debug_timeout_hdlr(struct timer_list *t)
 		  jiffies + msecs_to_jiffies(BOOT_DEBUG_TIMEOUT_MS));
 }
 
-#ifdef CONFIG_CNSS2_X86
+#ifndef CONFIG_RDDM_WORKER
 static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 				   enum mhi_callback reason)
 {
@@ -6476,7 +6480,9 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (ret)
 		goto disable_msi;
 
+#ifdef CONFIG_RDDM_WORKER
 	INIT_WORK(&pci_priv->rddm_worker, cnss_mhi_pm_rddm_worker);
+#endif
 
 	switch (pci_dev->device) {
 	case QCA6174_DEVICE_ID:
@@ -6634,7 +6640,7 @@ u32 mhi_reg_read_remap(struct cnss_pci_data *pci_priv,
 	}
 
 //	mhi_device_put(pci_priv->mhi_ctrl->mhi_dev);
-	cnss_pr_err("%s ioaddr %p iooffset %lu val %x\n", __func__,
+	cnss_pr_dbg("%s ioaddr %p iooffset %lu val %x\n", __func__,
 		    io_addr, io_offset, val);
 	return	val;
 }
@@ -6663,7 +6669,7 @@ void mhi_reg_write_remap(struct cnss_pci_data *pci_priv,
 	wmb();
 
 //	mhi_device_put(pci_priv->mhi_ctrl->mhi_dev);
-	cnss_pr_err("%s ioaddr %p iooffset %lu val %x\n", __func__,
+	cnss_pr_dbg("%s ioaddr %p iooffset %lu val %x\n", __func__,
 		    io_addr, io_offset, val);
 }
 
@@ -6751,7 +6757,7 @@ void mhi_set_pcie_mhictrl_reset(struct cnss_pci_data *pci_priv)
 	val = mhi_reg_read_remap(pci_priv,
 				 pci_priv->bar,
 				 MHISTATUS);
-	cnss_pr_err("MHISTATUS 0x%x\n", val);
+	cnss_pr_info("MHISTATUS 0x%x\n", val);
 
 	/*
 	 * Observed on Hastings that after SOC_GLOBAL_RESET, MHISTATUS
