@@ -2477,6 +2477,7 @@ struct cnss_qcom_dump_segment {
 	size_t size;
 };
 
+#ifdef CONFIG_CNSS_QCOM_DEVCD_SUPPORT
 struct cnss_qcom_ramdump_desc {
 	void *data;
 	struct completion dump_done;
@@ -2527,6 +2528,14 @@ int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
 
 	return ret ? 0 : -ETIMEDOUT;
 }
+#else
+int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
+				gfp_t gfp)
+{
+	return 0;
+}
+#endif
+
 
 /* Since the elf32 and elf64 identification is identical apart from
  * the class, use elf32 by default.
