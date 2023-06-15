@@ -98,9 +98,9 @@ int mhi_ctxt_init(struct mhi_device_ctxt *mhi_dev_ctxt)
 		ret_val = request_irq(mhi_dev_ctxt->core.irq_base +
 				mhi_dev_ctxt->ev_ring_props[j].msi_vec,
 				mhi_dev_ctxt->ev_ring_props[j].mhi_handler_ptr,
-				IRQF_NO_SUSPEND,
+				IRQF_NO_SUSPEND|IRQF_SHARED|IRQF_NOBALANCING,
 				"mhi_drv",
-				(void *)mhi_dev_ctxt);
+				(void *)&mhi_dev_ctxt->mhi_local_event_ctxt[j]);
 		if (ret_val) {
 			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 				"Failed to register handler for MSI ret_val = %d\n",
@@ -169,7 +169,9 @@ void mhi_ctxt_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 	kfree(mhi_dev_ctxt->ev_ring_props);
 
 	for (i = 0; i < mhi_dev_ctxt->core.max_nr_msis; i++)
-		free_irq(mhi_dev_ctxt->core.irq_base + i, (void *)mhi_dev_ctxt);
+		free_irq(mhi_dev_ctxt->core.irq_base +
+			mhi_dev_ctxt->ev_ring_props[i].msi_vec,
+			(void *)&mhi_dev_ctxt->mhi_local_event_ctxt[i]);
 }
 
 static const struct dev_pm_ops pm_ops = {

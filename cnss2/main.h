@@ -279,6 +279,7 @@ struct cnss_plat_data {
 	u32 wlan_en_gpio;
 	u8 wlan_en_active;
 	u8 power_on;
+	bool single_msi;
 };
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
