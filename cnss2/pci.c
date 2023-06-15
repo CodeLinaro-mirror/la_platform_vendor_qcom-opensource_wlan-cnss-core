@@ -40,11 +40,8 @@
 
 #define PCI_BAR_NUM			0
 
-#ifdef CONFIG_ARM_LPAE
-#define PCI_DMA_MASK			64
-#else
-#define PCI_DMA_MASK			32
-#endif
+#define PCI_DMA_MASK			36
+#define PCI_DMA_COHERENT_MASK			32
 
 #define MHI_NODE_NAME			"qcom,mhi"
 #define MHI_MSI_NAME			"MHI"
@@ -2366,35 +2363,118 @@ static int cnss_pci_get_msi_assignment(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
+/**
+ * All the user share the same vector and msi data
+ * For MHI user, we need pass IRQ array information to MHI component
+ * MHI_IRQ_NUMBER is defined to specify this MHI IRQ array size
+ */
+static struct cnss_msi_config msi_config_one_msi = {
+	.total_vectors = 1,
+	.total_users = 4,
+	.users = (struct cnss_msi_user[]) {
+		{ .name = "MHI", .num_vectors = 1, .base_vector = 0 },
+		{ .name = "CE", .num_vectors = 1, .base_vector = 0 },
+		{ .name = "WAKE", .num_vectors = 1, .base_vector = 0 },
+		{ .name = "DP", .num_vectors = 1, .base_vector = 0 },
+	},
+};
+
+static int cnss_pci_get_one_msi_assignment(struct cnss_pci_data *pci_priv)
+{
+	pci_priv->msi_config = &msi_config_one_msi;
+
+	return 0;
+}
+
+bool cnss_pci_fallback_one_msi(struct cnss_pci_data *pci_priv,
+			       int *num_vectors)
+{
+	struct pci_dev *pci_dev = pci_priv->pci_dev;
+	struct cnss_msi_config *msi_config;
+
+	cnss_pci_get_one_msi_assignment(pci_priv);
+	msi_config = pci_priv->msi_config;
+	if (!msi_config) {
+		cnss_pr_err("one msi_config is NULL!\n");
+		return false;
+	}
+	*num_vectors = pci_alloc_irq_vectors(pci_dev,
+					     msi_config->total_vectors,
+					     msi_config->total_vectors,
+					     PCI_IRQ_MSI);
+	if (*num_vectors < 0) {
+		cnss_pr_err("Failed to get one MSI vector!\n");
+		return false;
+	}
+	cnss_pr_info("request MSI one vector\n");
+
+	return true;
+}
+
+bool cnss_pci_alloc_irq_vectors(struct cnss_pci_data *pci_priv)
+{
+	int num_vectors;
+	int ret;
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(NULL);
+
+	if (!plat_priv->single_msi) {
+		struct cnss_msi_config * msi_config;
+		struct pci_dev *pci_dev = pci_priv->pci_dev;
+
+			ret = cnss_pci_get_msi_assignment(pci_priv);
+		if (ret) {
+			cnss_pr_err("Failed to get MSI assignment, err = %d\n", ret);
+			return false;
+		}
+
+		msi_config = pci_priv->msi_config;
+		if (!msi_config) {
+			cnss_pr_err("msi_config is NULL!\n");
+			return false;
+		}
+
+		num_vectors = pci_alloc_irq_vectors(pci_dev, msi_config->total_vectors,
+						    msi_config->total_vectors,
+						    PCI_IRQ_MSI);
+		if (num_vectors != msi_config->total_vectors) {
+			cnss_pr_err("Failed to get enough MSI vectors (%d), available vectors = %d",
+				    msi_config->total_vectors, num_vectors);
+			if (!cnss_pci_fallback_one_msi(pci_priv, &num_vectors)) {
+				pci_disable_msi(pci_priv->pci_dev);
+				return false;
+			}
+		}
+	} else {
+		if (!cnss_pci_fallback_one_msi(pci_priv, &num_vectors)) {
+			pci_disable_msi(pci_priv->pci_dev);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+int cnss_get_pci_msi_vectors(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_msi_config * msi_config;
+	msi_config = pci_priv->msi_config;
+
+	if (!msi_config) {
+		cnss_pr_err("msi_config is NULL!\n");
+		return -1;
+	} else
+		return msi_config->total_vectors;
+}
+
 static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
-	int num_vectors;
-	struct cnss_msi_config *msi_config;
 	struct msi_desc *msi_desc;
 
-	ret = cnss_pci_get_msi_assignment(pci_priv);
-	if (ret) {
-		cnss_pr_err("Failed to get MSI assignment, err = %d\n", ret);
-		goto out;
-	}
-
-	msi_config = pci_priv->msi_config;
-	if (!msi_config) {
-		cnss_pr_err("msi_config is NULL!\n");
+	if (!cnss_pci_alloc_irq_vectors(pci_priv)) {
 		ret = -EINVAL;
 		goto out;
-	}
-
-	num_vectors = pci_alloc_irq_vectors(pci_dev, msi_config->total_vectors,
-					    msi_config->total_vectors,
-					    PCI_IRQ_MSI);
-	if (num_vectors != msi_config->total_vectors) {
-		cnss_pr_err("Failed to get enough MSI vectors (%d), available vectors = %d",
-			    msi_config->total_vectors, num_vectors);
-		ret = -EINVAL;
-		goto reset_msi_config;
 	}
 
 	msi_desc = irq_get_msi_desc(pci_dev->irq);
@@ -2412,7 +2492,7 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 	}
 #endif
 
-	cnss_pr_dbg("MSI base data is %d\n", pci_priv->msi_ep_base_data);
+	cnss_pr_info("MSI base data is %d\n", pci_priv->msi_ep_base_data);
 
 	return 0;
 
@@ -2436,6 +2516,8 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 	struct cnss_pci_data *pci_priv = dev_get_drvdata(dev);
 	struct cnss_msi_config *msi_config;
 	int idx;
+	struct msi_desc *msi_desc;
+	struct pci_dev *pci_dev = pci_priv->pci_dev;
 
 	if (!pci_priv)
 		return -ENODEV;
@@ -2445,6 +2527,14 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 		cnss_pr_err("MSI is not supported.\n");
 		return -EINVAL;
 	}
+
+	msi_desc = irq_get_msi_desc(pci_dev->irq);
+	if (!msi_desc) {
+		cnss_pr_err("msi_desc is NULL!\n");
+		return -EINVAL;
+	}
+
+	pci_priv->msi_ep_base_data = msi_desc->msg.data;
 
 	for (idx = 0; idx < msi_config->total_users; idx++) {
 		if (strcmp(user_name, msi_config->users[idx].name) == 0) {
@@ -2479,12 +2569,20 @@ void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 			  u32 *msi_addr_high)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
+	u16 control;
 
+	pci_read_config_word(pci_dev, pci_dev->msi_cap + PCI_MSI_FLAGS,
+			     &control);
 	pci_read_config_dword(pci_dev, pci_dev->msi_cap + PCI_MSI_ADDRESS_LO,
 			      msi_addr_low);
+	/* Return MSI high address only when device supports 64-bit MSI */
+	if (control & PCI_MSI_FLAGS_64BIT)
+		pci_read_config_dword(pci_dev,
+				      pci_dev->msi_cap + PCI_MSI_ADDRESS_HI,
+				      msi_addr_high);
+	else
+		*msi_addr_high = 0;
 
-	pci_read_config_dword(pci_dev, pci_dev->msi_cap + PCI_MSI_ADDRESS_HI,
-			      msi_addr_high);
 }
 EXPORT_SYMBOL(cnss_get_msi_address);
 
@@ -2525,14 +2623,14 @@ static inline int cnss_pci_set_dma_mask(struct pci_dev *pci_dev)
 		return ret;
 	}
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0))
-	ret = dma_set_coherent_mask(&pci_dev->dev, DMA_BIT_MASK(PCI_DMA_MASK));
+	ret = dma_set_coherent_mask(&pci_dev->dev, DMA_BIT_MASK(PCI_DMA_COHERENT_MASK));
 #else
-	ret = pci_set_consistent_dma_mask(pci_dev, DMA_BIT_MASK(PCI_DMA_MASK));
+	ret = pci_set_consistent_dma_mask(pci_dev, DMA_BIT_MASK(PCI_DMA_COHERENT_MASK));
 #endif
 
 	if (ret)
 		cnss_pr_err("PCI consistent DMA mask: %d, err: %d\n",
-			    PCI_DMA_MASK, ret);
+			    PCI_DMA_COHERENT_MASK, ret);
 
 	return ret;
 }
@@ -2892,7 +2990,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_device *mhi_dev = &pci_priv->mhi_dev;
-
+	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_dev->mhi_dev_ctxt;
 #ifndef CONFIG_NAPIER_X86
 	mhi_dev->dev = &pci_priv->plat_priv->plat_dev->dev;
 #endif
@@ -2913,6 +3011,10 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		mhi_dev->resources[1].flags = IORESOURCE_IRQ;
 		mhi_dev->resources[1].name = "IRQ";
 	}
+
+        if (cnss_get_pci_msi_vectors(pci_priv) == 1)
+                mhi_dev->resources[1].end = pci_dev->irq;
+
 	cnss_pr_dbg("IRQ start is %pa, IRQ end is %pa\n",
 		    &mhi_dev->resources[1].start, &mhi_dev->resources[1].end);
 
@@ -2926,7 +3028,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_dev->rddm_size = 0x420000;
 #endif
 	mhi_dev->status_cb = cnss_mhi_notify_status;
-
+	mhi_config_single_msi(mhi_dev, cnss_get_pci_msi_vectors(pci_priv) == 1);
 	/* Update firmware name */
 	cnss_pci_fw_name_add_path(pci_priv, mhi_dev->fw_name, DEFAULT_FW_FILE_NAME);
 

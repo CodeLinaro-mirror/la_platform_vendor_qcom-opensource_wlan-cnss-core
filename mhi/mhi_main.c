@@ -1980,6 +1980,13 @@ int mhi_deregister_channel(struct mhi_client_handle *client_handle)
 }
 EXPORT_SYMBOL(mhi_deregister_channel);
 
+void mhi_config_single_msi(struct mhi_device *mhi_device, bool msi)
+{
+	mhi_device->single_msi = msi;
+	pr_info("single_msi %d\n", mhi_device->single_msi);
+}
+EXPORT_SYMBOL(mhi_config_single_msi);
+
 int mhi_register_device(struct mhi_device *mhi_device,
 			const char *node_name,
 			void *user_data)
@@ -2045,6 +2052,7 @@ int mhi_register_device(struct mhi_device *mhi_device,
 		"Registering Domain:%02u Bus:%04u dev:0x%04x slot:%04u\n",
 		domain, bus, dev_id, slot);
 
+	mhi_dev_ctxt->mhi_dev = mhi_device;
 	/* Set up pcie dev info */
 	mhi_dev_ctxt->pcie_device = pci_dev;
 	mhi_dev_ctxt->mhi_pm_state = MHI_PM_DISABLE;

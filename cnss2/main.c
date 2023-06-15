@@ -103,6 +103,10 @@ static int ssr_period = 4000;
 module_param(ssr_period, int, 0600);
 MODULE_PARM_DESC(ssr_period, "Time for Single SSR");
 
+static bool force_single_msi = 0;
+module_param(force_single_msi, bool, 0600);
+MODULE_PARM_DESC(force_single_msi, "Force single MSI mode");
+
 static unsigned int wow_wake_enable;
 int cnss_enable_wow_wake(const char *val, const struct kernel_param *kp)
 {
@@ -2403,6 +2407,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->device_id = QCA6490_DEVICE_ID;
 #endif /* CONFIG_NAPIER_X86 */
 
+	plat_priv->single_msi = !!force_single_msi;
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv);
 	cnss_pr_dbg("bus type selected  %d\n", plat_priv->bus_type);
 	plat_priv->cssr_timeout = cssr_threshold * ssr_period;

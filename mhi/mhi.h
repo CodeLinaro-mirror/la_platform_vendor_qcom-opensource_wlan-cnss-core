@@ -625,6 +625,7 @@ struct mhi_device_ctxt {
 	void (*status_cb)(enum MHI_CB_REASON, void *priv);
 	void *priv_data; /* private data for bus master */
 	struct completion cmd_complete;
+	void *mhi_dev;
 };
 
 struct mhi_device_driver {
