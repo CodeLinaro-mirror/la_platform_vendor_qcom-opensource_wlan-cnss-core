@@ -1062,7 +1062,7 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 		return -EINVAL;
 	}
 
-	cnss_pr_dbg("Processing FW Init Done..\n");
+	cnss_pr_info("Processing FW Init Done..\n");
 	del_timer(&plat_priv->fw_boot_timer);
 	set_bit(CNSS_FW_READY, &plat_priv->driver_state);
 	clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
