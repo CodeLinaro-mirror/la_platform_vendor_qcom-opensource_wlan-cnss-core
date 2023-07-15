@@ -9,10 +9,7 @@ _module_enablement_map = {
     "icnss2": [],
     "cnss_nl": ["ALL"],
     "cnss_prealloc": ["ALL"],
-    # List specific target/variants if needed
-    "cnss_utils": [
-        "pineapple_consolidate",
-    ],
+    "cnss_utils": ["ALL"],
     "wlan_firmware_service": ["ALL"],
     "cnss_plat_ipc_qmi_svc": ["ALL"],
 }
@@ -47,7 +44,7 @@ def _define_modules_for_target_variant(target, variant):
         ]),
         includes = ["cnss", "cnss_utils"],
         kconfig = "cnss2/Kconfig",
-        defconfig = "build/{}_defconfig".format(tv),
+        defconfig = "cnss2/{}_defconfig".format(tv),
         conditional_srcs =  {
             "CONFIG_CNSS2_QMI": {
                 True: [
@@ -67,6 +64,7 @@ def _define_modules_for_target_variant(target, variant):
         deps = [
             "//vendor/qcom/opensource/securemsm-kernel:{}_smcinvoke_dlkm".format(tv),
             ":{}_cnss_utils".format(tv),
+            ":{}_cnss_prealloc".format(tv),
             ":{}_wlan_firmware_service".format(tv),
             ":{}_cnss_plat_ipc_qmi_svc".format(tv),
             "//msm-kernel:all_headers",
@@ -86,7 +84,7 @@ def _define_modules_for_target_variant(target, variant):
         ]),
         includes = ["icnss2", "cnss_utils"],
         kconfig = "icnss2/Kconfig",
-        defconfig = "build/{}_defconfig".format(tv),
+        defconfig = "icnss2/{}_defconfig".format(tv),
         conditional_srcs = {
             "CONFIG_ICNSS2_QMI": {
                 True: [
@@ -97,6 +95,9 @@ def _define_modules_for_target_variant(target, variant):
         out = "icnss2.ko",
         kernel_build = "//msm-kernel:{}".format(tv),
         deps = [
+            ":{}_cnss_utils".format(tv),
+            ":{}_cnss_prealloc".format(tv),
+            ":{}_wlan_firmware_service".format(tv),
             "//msm-kernel:all_headers",
             ":wlan-platform-headers",
         ],
@@ -108,7 +109,7 @@ def _define_modules_for_target_variant(target, variant):
             "cnss_genl/cnss_nl.c",
         ],
         kconfig = "cnss_genl/Kconfig",
-        defconfig = "build/{}_defconfig".format(tv),
+        defconfig = "cnss_genl/{}_defconfig".format(tv),
         out = "cnss_nl.ko",
         kernel_build = "//msm-kernel:{}".format(tv),
         deps = [
@@ -119,11 +120,13 @@ def _define_modules_for_target_variant(target, variant):
 
     ddk_module(
         name = "{}_cnss_prealloc".format(tv),
-        srcs = [
+        srcs = native.glob([
             "cnss_prealloc/cnss_prealloc.c",
-        ],
+            "cnss_utils/*.h",
+        ]),
+        includes = ["cnss_utils"],
         kconfig = "cnss_prealloc/Kconfig",
-        defconfig = "build/{}_defconfig".format(tv),
+        defconfig = "cnss_prealloc/{}_defconfig".format(tv),
         out = "cnss_prealloc.ko",
         kernel_build = "//msm-kernel:{}".format(tv),
         deps = [
@@ -139,7 +142,7 @@ def _define_modules_for_target_variant(target, variant):
             "cnss_utils/*.h"
         ]),
         kconfig = "cnss_utils/Kconfig",
-        defconfig = "build/{}_defconfig".format(tv),
+        defconfig = "cnss_utils/{}_defconfig".format(tv),
         out = "cnss_utils.ko",
         kernel_build = "//msm-kernel:{}".format(tv),
         deps = [
@@ -156,7 +159,7 @@ def _define_modules_for_target_variant(target, variant):
             "cnss_utils/*.h"
         ]),
         kconfig = "cnss_utils/Kconfig",
-        defconfig = "build/{}_defconfig".format(tv),
+        defconfig = "cnss_utils/{}_defconfig".format(tv),
         out = "wlan_firmware_service.ko",
         kernel_build = "//msm-kernel:{}".format(tv),
         deps = ["//msm-kernel:all_headers"],
@@ -170,7 +173,7 @@ def _define_modules_for_target_variant(target, variant):
             "cnss_utils/*.h"
         ]),
         kconfig = "cnss_utils/Kconfig",
-        defconfig = "build/{}_defconfig".format(tv),
+        defconfig = "cnss_utils/{}_defconfig".format(tv),
         out = "cnss_plat_ipc_qmi_svc.ko",
         kernel_build = "//msm-kernel:{}".format(tv),
         deps = ["//msm-kernel:all_headers"],

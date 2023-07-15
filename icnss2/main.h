@@ -129,6 +129,7 @@ enum icnss_driver_state {
 	ICNSS_QMI_DMS_CONNECTED,
 	ICNSS_SLATE_SSR_REGISTERED,
 	ICNSS_SLATE_UP,
+	ICNSS_SLATE_READY,
 	ICNSS_LOW_POWER,
 };
 
@@ -505,9 +506,16 @@ struct icnss_priv {
 	u32 rf_subtype;
 	u8 is_slate_rfa;
 	struct completion slate_boot_complete;
+#ifdef SLATE_MODULE_ENABLED
+	struct seb_notif_info *seb_handle;
+	struct notifier_block seb_nb;
+#endif
 	struct timer_list recovery_timer;
 	struct timer_list wpss_ssr_timer;
 	bool wpss_self_recovery_enabled;
+	enum icnss_rd_card_chain_cap rd_card_chain_cap;
+	enum icnss_phy_he_channel_width_cap phy_he_channel_width_cap;
+	enum icnss_phy_qam_cap phy_qam_cap;
 };
 
 struct icnss_reg_info {
