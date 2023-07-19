@@ -94,6 +94,7 @@ struct cnss_pci_data {
 	u32 msi_ep_base_data;
 	struct mhi_device mhi_dev;
 	unsigned long mhi_state;
+	u32 remap_window;
 };
 
 static inline void cnss_set_pci_priv(struct pci_dev *pci_dev, void *data)

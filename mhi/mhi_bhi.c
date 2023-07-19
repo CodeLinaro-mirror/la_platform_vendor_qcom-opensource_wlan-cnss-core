@@ -356,13 +356,6 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 		udelay(BHIE_RDDM_DELAY_TIME_US);
 	}
 
-	if (rddm_retry <= 0) {
-		/* This is a hardware reset should gurantee device enter rddm */
-		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
-			"Did not enter RDDM triggering host req. reset to force rddm\n");
-		mhi_reg_write(mhi_dev_ctxt, mhi_dev_ctxt->mmio_info.mmio_addr,
-			MHI_SOC_RESET_REQ_OFFSET, MHI_SOC_RESET_REQ);
-	}
 	cur_exec = mhi_reg_read(bhi_ctxt->bhi_base, BHI_EXECENV);
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 		"Waiting for image download completion, current EE:%x\n", cur_exec);

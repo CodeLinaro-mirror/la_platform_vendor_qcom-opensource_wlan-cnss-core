@@ -91,6 +91,18 @@ static bool rddm_panic = 1;
 module_param(rddm_panic, bool, 0600);
 MODULE_PARM_DESC(rddm_panic, "Trigger kernel panic when RDDM happens");
 
+static int cssr_threshold = 3;
+module_param(cssr_threshold, int, 0600);
+MODULE_PARM_DESC(cssr_threshold, "CSSR Triger Threshold");
+
+static int cssr_enable = 0;
+module_param(cssr_enable, int, 0600);
+MODULE_PARM_DESC(cssr_enable, "Enable To Deal with CSSR");
+
+static int ssr_period = 4000;
+module_param(ssr_period, int, 0600);
+MODULE_PARM_DESC(ssr_period, "Time for Single SSR");
+
 static unsigned int wow_wake_enable;
 int cnss_enable_wow_wake(const char *val, const struct kernel_param *kp)
 {
@@ -1228,8 +1240,27 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	return 0;
 
 self_recovery:
-	cnss_bus_dev_shutdown(plat_priv);
-	cnss_bus_dev_powerup(plat_priv);
+	if (!timer_pending(&plat_priv->cssr_timer)) {
+		mod_timer(&plat_priv->cssr_timer,
+                          jiffies + msecs_to_jiffies(plat_priv->cssr_timeout));
+	}
+
+	if (cssr_enable)
+		plat_priv->cssr_count += 1;
+
+	if (plat_priv->cssr_count <= cssr_threshold) {
+		cnss_pr_info("ssr is trigered, cssr_count is (%d),"
+                             "cssr_detected is (%d)\n",
+                             plat_priv->cssr_count, plat_priv->cssr_detected);
+		cnss_bus_dev_shutdown(plat_priv);
+		cnss_bus_dev_powerup(plat_priv);
+	} else {
+		plat_priv->cssr_detected = 1;
+		cnss_pr_err("cssr reach threshold (%d) and do suppression,"
+                            "cssr_detected is (%d)\n",
+                            cssr_threshold, plat_priv->cssr_detected);
+		cnss_bus_dev_shutdown(plat_priv);
+	}
 
 	return 0;
 }
@@ -1946,7 +1977,10 @@ static int cnss_panic_handler(struct notifier_block *this,
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 
 	cnss_pci_dev_crash_shutdown(pci_priv);
-	cnss_pci_shutdown(pci_priv->pci_dev);
+	if (pci_priv) {
+		struct mhi_device *mhi_dev = &pci_priv->mhi_dev;
+		mhi_pcie_sw_soc_reset(mhi_dev);
+	}
 
 	return NOTIFY_DONE;
 }
@@ -2125,6 +2159,20 @@ static ssize_t cnss_wl_pwr_on(struct device *dev,
 
 static DEVICE_ATTR(wl_pwr_on, 0220, NULL, cnss_wl_pwr_on);
 
+static ssize_t cnss_cssr_detected_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
+	int ret = scnprintf(buf, PAGE_SIZE,
+			    "\ncssr_detected: %d, cssr_count: %d\n",
+			    plat_priv->cssr_detected, plat_priv->cssr_count);
+
+	return ret;
+}
+
+static DEVICE_ATTR(cssr_detected, 0444, cnss_cssr_detected_show, NULL);
+
 static int cnss_create_sysfs(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -2205,6 +2253,28 @@ static int cnss_event_work_init(struct cnss_plat_data *plat_priv)
 	INIT_LIST_HEAD(&plat_priv->event_list);
 
 	return 0;
+}
+
+static int cnss_create_sysfs_cssr(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	ret = device_create_file(&plat_priv->plat_dev->dev,
+                                 &dev_attr_cssr_detected);
+	if (ret) {
+		cnss_pr_err("Failed to create device file, err = %d\n", ret);
+		goto out;
+	}
+
+	cnss_pr_dbg("created sysfs for cssr_detected\n");
+	return 0;
+out:
+	return ret;
+}
+
+static void cnss_remove_sysfs_cssr(struct cnss_plat_data *plat_priv)
+{
+	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_cssr_detected);
 }
 
 static void cnss_event_work_deinit(struct cnss_plat_data *plat_priv)
@@ -2330,6 +2400,10 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv);
 	cnss_pr_dbg("bus type selected  %d\n", plat_priv->bus_type);
+	plat_priv->cssr_timeout = cssr_threshold * ssr_period;
+	cnss_pr_info("cssr_timeout is (%d) ms, cssr_enable is (%d),"
+                     "ssr_period is (%d) ms\n",
+                     plat_priv->cssr_timeout, cssr_enable, ssr_period);
 	cnss_set_plat_priv(plat_dev, plat_priv);
 #ifndef CONFIG_NAPIER_X86 
 	platform_set_drvdata(plat_dev, plat_priv);
@@ -2374,9 +2448,13 @@ retry:
 	if (ret)
 		goto remove_sysfs;
 
-	ret = cnss_event_work_init(plat_priv);
+	ret = cnss_create_sysfs_cssr(plat_priv);
 	if (ret)
 		goto remove_sysfs_pwr;
+
+	ret = cnss_event_work_init(plat_priv);
+	if (ret)
+		goto cnss_remove_sysfs_cssr;
 
 	ret = cnss_qmi_init(plat_priv);
 	if (ret)
@@ -2395,9 +2473,13 @@ retry:
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
 	timer_setup(&plat_priv->fw_boot_timer,
 		    cnss_bus_fw_boot_timeout_hdlr, 0);
+	timer_setup(&plat_priv->cssr_timer,
+		    cnss_cssr_timeout_hdlr, 0);
 #else
 	setup_timer(&plat_priv->fw_boot_timer,
 		    cnss_bus_fw_boot_timeout_hdlr, (unsigned long)plat_priv);
+	setup_timer(&plat_priv->cssr_timer,
+		    cnss_cssr_timeout_hdlr, (unsigned long)plat_priv);
 #endif
 	register_pm_notifier(&cnss_pm_notifier);
 
@@ -2422,6 +2504,8 @@ deinit_qmi:
 	cnss_qmi_deinit(plat_priv);
 deinit_event_work:
 	cnss_event_work_deinit(plat_priv);
+cnss_remove_sysfs_cssr:
+	cnss_remove_sysfs_cssr(plat_priv);
 remove_sysfs:
 	cnss_remove_sysfs(plat_priv);
 remove_sysfs_pwr:
@@ -2447,6 +2531,7 @@ reset_ctx:
 	    kfree(plat_env);
 	cnss_set_plat_priv(plat_dev,NULL);
 #endif
+
 out:
 	return ret;
 }
@@ -2465,10 +2550,12 @@ static int cnss_remove(struct platform_device *plat_dev)
 #endif
 	unregister_pm_notifier(&cnss_pm_notifier);
 	del_timer(&plat_priv->fw_boot_timer);
+	del_timer(&plat_priv->cssr_timer);
 	cnss_free_caldb_mem(plat_priv);
 	cnss_debugfs_destroy(plat_priv);
 	cnss_qmi_deinit(plat_priv);
 	cnss_event_work_deinit(plat_priv);
+	cnss_remove_sysfs_cssr(plat_priv);
 	cnss_remove_sysfs(plat_priv);
 	cnss_unregister_bus_scale(plat_priv);
 	cnss_unregister_esoc(plat_priv);

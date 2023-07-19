@@ -49,6 +49,14 @@ enum cnss_bdf_type {
     CNSS_BDF_REGDB,
 };
 
+#define BDFSTR(bdf) \
+       bdf == CNSS_BDF_BIN ? "BDF_BIN" : \
+       bdf == CNSS_BDF_ELF ? "BDF_ELF" : \
+       bdf == CNSS_BDF_FLASH ? "BDF_FLASH" : \
+       bdf == CNSS_BDF_EEPROM ? "BDF_EEPROM" : \
+       bdf == CNSS_BDF_REGDB ? "BDF_REGDB" : \
+       "unknow BDF"
+
 enum cnss_dev_bus_type {
 	CNSS_BUS_NONE = -1,
 	CNSS_BUS_PCI,
@@ -175,6 +183,7 @@ enum cnss_driver_state {
 	CNSS_DEV_ERR_NOTIFY,
 	CNSS_DRIVER_DEBUG,
 	CNSS_DEV_REMOVED,
+	CNSS_IN_PANIC,
 };
 
 struct cnss_recovery_data {
@@ -250,6 +259,10 @@ struct cnss_plat_data {
 	struct dentry *root_dentry;
 	atomic_t pm_count;
 	struct timer_list fw_boot_timer;
+	int cssr_count;
+	unsigned int cssr_timeout;
+	int cssr_detected;
+	struct timer_list cssr_timer;
 	struct completion power_up_complete;
 	struct mutex dev_lock; /* mutex for register access through debugfs */
 	u32 diag_reg_read_addr;
