@@ -2144,13 +2144,15 @@ EXPORT_SYMBOL(mhi_register_device);
 
 void mhi_deregister_device(struct mhi_device *mhi_device)
 {
-	struct pci_dev *pci_dev = mhi_device->pci_dev;
+	struct pci_dev *pci_dev = NULL;
 	struct mhi_device_ctxt *mhi_ctxt = NULL;
 	struct mhi_device_ctxt *entry;
 	struct pcie_core_info *core;
 
 	if (!mhi_device)
 		return;
+
+	pci_dev = mhi_device->pci_dev;
 
 	mutex_lock(&mhi_device_drv->lock);
 	list_for_each_entry(entry, &mhi_device_drv->head, node) {

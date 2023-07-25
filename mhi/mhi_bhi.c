@@ -582,7 +582,7 @@ void bhi_firmware_download(struct work_struct *work)
 	struct mhi_device_ctxt *mhi_dev_ctxt;
 	struct bhi_ctxt_t *bhi_ctxt;
 	struct bhie_mem_info mem_info;
-	int ret;
+	int ret = 0;
 
 	mhi_dev_ctxt = container_of(work, struct mhi_device_ctxt,
 				    bhi_ctxt.fw_load_work);
@@ -614,7 +614,7 @@ void bhi_firmware_download(struct work_struct *work)
 	mhi_init_state_transition(mhi_dev_ctxt,
 				  STATE_TRANSITION_RESET);
 
-	wait_event_timeout(*mhi_dev_ctxt->mhi_ev_wq.bhi_event,
+	ret = wait_event_timeout(*mhi_dev_ctxt->mhi_ev_wq.bhi_event,
 #ifdef CONFIG_HST_IMX
 		mhi_dev_ctxt->dev_exec_env == MHI_EXEC_ENV_SBL ||
 #else

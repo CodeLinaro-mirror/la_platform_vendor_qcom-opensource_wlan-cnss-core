@@ -4000,6 +4000,8 @@ static void *ipc_router_create_log_ctx(char *name)
 		kfree(sub_log_ctx);
 		return NULL;
 	}
+#else
+	sub_log_ctx->log_ctx = NULL;
 #endif
 	strlcpy(sub_log_ctx->log_ctx_name, name,
 			LOG_CTX_NAME_LEN);
