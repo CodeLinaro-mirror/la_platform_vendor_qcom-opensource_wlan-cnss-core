@@ -650,7 +650,7 @@ static void mhi_xprt_enable_event(struct ipc_router_mhi_xprt_work *xprt_work)
 		usleep_range(400, 500);
 		check_num++;
 	}
-	if (!mhi_xprtp->xprt.priv && check_num == MAX_CHECK_NUM) {
+	if (check_num == MAX_CHECK_NUM) {
 		IPC_RTR_ERR("%s Failed to open xprt.\n", __func__);
 		return;
 	}

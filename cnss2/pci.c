@@ -128,6 +128,10 @@ void cnss_pci_dump_qdss_reg(struct cnss_pci_data *pci_priv)
 		plat_priv->qdss_reg = devm_kzalloc(&pci_priv->pci_dev->dev,
 						   sizeof(*plat_priv->qdss_reg)
 						   * array_size, gfp);
+	
+	if (!plat_priv->qdss_reg) {
+		return;
+	}
 
 	for (i = 0; qdss_csr[i].name; i++) {
 		reg_offset = QDSS_APB_DEC_CSR_BASE + qdss_csr[i].offset;
