@@ -579,13 +579,15 @@ err_dev_create:
 
 void bhi_firmware_download(struct work_struct *work)
 {
-	struct mhi_device_ctxt *mhi_dev_ctxt;
-	struct bhi_ctxt_t *bhi_ctxt;
-	struct bhie_mem_info mem_info;
+	struct mhi_device_ctxt *mhi_dev_ctxt = NULL;
+	struct bhi_ctxt_t *bhi_ctxt = NULL;
+	struct bhie_mem_info mem_info = {0};
 	int ret = 0;
 
 	mhi_dev_ctxt = container_of(work, struct mhi_device_ctxt,
 				    bhi_ctxt.fw_load_work);
+	if (!mhi_dev_ctxt)
+		return;
 	bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "Enter\n");
@@ -614,7 +616,7 @@ void bhi_firmware_download(struct work_struct *work)
 	mhi_init_state_transition(mhi_dev_ctxt,
 				  STATE_TRANSITION_RESET);
 
-	ret = wait_event_timeout(*mhi_dev_ctxt->mhi_ev_wq.bhi_event,
+	wait_event_timeout(*mhi_dev_ctxt->mhi_ev_wq.bhi_event,
 #ifdef CONFIG_HST_IMX
 		mhi_dev_ctxt->dev_exec_env == MHI_EXEC_ENV_SBL ||
 #else
