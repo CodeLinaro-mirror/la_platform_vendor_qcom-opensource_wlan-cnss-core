@@ -609,6 +609,8 @@ static void mhi_xprt_enable_event(struct ipc_router_mhi_xprt_work *xprt_work)
 	int rc, check_num = 0;
 	bool notify = false;
 
+	if (!mhi_xprtp)
+		return;
 	if (xprt_work->chan_id == mhi_xprtp->ch_hndl.out_chan_id) {
 		rc = mhi_open_channel(mhi_xprtp->ch_hndl.out_handle);
 		if (rc) {
@@ -646,11 +648,11 @@ static void mhi_xprt_enable_event(struct ipc_router_mhi_xprt_work *xprt_work)
 	if (xprt_work->chan_id != mhi_xprtp->ch_hndl.in_chan_id)
 		return;
 
-	while (mhi_xprtp && !mhi_xprtp->xprt.priv && check_num < MAX_CHECK_NUM) {
+	while (!mhi_xprtp->xprt.priv && check_num < MAX_CHECK_NUM) {
 		usleep_range(400, 500);
 		check_num++;
 	}
-	if (check_num == MAX_CHECK_NUM) {
+	if (!mhi_xprtp->xprt.priv && check_num == MAX_CHECK_NUM) {
 		IPC_RTR_ERR("%s Failed to open xprt.\n", __func__);
 		return;
 	}
