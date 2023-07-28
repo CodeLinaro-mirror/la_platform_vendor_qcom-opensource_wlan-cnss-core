@@ -2517,10 +2517,15 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 	struct cnss_msi_config *msi_config;
 	int idx;
 	struct msi_desc *msi_desc;
-	struct pci_dev *pci_dev = pci_priv->pci_dev;
-
+	struct pci_dev *pci_dev;
+	
 	if (!pci_priv)
+	{
+		cnss_pr_err("pci_priv is NULL");
 		return -ENODEV;
+	}
+
+	pci_dev = pci_priv->pci_dev;
 
 	msi_config = pci_priv->msi_config;
 	if (!msi_config) {
