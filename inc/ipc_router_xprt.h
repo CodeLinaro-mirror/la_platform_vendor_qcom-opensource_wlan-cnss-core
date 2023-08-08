@@ -147,6 +147,7 @@ struct msm_ipc_router_xprt {
 	int (*close)(struct msm_ipc_router_xprt *xprt);
 	void (*sft_close_done)(struct msm_ipc_router_xprt *xprt);
 	bool (*get_ws_info)(struct msm_ipc_router_xprt *xprt);
+	struct completion enable_complete;
 };
 
 void msm_ipc_router_xprt_notify(struct msm_ipc_router_xprt *xprt,
