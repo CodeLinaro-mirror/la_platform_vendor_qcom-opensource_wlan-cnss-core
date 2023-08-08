@@ -4211,8 +4211,10 @@ static void xprt_open_worker(struct work_struct *work)
 {
 	struct msm_ipc_router_xprt_work *xprt_work =
 		container_of(work, struct msm_ipc_router_xprt_work, work);
+	struct msm_ipc_router_xprt *xprtp = xprt_work->xprt;
 
 	msm_ipc_router_add_xprt(xprt_work->xprt);
+	complete_all(&xprtp->enable_complete);
 	kfree(xprt_work);
 }
 
