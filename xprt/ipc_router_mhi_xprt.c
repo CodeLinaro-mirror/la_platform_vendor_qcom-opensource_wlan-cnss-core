@@ -608,6 +608,7 @@ static void mhi_xprt_enable_event(struct ipc_router_mhi_xprt_work *xprt_work)
 	struct ipc_router_mhi_xprt *mhi_xprtp = xprt_work->mhi_xprtp;
 	int rc, check_num = 0;
 	bool notify = false;
+	struct msm_ipc_router_xprt *xprtp;
 
 	if (!mhi_xprtp)
 		return;
@@ -639,6 +640,8 @@ static void mhi_xprt_enable_event(struct ipc_router_mhi_xprt_work *xprt_work)
 
 	/* Register the XPRT before receiving any data */
 	if (notify) {
+		xprtp =  &mhi_xprtp->xprt;
+		init_completion(&xprtp->enable_complete);
 		msm_ipc_router_xprt_notify(&mhi_xprtp->xprt,
 				   IPC_ROUTER_XPRT_EVENT_OPEN, NULL);
 		D("%s: Notified IPC Router of %s OPEN\n",
@@ -648,10 +651,8 @@ static void mhi_xprt_enable_event(struct ipc_router_mhi_xprt_work *xprt_work)
 	if (xprt_work->chan_id != mhi_xprtp->ch_hndl.in_chan_id)
 		return;
 
-	while (!mhi_xprtp->xprt.priv && check_num < MAX_CHECK_NUM) {
-		usleep_range(400, 500);
-		check_num++;
-	}
+	wait_for_completion(&xprtp->enable_complete);
+
 	if (!mhi_xprtp->xprt.priv && check_num == MAX_CHECK_NUM) {
 		IPC_RTR_ERR("%s Failed to open xprt.\n", __func__);
 		return;
