@@ -11,6 +11,8 @@
  */
 #include <linux/interrupt.h>
 #include <linux/irqreturn.h>
+#include <linux/irq.h>
+
 
 #include "mhi_sys.h"
 #include "mhi_trace.h"
@@ -244,11 +246,157 @@ static int mhi_process_event_ring(
 	return count;
 }
 
+static int __mhi_dump_event_ring(
+		struct mhi_device_ctxt *mhi_dev_ctxt,
+		u32 ev_index,
+		u32 event_quota)
+{
+	union mhi_event_pkt *local_rp = NULL;
+	union mhi_event_pkt *device_rp = NULL;
+	union mhi_event_pkt event_to_process;
+	int count = 0;
+	struct mhi_event_ctxt *ev_ctxt = NULL;
+	unsigned long flags;
+	struct mhi_ring *local_ev_ctxt =
+		&mhi_dev_ctxt->mhi_local_event_ctxt[ev_index];
+
+	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR, "Enter ev_index:%u\n", ev_index);
+	read_lock_bh(&mhi_dev_ctxt->pm_xfer_lock);
+	if (unlikely(MHI_EVENT_ACCESS_INVALID(mhi_dev_ctxt->mhi_pm_state))) {
+		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+			"No event access, PM_STATE:0x%x\n",
+			mhi_dev_ctxt->mhi_pm_state);
+		read_unlock_bh(&mhi_dev_ctxt->pm_xfer_lock);
+		return -EIO;
+	}
+	mhi_dev_ctxt->assert_wake(mhi_dev_ctxt, false);
+	read_unlock_bh(&mhi_dev_ctxt->pm_xfer_lock);
+	ev_ctxt = &mhi_dev_ctxt->dev_space.ring_ctxt.ec_list[ev_index];
+
+	spin_lock_irqsave(&local_ev_ctxt->ring_lock, flags);
+	device_rp = (union mhi_event_pkt *)mhi_p2v_addr(
+					mhi_dev_ctxt,
+					MHI_RING_TYPE_EVENT_RING,
+					ev_index,
+					ev_ctxt->mhi_event_read_ptr);
+
+	local_rp = (union mhi_event_pkt *)local_ev_ctxt->rp;
+	spin_unlock_irqrestore(&local_ev_ctxt->ring_lock, flags);
+	BUG_ON(validate_ev_el_addr(local_ev_ctxt, (uintptr_t)device_rp));
+
+	while ((local_rp != device_rp) && (event_quota > 0) &&
+			(device_rp != NULL) && (local_rp != NULL)) {
+
+		spin_lock_irqsave(&local_ev_ctxt->ring_lock, flags);
+		event_to_process = *local_rp;
+		recycle_trb_and_ring(mhi_dev_ctxt,
+				     local_ev_ctxt,
+				     MHI_RING_TYPE_EVENT_RING,
+				     ev_index);
+		spin_unlock_irqrestore(&local_ev_ctxt->ring_lock, flags);
+
+		switch (MHI_TRB_READ_INFO(EV_TRB_TYPE, &event_to_process)) {
+		case MHI_PKT_TYPE_CMD_COMPLETION_EVENT:
+		{
+			union mhi_cmd_pkt *cmd_pkt;
+			u32 chan;
+			get_cmd_pkt(mhi_dev_ctxt,
+				    &event_to_process,
+				    &cmd_pkt, ev_index);
+			MHI_TRB_GET_INFO(CMD_TRB_CHID, cmd_pkt, chan);
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+				"MHI CCE received ring 0x%x chan:%u\n",
+				ev_index, chan);
+			break;
+		}
+		case MHI_PKT_TYPE_TX_EVENT:
+		{
+			u32 chan;
+			chan = MHI_EV_READ_CHID(EV_CHID, &event_to_process);
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+				"MHI TXE received ring 0x%x chan:%u\n",
+				ev_index, chan);
+			event_quota--;
+			break;
+		}
+		case MHI_PKT_TYPE_STATE_CHANGE_EVENT:
+		{
+			enum STATE_TRANSITION new_state;
+			new_state = MHI_READ_STATE(&event_to_process);
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+				"MHI STE received ring 0x%x State:%s\n",
+				ev_index, state_transition_str(new_state));
+
+			break;
+		}
+		case MHI_PKT_TYPE_EE_EVENT:
+		{
+			enum MHI_EXEC_ENV event =
+				MHI_READ_EXEC_ENV(&event_to_process);
+
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+				"MHI EE received ring 0x%x event:0x%x\n",
+				ev_index, event);
+			break;
+		}
+		case MHI_PKT_TYPE_STALE_EVENT:
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+				"Stale Event received for chan:%u\n",
+				MHI_EV_READ_CHID(EV_CHID, local_rp));
+			break;
+		default:
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+				"Unsupported packet type code 0x%x\n",
+				MHI_TRB_READ_INFO(EV_TRB_TYPE,
+					&event_to_process));
+			break;
+		}
+		spin_lock_irqsave(&local_ev_ctxt->ring_lock, flags);
+		local_rp = (union mhi_event_pkt *)local_ev_ctxt->rp;
+		device_rp = (union mhi_event_pkt *)mhi_p2v_addr(
+						mhi_dev_ctxt,
+						MHI_RING_TYPE_EVENT_RING,
+						ev_index,
+						ev_ctxt->mhi_event_read_ptr);
+		spin_unlock_irqrestore(&local_ev_ctxt->ring_lock, flags);
+		count++;
+	}
+	read_lock_bh(&mhi_dev_ctxt->pm_xfer_lock);
+	mhi_dev_ctxt->deassert_wake(mhi_dev_ctxt);
+	read_unlock_bh(&mhi_dev_ctxt->pm_xfer_lock);
+	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR, "exit ev_index:%u\n", ev_index);
+	return count;
+}
+
+void mhi_dump_event_ring(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	__mhi_dump_event_ring(mhi_dev_ctxt, 0, U32_MAX);
+}
+/*
+void mhi_dump_irq(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	int irq;
+	struct irq_desc *desc;
+
+	irq = MSI_TO_IRQ(mhi_dev_ctxt, 0);
+	desc = irq_to_desc(irq);
+
+	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+		"MSI0 irq=%d, depth=%d\n", irq, desc->depth);
+
+	irq = MSI_TO_IRQ(mhi_dev_ctxt, 1);
+	desc = irq_to_desc(irq);
+	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+		"MSI1 irq=%d, depth=%d\n", irq, desc->depth);
+}
+*/
 void mhi_ev_task(unsigned long data)
 {
 	struct mhi_ring *mhi_ring = (struct mhi_ring *)data;
 	struct mhi_device_ctxt *mhi_dev_ctxt =
 		mhi_ring->mhi_dev_ctxt;
+	struct mhi_device *mhi_device = mhi_dev_ctxt->mhi_dev;
+	bool single_msi = mhi_device->single_msi;
 	int ev_index = mhi_ring->index;
 	const int CTRL_EV = 0; /* event ring for ctrl events */
 	int ret;
@@ -298,8 +446,12 @@ void mhi_ev_task(unsigned long data)
 					      process_sys_err_worker);
 		}
 	}
+	if (single_msi) {
+		enable_irq(MSI_TO_IRQ(mhi_dev_ctxt, 0));
+	} else {
+		enable_irq(MSI_TO_IRQ(mhi_dev_ctxt, ev_index));
+	}
 
-	enable_irq(MSI_TO_IRQ(mhi_dev_ctxt, ev_index));
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Exit\n");
 }
 
@@ -310,12 +462,18 @@ void process_event_ring(struct work_struct *work)
 	struct mhi_device_ctxt *mhi_dev_ctxt =
 		mhi_ring->mhi_dev_ctxt;
 	int ev_index = mhi_ring->index;
+	struct mhi_device *mhi_device = mhi_dev_ctxt->mhi_dev;
+	bool single_msi = mhi_device->single_msi;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Enter\n");
 	/* Process event ring */
 	mhi_process_event_ring(mhi_dev_ctxt, ev_index, U32_MAX);
 
-	enable_irq(MSI_TO_IRQ(mhi_dev_ctxt, ev_index));
+	if (single_msi) {
+		enable_irq(MSI_TO_IRQ(mhi_dev_ctxt, 0));
+	} else {
+		enable_irq(MSI_TO_IRQ(mhi_dev_ctxt, ev_index));
+	}
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Exit\n");
 }
 
@@ -362,16 +520,17 @@ void mhi_unmask_irq(struct mhi_client_handle *client_handle)
 
 irqreturn_t mhi_msi_handlr(int irq_number, void *dev_id)
 {
-	struct mhi_device_ctxt *mhi_dev_ctxt = dev_id;
-	int msi = IRQ_TO_MSI(mhi_dev_ctxt, irq_number);
-	struct mhi_ring *mhi_ring = &mhi_dev_ctxt->mhi_local_event_ctxt[msi];
+	struct mhi_ring *mhi_ring = dev_id;
+	int er_index = mhi_ring->index;
+	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_ring->mhi_dev_ctxt;
 	struct mhi_event_ring_cfg *ring_props =
-		&mhi_dev_ctxt->ev_ring_props[msi];
+		&mhi_dev_ctxt->ev_ring_props[er_index];
+	int msi = IRQ_TO_MSI(mhi_dev_ctxt, irq_number);
 
-	mhi_dev_ctxt->counters.msi_counter[
-			IRQ_TO_MSI(mhi_dev_ctxt, irq_number)]++;
-	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Got MSI 0x%x\n", msi);
-	trace_mhi_msi(IRQ_TO_MSI(mhi_dev_ctxt, irq_number));
+	mhi_dev_ctxt->counters.msi_counter[er_index]++;
+	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Got MSI 0x%x for ring %u disirq %d\n",
+		msi, er_index, irq_number);
+	trace_mhi_msi(msi);
 	disable_irq_nosync(irq_number);
 	if (ring_props->priority <= MHI_EV_PRIORITY_TASKLET)
 		tasklet_schedule(&mhi_ring->ev_task);

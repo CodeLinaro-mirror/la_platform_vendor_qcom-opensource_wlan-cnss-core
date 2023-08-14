@@ -38,6 +38,9 @@
 #define QCN7605_CALDB_SIZE 614400
 #define HOST_WAKE_GPIO_IN 144
 
+#define POWER_ON_RETRY_MAX_TIMES	4
+#define POWER_ON_RETRY_DELAY_MS		500
+
 enum cnss_bdf_type {
     CNSS_BDF_BIN,
     CNSS_BDF_ELF,
@@ -45,6 +48,14 @@ enum cnss_bdf_type {
     CNSS_BDF_EEPROM,
     CNSS_BDF_REGDB,
 };
+
+#define BDFSTR(bdf) \
+       bdf == CNSS_BDF_BIN ? "BDF_BIN" : \
+       bdf == CNSS_BDF_ELF ? "BDF_ELF" : \
+       bdf == CNSS_BDF_FLASH ? "BDF_FLASH" : \
+       bdf == CNSS_BDF_EEPROM ? "BDF_EEPROM" : \
+       bdf == CNSS_BDF_REGDB ? "BDF_REGDB" : \
+       "unknow BDF"
 
 enum cnss_dev_bus_type {
 	CNSS_BUS_NONE = -1,
@@ -172,6 +183,7 @@ enum cnss_driver_state {
 	CNSS_DEV_ERR_NOTIFY,
 	CNSS_DRIVER_DEBUG,
 	CNSS_DEV_REMOVED,
+	CNSS_IN_PANIC,
 };
 
 struct cnss_recovery_data {
@@ -242,10 +254,15 @@ struct cnss_plat_data {
 	u32 fw_mem_seg_len;
 	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
 	struct cnss_fw_mem m3_mem;
+	u32 *qdss_reg;
 	struct cnss_pin_connect_result pin_result;
 	struct dentry *root_dentry;
 	atomic_t pm_count;
 	struct timer_list fw_boot_timer;
+	int cssr_count;
+	unsigned int cssr_timeout;
+	int cssr_detected;
+	struct timer_list cssr_timer;
 	struct completion power_up_complete;
 	struct mutex dev_lock; /* mutex for register access through debugfs */
 	u32 diag_reg_read_addr;
@@ -262,6 +279,7 @@ struct cnss_plat_data {
 	u32 wlan_en_gpio;
 	u8 wlan_en_active;
 	u8 power_on;
+	bool single_msi;
 };
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
@@ -295,5 +313,4 @@ u32 cnss_get_wake_msi(struct cnss_plat_data *plat_priv);
 bool *cnss_get_qmi_bypass(void);
 bool is_qcn7605_device(u16 device_id);
 void cnss_set_wlan_chip_to_host_wakeup(unsigned int wakeup_gpio_num);
-int cnss_enable_wow_wake(const char *val, const struct kernel_param *kp);
 #endif /* _CNSS_MAIN_H */

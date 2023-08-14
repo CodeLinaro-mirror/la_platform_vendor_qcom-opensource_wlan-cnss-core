@@ -48,7 +48,7 @@ extern void *cnss_ipc_log_context;
 	} while (0)
 
 #define cnss_pr_dbg(_fmt, ...) do {					\
-		pr_err("cnss: " _fmt, ##__VA_ARGS__);			\
+		pr_debug("cnss: " _fmt, ##__VA_ARGS__);			\
 		cnss_ipc_log_string("DBG: " pr_fmt(_fmt),		\
 				    ##__VA_ARGS__);			\
 	} while (0)
@@ -75,5 +75,8 @@ int cnss_debug_init(void);
 void cnss_debug_deinit(void);
 int cnss_debugfs_create(struct cnss_plat_data *plat_priv);
 void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv);
+#ifdef DUMP_TO_FS
+extern int cnss_dump_fw_sram_to_file(struct cnss_plat_data *plat_priv);
+#endif
 
 #endif /* _CNSS_DEBUG_H */

@@ -43,9 +43,11 @@ struct fw_remote_mem {
 	void *vaddr;
 };
 
+#ifdef DUMP_TO_FS
 void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt);
 void dump_fw_info_to_kmsg(struct mhi_device_ctxt *mhi_dev_ctxt);
-
+bool is_ramdump_all_zero(struct mhi_device_ctxt *mhi_dev_ctxt);
+#endif
 #endif
 
 enum MHI_DEBUG_LEVEL {
@@ -623,6 +625,7 @@ struct mhi_device_ctxt {
 	void (*status_cb)(enum MHI_CB_REASON, void *priv);
 	void *priv_data; /* private data for bus master */
 	struct completion cmd_complete;
+	void *mhi_dev;
 };
 
 struct mhi_device_driver {
@@ -822,5 +825,20 @@ void mhi_reset_pcie_rxvecstatus(struct mhi_device_ctxt *mhi_dev_ctxt);
 #ifdef CONFIG_HST_IMX
 void mhi_set_pcie_mhictrl_reset(struct mhi_device_ctxt *mhi_dev_ctxt);
 #endif
+
+
+#ifdef DUMP_TO_FS
+int get_time_of_the_day_in_hr_min_sec(char *tbuf, int len);
+
+int fw_paging_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
+		   struct bhie_vec_table *fw_table,
+		   char *file_full_path);
+int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
+		       struct fw_remote_mem *fw_mem,
+		       char *file_full_path);
+#endif
+void mhi_dump_event_ring(struct mhi_device_ctxt *mhi_dev_ctxt);
+
+//void mhi_dump_irq(struct mhi_device_ctxt *mhi_dev_ctxt);
 
 #endif

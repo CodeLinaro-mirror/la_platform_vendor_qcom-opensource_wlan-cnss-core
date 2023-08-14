@@ -98,9 +98,9 @@ int mhi_ctxt_init(struct mhi_device_ctxt *mhi_dev_ctxt)
 		ret_val = request_irq(mhi_dev_ctxt->core.irq_base +
 				mhi_dev_ctxt->ev_ring_props[j].msi_vec,
 				mhi_dev_ctxt->ev_ring_props[j].mhi_handler_ptr,
-				IRQF_NO_SUSPEND,
+				IRQF_NO_SUSPEND|IRQF_SHARED|IRQF_NOBALANCING,
 				"mhi_drv",
-				(void *)mhi_dev_ctxt);
+				(void *)&mhi_dev_ctxt->mhi_local_event_ctxt[j]);
 		if (ret_val) {
 			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 				"Failed to register handler for MSI ret_val = %d\n",
@@ -169,7 +169,9 @@ void mhi_ctxt_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 	kfree(mhi_dev_ctxt->ev_ring_props);
 
 	for (i = 0; i < mhi_dev_ctxt->core.max_nr_msis; i++)
-		free_irq(mhi_dev_ctxt->core.irq_base + i, (void *)mhi_dev_ctxt);
+		free_irq(mhi_dev_ctxt->core.irq_base +
+			mhi_dev_ctxt->ev_ring_props[i].msi_vec,
+			(void *)&mhi_dev_ctxt->mhi_local_event_ctxt[i]);
 }
 
 static const struct dev_pm_ops pm_ops = {
@@ -194,17 +196,19 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 	int ret_val = 0;
 	struct platform_device *plat_dev;
 	struct mhi_device_ctxt *mhi_dev_ctxt = NULL, *itr;
+#ifdef CONFIG_ARCH_QCOM
 	u32 domain = pci_domain_nr(pcie_device->bus);
 	u32 bus = pcie_device->bus->number;
-	u32 dev_id = pcie_device->device;
 	u32 slot = PCI_SLOT(pcie_device->devfn);
+	char node[32];
+#endif
+	u32 dev_id = pcie_device->device;
 	unsigned long msi_requested, msi_required;
 #ifdef CONFIG_ARCH_QCOM
 	struct msm_pcie_register_event *mhi_pci_link_event;
 #endif
 	struct pcie_core_info *core;
 	int i;
-	char node[32];
 
 	/* Find correct device context based on bdf & dev_id */
 	mutex_lock(&mhi_device_drv->lock);
@@ -319,7 +323,11 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 
 	ret_val = pci_alloc_irq_vectors(pcie_device, 1, msi_requested,
 					PCI_IRQ_MSI);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+	if (IS_ERR_VALUE((unsigned long)ret_val) || (ret_val < msi_requested)) {
+#else
 	if (IS_ERR_VALUE(ret_val) || (ret_val < msi_requested)) {
+#endif
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 			"Failed to enable MSIs for pcie dev ret_val %d.\n",
 			ret_val);
@@ -553,12 +561,13 @@ static int mhi_plat_probe(struct platform_device *pdev)
 #else
 static int mhi_plat_probe(struct platform_device *pdev)
 {
-	int r = 0, len;
+	//int r = 0, len;
 	struct mhi_device_ctxt *mhi_dev_ctxt;
 	struct pcie_core_info *core;
-	struct device_node *of_node = pdev->dev.of_node;
 	u64 address_window[2];
 
+#ifndef CONFIG_NAPIER_X86
+	struct device_node *of_node = pdev->dev.of_node;
 	if (of_node == NULL)
 		return -ENODEV;
 
@@ -569,6 +578,9 @@ static int mhi_plat_probe(struct platform_device *pdev)
 	mhi_dev_ctxt = devm_kzalloc(&pdev->dev,
 				    sizeof(*mhi_dev_ctxt),
 				    GFP_KERNEL);
+#else
+	mhi_dev_ctxt = kzalloc(sizeof(*mhi_dev_ctxt), GFP_KERNEL);
+#endif
 	if (!mhi_dev_ctxt)
 		return -ENOMEM;
 
@@ -601,8 +613,10 @@ static int mhi_plat_probe(struct platform_device *pdev)
 
 	mhi_dev_ctxt->flags.bb_required = false;
 
+#ifndef CONFIG_NAPIER_X86
 	mhi_dev_ctxt->plat_dev = pdev;
 	platform_set_drvdata(pdev, mhi_dev_ctxt);
+#endif
 
 	/*r = dma_set_mask(&pdev->dev, MHI_DMA_MASK);
 	if (r) {
@@ -643,9 +657,8 @@ static void __exit mhi_exit(void)
 
 static int __exit mhi_plat_remove(struct platform_device *pdev)
 {
-	struct mhi_device_ctxt *mhi_dev_ctxt = platform_get_drvdata(pdev);
-
 #ifdef CONFIG_ARCH_QCOM
+	struct mhi_device_ctxt *mhi_dev_ctxt = platform_get_drvdata(pdev);
 	ipc_log_context_destroy(mhi_dev_ctxt->mhi_ipc_log);
 #endif
 	return 0;
@@ -676,11 +689,15 @@ static int __init mhi_init(void)
 	mhi_dev_drv->parent = debugfs_create_dir("mhi", NULL);
 	mhi_device_drv = mhi_dev_drv;
 
+#ifdef CONFIG_NAPIER_X86
+	mhi_plat_probe(NULL);
+#else
 	r = platform_driver_register(&mhi_plat_driver);
 	if (r) {
 		pr_err("%s: Failed to probe platform ret %d\n", __func__, r);
 		goto platform_error;
 	}
+#endif
 	r = pci_register_driver(&mhi_pcie_driver);
 	if (r) {
 		pr_err("%s: Failed to register pcie drv ret %d\n", __func__, r);
@@ -689,8 +706,10 @@ static int __init mhi_init(void)
 
 	return 0;
 error:
+#ifndef CONFIG_NAPIER_X86
 	platform_driver_unregister(&mhi_plat_driver);
 platform_error:
+#endif
 	class_destroy(mhi_device_drv->mhi_bhi_class);
 
 class_error:

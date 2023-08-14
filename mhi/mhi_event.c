@@ -41,6 +41,7 @@ int mhi_populate_event_cfg(struct mhi_device_ctxt *mhi_dev_ctxt)
 	u32 evt_cfgs[2][6] = {{0xa, 0x0, 0x1, 0, 1, 0x31},
 			{0x80, 0x1, 0x1, 0, 1, 0x31}};
 	mhi_dev_ctxt->mmio_info.nr_event_rings = 2;
+	struct mhi_device *mhi_device = mhi_dev_ctxt->mhi_dev;
 #endif
 	mhi_dev_ctxt->ev_ring_props =
 				kzalloc(sizeof(struct mhi_event_ring_cfg) *
@@ -48,6 +49,10 @@ int mhi_populate_event_cfg(struct mhi_device_ctxt *mhi_dev_ctxt)
 					GFP_KERNEL);
 	if (!mhi_dev_ctxt->ev_ring_props)
 		return -ENOMEM;
+
+	if (mhi_device && mhi_device->single_msi) {
+		evt_cfgs[1][1] = 0;
+	}
 
 	for (i = 0; i < mhi_dev_ctxt->mmio_info.nr_event_rings; ++i) {
 		u32 dt_configs[6];

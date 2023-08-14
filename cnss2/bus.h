@@ -32,6 +32,12 @@
 #define QCN7605_DEVICE_ID		0x1102
 #define QCN7605_SDIO_VENDOR_ID		0x70
 #define QCN7605_SDIO_DEVICE_ID		0x400B
+#define PEACH_VENDOR_ID                 0x17CB
+#define PEACH_DEVICE_ID                 0x110E
+#define KIWI_VENDOR_ID                  0x17CB
+#define KIWI_DEVICE_ID                  0x1107
+#define MANGO_VENDOR_ID                 0x17CB
+#define MANGO_DEVICE_ID                 0x110A
 
 #define QCN7605_USB_VENDOR_ID             0x05C6
 #define QCN7605_COMPOSITE_DEVICE_ID     QCN7605_COMPOSITE_PRODUCT_ID
@@ -54,13 +60,16 @@ void cnss_bus_deinit(struct cnss_plat_data *plat_priv);
 void cnss_bus_fw_name_add_path(struct cnss_plat_data *plat_priv,
 			       char *file_name, char *name);
 int cnss_bus_load_m3(struct cnss_plat_data *plat_priv);
+int cnss_bus_free_m3(struct cnss_plat_data *plat_priv);
 int cnss_bus_alloc_fw_mem(struct cnss_plat_data *plat_priv);
 int cnss_bus_get_wake_irq(struct cnss_plat_data *plat_priv);
 int cnss_bus_force_fw_assert_hdlr(struct cnss_plat_data *plat_priv);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
 void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *t);
+void cnss_cssr_timeout_hdlr(struct timer_list *t);
 #else
 void cnss_bus_fw_boot_timeout_hdlr(unsigned long data);
+void cnss_cssr_timeout_hdlr(unsigned long data);
 #endif
 void cnss_bus_collect_dump_info(struct cnss_plat_data *plat_priv);
 int cnss_bus_call_driver_probe(struct cnss_plat_data *plat_priv);
@@ -74,4 +83,10 @@ int cnss_bus_unregister_driver_hdlr(struct cnss_plat_data *plat_priv);
 int cnss_bus_call_driver_modem_status(struct cnss_plat_data *plat_priv,
 				      int modem_current_status);
 int cnss_bus_recovery_update_status(struct cnss_plat_data *plat_priv);
+#ifdef DUMP_TO_FS
+int cnss_bus_fw_sram_dump_to_file(struct cnss_plat_data *plat_priv,
+		uint32_t fw_sram_start,
+		uint32_t fw_sram_end,
+		const char *fw_sram_dump_path);
+#endif
 #endif /* _CNSS_BUS_H */

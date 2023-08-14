@@ -29,7 +29,9 @@
 
 #define CNSS_MAX_FILE_NAME		20
 #define CNSS_MAX_TIMESTAMP_LEN		32
+#define CNSS_WLFW_MAX_BUILD_ID_LEN	128
 #define CNSS_MAX_DEV_MEM_NUM		4
+#define CNSS_CHIP_VER_ANY		0
 
 /*
  * Temporary change for compilation, will be removed
@@ -86,6 +88,7 @@ struct cnss_soc_info {
 	char fw_build_timestamp[CNSS_MAX_TIMESTAMP_LEN + 1];
 	struct cnss_device_version device_version;
 	struct cnss_dev_mem_info dev_mem_info[CNSS_MAX_DEV_MEM_NUM];
+	char fw_build_id[CNSS_WLFW_MAX_BUILD_ID_LEN + 1];
 };
 
 struct cnss_wlan_runtime_ops {
@@ -107,6 +110,15 @@ enum cnss_bus_event_type {
 	BUS_EVENT_PCI_LINK_DOWN = 0,
 
 	BUS_EVENT_INVALID = 0xFFFF,
+};
+
+enum cnss_wfc_mode {
+	CNSS_WFC_MODE_OFF,
+	CNSS_WFC_MODE_ON,
+};
+
+struct cnss_wfc_cfg {
+	enum cnss_wfc_mode mode;
 };
 
 struct cnss_hang_event {
@@ -144,6 +156,10 @@ struct cnss_wlan_driver {
 			     struct cnss_uevent_data *uevent);
 	struct cnss_wlan_runtime_ops *runtime_ops;
 	const struct pci_device_id *id_table;
+	u32 chip_version;
+	int (*set_therm_cdev_state)(struct pci_dev *pci_dev,
+				    unsigned long thermal_state,
+				    int tcdev_id);
 };
 
 struct cnss_usb_wlan_driver {
@@ -237,6 +253,11 @@ enum cnss_recovery_reason {
 	CNSS_REASON_TIMEOUT,
 };
 
+enum cnss_fw_caps {
+	CNSS_FW_CAP_DIRECT_LINK_SUPPORT,
+};
+	
+
 extern int cnss_wlan_register_driver(struct cnss_wlan_driver *driver);
 extern void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver);
 extern void cnss_device_crashed(struct device *dev);
@@ -297,6 +318,21 @@ extern void cnss_release_pm_sem(struct device *dev);
 extern void cnss_pci_lock_reg_window(struct device *dev, unsigned long *flags);
 extern void cnss_pci_unlock_reg_window(struct device *dev,
 				       unsigned long *flags);
+extern int cnss_get_pci_slot(struct device *dev);
+extern struct kobject *cnss_get_wifi_kobj(struct device *dev);
+extern int cnss_thermal_cdev_register(struct device *dev,
+				      unsigned long max_state,
+				      int tcdev_id);
+extern void cnss_thermal_cdev_unregister(struct device *dev, int tcdev_id);
+extern int cnss_get_curr_therm_cdev_state(struct device *dev,
+					  unsigned long *thermal_state,
+					  int tcdev_id);
+extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);
+extern int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
+			       dma_addr_t iova, size_t size);
+extern void cnss_audio_smmu_unmap(struct device *dev, dma_addr_t iova,
+				 size_t size);
+extern int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg);
 extern int cnss_auto_suspend(struct device *dev);
 extern int cnss_auto_resume(struct device *dev);
 extern int cnss_pci_is_drv_connected(struct device *dev);

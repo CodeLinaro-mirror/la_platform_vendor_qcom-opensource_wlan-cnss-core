@@ -154,6 +154,7 @@ struct mhi_device {
 	void (*pm_runtime_put_noidle)(struct pci_dev *pci_dev);
 	void (*status_cb)(enum MHI_CB_REASON, void *priv);
 	struct mhi_device_ctxt *mhi_dev_ctxt;
+	bool single_msi;
 };
 
 enum mhi_dev_ctrl {
@@ -176,6 +177,8 @@ enum mhi_rddm_segment {
 };
 
 #if defined(CONFIG_HST_IMX)
+void mhi_config_single_msi(struct mhi_device *mhi_device, bool msi);
+
 /**
  * mhi_is_device_ready - Check if MHI is ready to register clients
  *

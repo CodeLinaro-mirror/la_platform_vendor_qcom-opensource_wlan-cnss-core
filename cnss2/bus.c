@@ -38,7 +38,7 @@ enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 {
 	int ret;
 	struct device *dev;
-	enum cnss_dev_bus_type bus_type = CNSS_BUS_NONE;
+	//enum cnss_dev_bus_type bus_type = CNSS_BUS_NONE;
 	u32 bus_type_dt = CNSS_BUS_NONE;
 
 	if (plat_priv->is_converged_dt) {
@@ -193,6 +193,22 @@ int cnss_bus_load_m3(struct cnss_plat_data *plat_priv)
 	}
 }
 
+int cnss_bus_free_m3(struct cnss_plat_data *plat_priv)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		cnss_pci_free_m3_mem(plat_priv->bus_priv);
+		return 0;
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return -EINVAL;
+	}
+}
+
 int cnss_bus_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 {
 	if (!plat_priv)
@@ -256,6 +272,18 @@ void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *t)
 		return;
 	}
 }
+
+void cnss_cssr_timeout_hdlr(struct timer_list *t)
+{
+	struct cnss_plat_data *plat_priv =
+		from_timer(plat_priv, t, cssr_timer);
+
+	if (!plat_priv)
+		return;
+
+	plat_priv->cssr_count = 0;
+}
+
 #else
 void cnss_bus_fw_boot_timeout_hdlr(unsigned long data)
 {
@@ -277,6 +305,17 @@ void cnss_bus_fw_boot_timeout_hdlr(unsigned long data)
 		return;
 	}
 }
+
+void cnss_cssr_timeout_hdlr(unsigned long data)
+{
+	struct cnss_plat_data *plat_priv =
+		(struct cnss_plat_data *)data;
+
+	if (!plat_priv)
+		return;
+
+	plat_priv->cssr_count = 0;
+}
 #endif
 
 void cnss_bus_collect_dump_info(struct cnss_plat_data *plat_priv)
@@ -292,6 +331,11 @@ void cnss_bus_collect_dump_info(struct cnss_plat_data *plat_priv)
 					     CNSS_MHI_RDDM);
 		if (ret) {
 			cnss_pr_err("Failed to complete RDDM, err = %d\n", ret);
+#ifdef DUMP_TO_FS
+			cnss_dump_fw_sram_to_file(plat_priv);
+			cnss_pci_dump_fw_remote_mem_to_file(plat_priv->bus_priv);
+			cnss_pci_dump_fw_paging_to_file(plat_priv->bus_priv);
+#endif
 			break;
 		}
 		return cnss_pci_collect_dump_info(plat_priv->bus_priv);
@@ -478,3 +522,35 @@ int cnss_bus_recovery_update_status(struct cnss_plat_data *plat_priv)
 		return -EINVAL;
 	}
 }
+
+#ifdef DUMP_TO_FS
+int cnss_bus_fw_sram_dump_to_file(struct cnss_plat_data *plat_priv,
+		uint32_t fw_sram_start,
+		uint32_t fw_sram_end,
+		const char *fw_sram_dump_path)
+{
+	int ret = 0;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	switch (cnss_get_bus_type(plat_priv)) {
+		case CNSS_BUS_PCI:
+			ret = cnss_pci_fw_sram_dump_to_file(
+					plat_priv->bus_priv,
+					fw_sram_start,
+					fw_sram_end,
+					fw_sram_dump_path);
+			break;
+		case CNSS_BUS_SDIO:
+		case CNSS_BUS_USB:
+		default:
+			ret = -ENOTSUPP;
+			break;
+	}
+
+	return ret;
+}
+#endif

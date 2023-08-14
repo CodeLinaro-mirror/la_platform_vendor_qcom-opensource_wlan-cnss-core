@@ -22,6 +22,10 @@
 #include "mhi_hwio.h"
 #include "mhi_bhi.h"
 
+#ifdef CONFIG_NAPIER_X86
+static struct mhi_device_ctxt *s_mhi_dev_ctxt;
+#endif
+
 static int bhi_open(struct inode *mhi_inode, struct file *file_handle)
 {
 	struct mhi_device_ctxt *mhi_dev_ctxt;
@@ -38,14 +42,18 @@ static int bhi_alloc_bhie_xfer(struct mhi_device_ctxt *mhi_dev_ctxt,
 			       struct bhie_vec_table *vec_table)
 {
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+#ifdef CONFIG_NAPIER_X86
+	struct device *dev = &mhi_dev_ctxt->pcie_device->dev;
+#else
 	struct device *dev = &mhi_dev_ctxt->plat_dev->dev;
+#endif
 	const phys_addr_t align = bhi_ctxt->alignment - 1;
 	size_t seg_size = bhi_ctxt->firmware_info.segment_size;
 	/* We need one additional entry for Vector Table */
 	int segments = DIV_ROUND_UP(size, seg_size) + 1;
 	int i;
 	struct scatterlist *sg_list;
-	struct bhie_mem_info *bhie_mem_info, *info;
+	struct bhie_mem_info *bhie_mem_info, *info = NULL;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 		"Total size:%lu total_seg:%d seg_size:%lu\n",
@@ -114,7 +122,11 @@ static int bhi_alloc_pbl_xfer(struct mhi_device_ctxt *mhi_dev_ctxt,
 {
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
 	const phys_addr_t align_len = bhi_ctxt->alignment;
+#ifdef CONFIG_NAPIER_X86
+	struct device *dev = &mhi_dev_ctxt->pcie_device->dev;
+#else
 	struct device *dev = &mhi_dev_ctxt->plat_dev->dev;
+#endif
 
 	mem_info->size = size;
 	mem_info->alloc_size = size + (align_len - 1);
@@ -265,13 +277,15 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 
 	if (!in_panic) {
 		ret = bhi_rddm_graceful(mhi_dev_ctxt);
-#if 0
-		if (!ret)
+#ifdef DUMP_TO_FS
+		if (!ret) {
 			dump_fw_to_file(mhi_dev_ctxt);
+			if (is_ramdump_all_zero(mhi_dev_ctxt))
+				ret = -EINVAL;
+		}
 #endif
 		return ret;
 	}
-
 	/*
 	 * Below code should only be executed during kernel panic,
 	 * we expect other cores to be shutting down while we're
@@ -342,13 +356,6 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 		udelay(BHIE_RDDM_DELAY_TIME_US);
 	}
 
-	if (rddm_retry <= 0) {
-		/* This is a hardware reset should gurantee device enter rddm */
-		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
-			"Did not enter RDDM triggering host req. reset to force rddm\n");
-		mhi_reg_write(mhi_dev_ctxt, mhi_dev_ctxt->mmio_info.mmio_addr,
-			MHI_SOC_RESET_REQ_OFFSET, MHI_SOC_RESET_REQ);
-	}
 	cur_exec = mhi_reg_read(bhi_ctxt->bhi_base, BHI_EXECENV);
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 		"Waiting for image download completion, current EE:%x\n", cur_exec);
@@ -382,7 +389,7 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 		    (current_seq == rx_sequence)) {
 			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 				"rddm transfer completed\n");
-#ifdef CONFIG_HST_IMX
+#ifdef DUMP_TO_FS
 			dump_fw_info_to_kmsg(mhi_dev_ctxt);
 #endif
 			return 0;
@@ -536,7 +543,11 @@ int bhi_expose_dev_bhi(struct mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "Creating dev node\n");
 
 	ret_val = alloc_chrdev_region(&bhi_ctxt->bhi_dev, 0, 1, "bhi");
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+	if (IS_ERR_VALUE((unsigned long)ret_val)) {
+#else
 	if (IS_ERR_VALUE(ret_val)) {
+#endif
 		mhi_log(mhi_dev_ctxt, MHI_MSG_CRITICAL,
 			"Failed to alloc char device %d\n", ret_val);
 		return -EIO;
@@ -568,13 +579,15 @@ err_dev_create:
 
 void bhi_firmware_download(struct work_struct *work)
 {
-	struct mhi_device_ctxt *mhi_dev_ctxt;
-	struct bhi_ctxt_t *bhi_ctxt;
-	struct bhie_mem_info mem_info;
-	int ret;
+	struct mhi_device_ctxt *mhi_dev_ctxt = NULL;
+	struct bhi_ctxt_t *bhi_ctxt = NULL;
+	struct bhie_mem_info mem_info = {0};
+	int ret = 0;
 
 	mhi_dev_ctxt = container_of(work, struct mhi_device_ctxt,
 				    bhi_ctxt.fw_load_work);
+	if (!mhi_dev_ctxt)
+		return;
 	bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "Enter\n");
@@ -645,6 +658,10 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 	const u8 *image;
 	int id;
 
+#ifdef CONFIG_NAPIER_X86
+	s_mhi_dev_ctxt = mhi_dev_ctxt;
+#endif
+
 	/* expose dev node to userspace */
 	if (bhi_ctxt->manage_boot == false)
 		return bhi_expose_dev_bhi(mhi_dev_ctxt);
@@ -662,15 +679,24 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 		"max sbl image size:%lu segment size:%lu\n",
 		fw_info->max_sbl_len, fw_info->segment_size);
 
+#ifdef CONFIG_NAPIER_X86
+	/* Read the fw image */
+	ret = request_firmware(&firmware, fw_info->fw_image,
+			       &mhi_dev_ctxt->pcie_device->dev);
+#else
 	/* Read the fw image */
 	ret = request_firmware(&firmware, fw_info->fw_image,
 			       &mhi_dev_ctxt->plat_dev->dev);
+#endif
 	if (ret) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 			"Error request firmware for:%s ret:%d\n",
 			fw_info->fw_image, ret);
 		return ret;
 	}
+
+	mhi_log(mhi_dev_ctxt, MHI_MSG_DBG, "fw: %s size %d\n",
+                fw_info->fw_image, firmware->size);
 
 	ret = bhi_alloc_bhie_xfer(mhi_dev_ctxt,
 				  firmware->size,
@@ -777,7 +803,11 @@ void bhi_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
 	struct bhie_vec_table *fw_table = &bhi_ctxt->fw_table;
 	struct bhie_vec_table *rddm_table = &bhi_ctxt->rddm_table;
+#ifdef CONFIG_NAPIER_X86
+	struct device *dev = &mhi_dev_ctxt->pcie_device->dev;
+#else
 	struct device *dev = &mhi_dev_ctxt->plat_dev->dev;
+#endif
 	struct bhie_mem_info *bhie_mem_info;
 	int i;
 
@@ -814,4 +844,7 @@ void bhi_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 	kfree(rddm_table->bhie_mem_info);
 	rddm_table->bhie_mem_info = NULL;
 	rddm_table->bhi_vec_entry = NULL;
+#ifdef CONFIG_NAPIER_X86
+	s_mhi_dev_ctxt = NULL;
+#endif
 }
