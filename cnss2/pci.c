@@ -1166,6 +1166,10 @@ static int cnss_pci_suspend(struct device *dev)
 		goto out;
 
 	driver_ops = pci_priv->driver_ops;
+
+	if (!driver_ops)
+		goto out;
+
 	if (driver_ops && driver_ops->suspend) {
 		ret = driver_ops->suspend(pci_dev, state);
 		if (ret) {
@@ -1221,6 +1225,10 @@ static int cnss_pci_resume(struct device *dev)
 	if (!plat_priv)
 		goto out;
 
+	driver_ops = pci_priv->driver_ops;
+	if (!driver_ops)
+		goto out;
+
 	if (pci_priv->pci_link_down_ind)
 		goto out;
 
@@ -1238,7 +1246,6 @@ static int cnss_pci_resume(struct device *dev)
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RESUME);
 	}
 
-	driver_ops = pci_priv->driver_ops;
 	if (driver_ops && driver_ops->resume) {
 		ret = driver_ops->resume(pci_dev);
 		if (ret)
