@@ -845,6 +845,14 @@ void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
 {
 	return mhi_controller_set_base(pci_priv->mhi_ctrl, base);
 }
+
+#ifdef CONFIG_PCIE_SWITCH_NTN3
+int cnss_pci_dsp_link_control(struct cnss_pci_data *pci_priv,
+			      bool link_enable)
+{
+	return msm_pcie_dsp_link_control(pci_priv->pci_dev, link_enable);
+}
+#endif
 #else
 static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
 {
