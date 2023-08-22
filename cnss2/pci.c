@@ -1816,9 +1816,29 @@ EXPORT_SYMBOL(cnss_pci_force_wake_release);
 
 int cnss_pci_force_wake_request_sync(struct device *dev, int timeout_us)
 {
+	if (timeout_us) {
+		/* Busy wait for timeout_us */
+		return -EOPNOTSUPP;
+	} else {
+		/* Sleep wait for mhi_ctrl->timeout_ms */
+		return cnss_pci_force_wake_request(dev);
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(cnss_pci_force_wake_request_sync);
+
+int cnss_update_time_sync_period(struct device *dev, uint32_t time_sync_period)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_update_time_sync_period);
+
+int cnss_reset_time_sync_period(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_reset_time_sync_period);
 #else
 int cnss_pci_force_wake_request(struct device *dev)
 {
