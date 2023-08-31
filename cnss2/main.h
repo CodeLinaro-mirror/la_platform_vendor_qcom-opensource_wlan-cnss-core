@@ -675,7 +675,8 @@ int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 			  u64 *feature_list);
 int cnss_save_buf_to_file(char *buf, u32 buf_len, char *file_name);
 
-#define QCA_DUMP_BIN_PATH "/usr/sbin/fw-ram-dump"
+#define QCA_DUMP_BIN_PATH "/usr/sbin/ram-dump"
+#define HOST_RDDM_DUMP "host_rddm"
 #define FW_RDDM_DUMP "fw_rddm"
 #define FW_SRAM_DUMP "fw_sram"
 int cnss_invoke_qca_dump_app(char *type);

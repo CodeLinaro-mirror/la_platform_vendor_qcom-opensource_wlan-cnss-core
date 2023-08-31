@@ -2529,7 +2529,7 @@ int cnss_invoke_qca_dump_app(char *type)
 }
 
 int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
-				gfp_t gfp)
+				gfp_t gfp, char *type)
 {
 	struct cnss_qcom_ramdump_desc *desc;
 	int ret = 0;
@@ -2543,7 +2543,7 @@ int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
 	dev_coredumpm(dev, NULL, desc, datalen, gfp,
 		      cnss_qcom_devcd_readv, cnss_qcom_devcd_freev);
 #ifdef CALL_USER_MODE_HELPER
-	cnss_invoke_qca_dump_app(FW_RDDM_DUMP);
+		cnss_invoke_qca_dump_app(type);
 #endif
 	return ret;
 }
@@ -2569,7 +2569,7 @@ static void init_elf_identification(struct elf32_hdr *ehdr, unsigned char class)
 }
 
 int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
-		       unsigned char class)
+		       unsigned char class, char *type)
 {
 	struct cnss_qcom_dump_segment *segment;
 	void *phdr, *ehdr;
@@ -2635,7 +2635,7 @@ int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
 		phdr += sizeof_elf_phdr(class);
 	}
 
-	return cnss_qcom_devcd_dump(dev, data, data_size, GFP_KERNEL);
+	return cnss_qcom_devcd_dump(dev, data, data_size, GFP_KERNEL, type);
 }
 
 /* Saving dump to file system is always needed in this case. */
@@ -2708,7 +2708,7 @@ int cnss_do_elf_ramdump(struct cnss_plat_data *plat_priv)
 	list_add(&seg->node, &head);
 
 do_elf_dump:
-	ret = qcom_elf_dump(&head, info_v2->ramdump_dev, ELF_CLASS);
+	ret = qcom_elf_dump(&head, info_v2->ramdump_dev, ELF_CLASS, FW_RDDM_DUMP);
 
 	while (!list_empty(&head)) {
 		seg = list_first_entry(&head, struct qcom_dump_segment, node);
@@ -2722,6 +2722,11 @@ do_elf_dump:
 }
 
 #ifdef CONFIG_CNSS2_SSR_DRIVER_DUMP
+void wlan_driver_release(struct device *dev)
+{
+	cnss_pr_info("Freeing %s\n", dev->kobj.name);
+	kfree(dev);
+}
 int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 			 struct cnss_ssr_driver_dump_entry *ssr_entry,
 			 size_t num_entries_loaded)
@@ -2773,6 +2778,7 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 	device_initialize(new_device);
 	dev_set_name(new_device, "wlan_driver");
 	dev_ret = device_add(new_device);
+	new_device->release = wlan_driver_release;
 	if (dev_ret) {
 		cnss_pr_err("Failed to add new device\n");
 		goto put_device;
@@ -2811,7 +2817,7 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 	seg->da = (dma_addr_t)&meta_info;
 	seg->size = sizeof(meta_info);
 	list_add(&seg->node, &head);
-	ret = qcom_elf_dump(&head, new_device, ELF_CLASS);
+	ret = qcom_elf_dump(&head, new_device, ELF_CLASS, HOST_RDDM_DUMP);
 	while (!list_empty(&head)) {
 		seg = list_first_entry(&head, struct qcom_dump_segment, node);
 		list_del(&seg->node);
@@ -2820,7 +2826,7 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 	device_del(new_device);
 put_device:
 	put_device(new_device);
-	kfree(new_device);
+//	kfree(new_device);
 	return ret;
 }
 #endif
