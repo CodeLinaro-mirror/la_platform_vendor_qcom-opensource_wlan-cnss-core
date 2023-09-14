@@ -2009,7 +2009,7 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 
 	if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state)) {
 		mod_timer(&plat_priv->fw_boot_timer,
-			  jiffies + msecs_to_jiffies(FW_ASSERT_TIMEOUT << 2));
+			  jiffies + msecs_to_jiffies(FW_ASSERT_TIMEOUT));
 	}
 
 	return 0;
