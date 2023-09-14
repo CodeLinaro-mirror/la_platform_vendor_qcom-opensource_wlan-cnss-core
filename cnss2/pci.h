@@ -179,6 +179,9 @@ struct cnss_pci_data {
 	bool drv_supported;
 	bool is_smmu_fault;
 	unsigned long long smmu_fault_timestamp[SMMU_CB_MAX];
+#ifdef CONFIG_PCIE_SWITCH_NTN3
+	bool pcie_switch_ntn3;
+#endif
 };
 
 static inline void cnss_set_pci_priv(struct pci_dev *pci_dev, void *data)

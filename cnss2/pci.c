@@ -850,7 +850,10 @@ void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
 int cnss_pci_dsp_link_control(struct cnss_pci_data *pci_priv,
 			      bool link_enable)
 {
-	return msm_pcie_dsp_link_control(pci_priv->pci_dev, link_enable);
+	if (pci_priv->pcie_switch_ntn3)
+		return msm_pcie_dsp_link_control(pci_priv->pci_dev, link_enable);
+	else
+		return 0;
 }
 #endif
 #else
@@ -6818,6 +6821,33 @@ static int cnss_try_suspend(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+#ifdef CONFIG_PCIE_SWITCH_NTN3
+#if IS_ENABLED(CONFIG_ARCH_QCOM)
+static void cnss_pci_of_switch_ntn3_init(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct device *dev = &plat_priv->plat_dev->dev;
+
+	if (dev && dev->of_node) {
+		pci_priv->pcie_switch_ntn3 =
+		    of_property_read_bool(dev->of_node,
+					"qcom,pcie-switch-ntn3");
+		cnss_pr_dbg("pcie_switch_ntn3 is %s",
+			    pci_priv->pcie_switch_ntn3 ? "enabled" : "disabled");
+	}
+	else {
+		cnss_pr_err("device or node is not available.");
+		pci_priv->pcie_switch_ntn3 = 0;
+	}
+}
+#else /* IS_ENABLED(CONFIG_ARCH_QCOM) */
+static void cnss_pci_of_switch_ntn3_init(struct cnss_pci_data *pci_priv)
+{
+	pci_priv->pcie_switch_ntn3 = 0;
+}
+#endif /* IS_ENABLED(CONFIG_ARCH_QCOM) */
+#endif /* CONFIG_PCIE_SWITCH_NTN3 */
+
 /* Setting to use this cnss_pm_domain ops will let PM framework override the
  * ops from dev->bus->pm which is pci_dev_pm_ops from pci-driver.c. This ops
  * has to take care everything device driver needed which is currently done
@@ -7021,6 +7051,10 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	ret = cnss_dev_specific_power_on(plat_priv);
 	if (ret < 0)
 		goto reset_ctx;
+
+#ifdef CONFIG_PCIE_SWITCH_NTN3
+	cnss_pci_of_switch_ntn3_init(pci_priv);
+#endif
 
 	cnss_pci_of_reserved_mem_device_init(pci_priv);
 
