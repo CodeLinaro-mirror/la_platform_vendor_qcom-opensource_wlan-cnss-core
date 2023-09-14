@@ -1471,7 +1471,33 @@ int cnss_force_collect_rddm(struct device *dev)
 #else
 int cnss_force_collect_rddm(struct device *dev)
 {
-        return 0;
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int ret = 0;
+
+	if (!plat_priv) { 
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+		}
+
+	if (plat_priv->device_id == QCA6174_DEVICE_ID) { 
+		cnss_pr_info("Force collect rddm is not supported\n");
+		return -EOPNOTSUPP;
+		}
+	
+	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
+		cnss_pr_info("Recovery is already in progress, ignore forced collect rddm\n");
+		return 0;
+		}
+
+	cnss_driver_event_post(plat_priv, 
+			       CNSS_DRIVER_EVENT_FORCE_FW_ASSERT, 0, NULL);
+
+	reinit_completion(&plat_priv->rddm_complete);
+	ret = wait_for_completion_timeout(&plat_priv->rddm_complete,
+					  msecs_to_jiffies(CNSS_RDDM_TIMEOUT_MS));
+	if (!ret) 
+		ret = -ETIMEDOUT;
+	return 0;
 }
 #endif
 EXPORT_SYMBOL(cnss_force_collect_rddm);
