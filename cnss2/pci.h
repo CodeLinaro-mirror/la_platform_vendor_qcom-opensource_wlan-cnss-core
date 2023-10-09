@@ -20,6 +20,11 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/pci.h>
 #include <linux/sched_clock.h>
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
+#include <linux/sched/clock.h>
+#endif
+
 
 #include "main.h"
 
@@ -253,6 +258,7 @@ void cnss_pci_add_fw_prefix_name(struct cnss_pci_data *pci_priv,
 int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv);
 int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv);
 void cnss_pci_free_qdss_mem(struct cnss_pci_data *pci_priv);
+int cnss_pci_load_tme_patch(struct cnss_pci_data *pci_priv);
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv);
 void cnss_pci_free_blob_mem(struct cnss_pci_data *pci_priv);
 int cnss_pci_load_aux(struct cnss_pci_data *pci_priv);
