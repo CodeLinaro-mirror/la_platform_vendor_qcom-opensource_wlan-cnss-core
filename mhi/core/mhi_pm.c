@@ -550,7 +550,7 @@ static int mhi_pm_mission_mode_transition(struct mhi_controller *mhi_cntrl)
 	MHI_CNTRL_LOG("Adding new devices\n");
 
 	/* add supported devices */
-	mhi_create_devices(mhi_cntrl);
+	ret = mhi_create_devices(mhi_cntrl);
 
 	read_lock_bh(&mhi_cntrl->pm_lock);
 

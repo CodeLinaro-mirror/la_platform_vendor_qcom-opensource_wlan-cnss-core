@@ -44,7 +44,7 @@
 #else
 #define CNSS_MHI_TIMEOUT_DEFAULT	0
 #endif
-#define CNSS_QMI_TIMEOUT_DEFAULT	10000
+#define CNSS_QMI_TIMEOUT_DEFAULT	8000
 #define CNSS_BDF_TYPE_DEFAULT		CNSS_BDF_ELF
 
 #define FW_SRAM_DUMP_PATH			"/var/crash/fw_sram_dump.bin"

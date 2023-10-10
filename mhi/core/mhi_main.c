@@ -811,7 +811,7 @@ static void mhi_assign_of_node(struct mhi_controller *mhi_cntrl,
 }
 
 /* bind mhi channels into mhi devices */
-void mhi_create_devices(struct mhi_controller *mhi_cntrl)
+int mhi_create_devices(struct mhi_controller *mhi_cntrl)
 {
 	int i;
 	struct mhi_chan *mhi_chan;
@@ -825,7 +825,7 @@ void mhi_create_devices(struct mhi_controller *mhi_cntrl)
 			continue;
 		mhi_dev = mhi_alloc_device(mhi_cntrl);
 		if (!mhi_dev)
-			return;
+			return ENODEV;
 
 		mhi_dev->dev_type = MHI_XFER_TYPE;
 		switch (mhi_chan->dir) {
@@ -897,6 +897,7 @@ void mhi_create_devices(struct mhi_controller *mhi_cntrl)
 			mhi_dealloc_device(mhi_cntrl, mhi_dev);
 		}
 	}
+	return ret;
 }
 
 static int parse_xfer_event(struct mhi_controller *mhi_cntrl,

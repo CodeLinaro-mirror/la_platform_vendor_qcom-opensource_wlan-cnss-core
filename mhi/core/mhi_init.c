@@ -1904,8 +1904,11 @@ static int mhi_driver_probe(struct device *dev)
 	if (ret)
 		goto exit_probe;
 
-	if (dl_chan && dl_chan->auto_start)
-		mhi_prepare_channel(mhi_cntrl, dl_chan);
+	if (dl_chan && dl_chan->auto_start){		
+		ret = mhi_prepare_channel(mhi_cntrl, dl_chan);
+		if (ret)
+			goto exit_probe;
+		}
 
 	mhi_device_put(mhi_dev, MHI_VOTE_DEVICE);
 
@@ -1915,7 +1918,7 @@ exit_probe:
 	mhi_unprepare_from_transfer(mhi_dev);
 
 	mhi_device_put(mhi_dev, MHI_VOTE_DEVICE);
-
+	MHI_LOG("mhi_driver_probe return %d\n", ret);
 	return ret;
 }
 

@@ -1250,7 +1250,7 @@ retry:
 		if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
 		    !pci_priv->pci_link_down_ind && timeout)
 			mod_timer(&plat_priv->fw_boot_timer,
-				  jiffies + msecs_to_jiffies(timeout >> 1));
+				  jiffies + msecs_to_jiffies(timeout));
 		return 0;
 	}
 
@@ -1268,7 +1268,7 @@ retry:
 			goto stop_mhi;
 	} else if (timeout) {
 		mod_timer(&plat_priv->fw_boot_timer,
-			  jiffies + msecs_to_jiffies(timeout << 1));
+			  jiffies + msecs_to_jiffies(timeout));
 	}
 
 	return 0;
@@ -2594,9 +2594,9 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 {
 	if (!pci_priv)
 		return;
-#ifdef SUPPORT_WLAN_EN	
 	cnss_fatal_err("Timeout waiting for FW ready indication\n");
-
+	clear_bit(CNSS_DRIVER_LOADING, &pci_priv->plat_priv->driver_state);
+#ifdef SUPPORT_WLAN_EN	
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 			       CNSS_REASON_TIMEOUT);
 #endif

@@ -892,7 +892,7 @@ static inline void mhi_dealloc_device(struct mhi_controller *mhi_cntrl,
 	kfree(mhi_dev);
 }
 int mhi_destroy_device(struct device *dev, void *data);
-void mhi_create_devices(struct mhi_controller *mhi_cntrl);
+int mhi_create_devices(struct mhi_controller *mhi_cntrl);
 int mhi_alloc_bhie_table(struct mhi_controller *mhi_cntrl,
 			 struct image_info **image_info, size_t alloc_size);
 void mhi_free_bhie_table(struct mhi_controller *mhi_cntrl,
