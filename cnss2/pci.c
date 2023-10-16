@@ -1469,7 +1469,7 @@ void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv)
 	}
 
 	if (pci_dev->device == QCA6174_DEVICE_ID)
-		disable_irq(pci_dev->irq);
+		disable_irq_nosync(pci_dev->irq);
 
 	/* Notify bus related event. Now for all supported chips.
 	 * Here PCIe LINK_DOWN notification taken care.
@@ -6632,26 +6632,22 @@ static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
 }
 #endif
 
-static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev)
+static int cnss_pci_set_gen2_speed(struct cnss_plat_data *plat_priv, u32 rc_num)
 {
-	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
-	int rc_num = pci_dev->bus->domain_nr;
-	struct cnss_plat_data *plat_priv;
-	int ret = 0;
-	bool suspend_pwroff = cnss_should_suspend_pwroff(pci_dev);
+	int ret;
 
-	plat_priv = cnss_get_plat_priv_by_rc_num(rc_num);
+	/* Always set initial target PCIe link speed to Gen2 for QCA6490 device
+	 * since there may be link issues if it boots up with Gen3 link speed.
+	 * Device is able to change it later at any time. It will be rejected
+	 * if requested speed is higher than the one specified in PCIe DT.
+	 */
+	ret = cnss_pci_set_max_link_speed(plat_priv->bus_priv, rc_num,
+					  PCI_EXP_LNKSTA_CLS_5_0GB);
+	if (ret && ret != -EPROBE_DEFER)
+		cnss_pr_err("Failed to set max PCIe RC%x link speed to Gen2, err = %d\n",
+				rc_num, ret);
 
-	if (suspend_pwroff) {
-		ret = cnss_suspend_pci_link(pci_priv);
-		if (ret)
-			cnss_pr_err("Failed to suspend PCI link, err = %d\n",
-				    ret);
-		cnss_power_off_device(plat_priv);
-	} else {
-		cnss_pr_dbg("bus suspend and dev power off disabled for device [0x%x]\n",
-			    pci_dev->device);
-	}
+	return ret;
 }
 
 #ifdef CONFIG_CNSS2_ENUM_WITH_LOW_SPEED
@@ -6674,21 +6670,32 @@ cnss_pci_restore_rc_speed(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
 	/* if not Genoa, do not restore rc speed */
-	if (pci_priv->device_id != QCN7605_DEVICE_ID) {
+	if (pci_priv->device_id == QCA6490_DEVICE_ID) {
+		cnss_pci_set_gen2_speed(plat_priv, plat_priv->rc_num);
+	} else if (pci_priv->device_id != QCN7605_DEVICE_ID) {
 		/* The request 0 will reset maximum GEN speed to default */
 		ret = cnss_pci_set_max_link_speed(pci_priv, plat_priv->rc_num, 0);
 		if (ret)
 			cnss_pr_err("Failed to reset max PCIe RC%x link speed to default, err = %d\n",
 				     plat_priv->rc_num, ret);
-
-		/* suspend/resume will trigger retain to re-establish link speed */
-		ret = cnss_suspend_pci_link(pci_priv);
-		if (ret)
-			cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
-
-		ret = cnss_resume_pci_link(pci_priv);
-		cnss_pr_err("Failed to resume PCI link, err = %d\n", ret);
 	}
+}
+
+static void
+cnss_pci_link_retrain_trigger(struct cnss_pci_data *pci_priv)
+{
+	int ret;
+
+	/* suspend/resume will trigger retain to re-establish link speed */
+	ret = cnss_suspend_pci_link(pci_priv);
+	if (ret)
+		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
+
+	ret = cnss_resume_pci_link(pci_priv);
+	if (ret)
+		cnss_pr_err("Failed to resume PCI link, err = %d\n", ret);
+
+	cnss_pci_get_link_status(pci_priv);
 }
 #else
 static void
@@ -6700,7 +6707,35 @@ static void
 cnss_pci_restore_rc_speed(struct cnss_pci_data *pci_priv)
 {
 }
+
+static void
+cnss_pci_link_retrain_trigger(struct cnss_pci_data *pci_priv)
+{
+}
 #endif
+
+static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev)
+{
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
+	int rc_num = pci_dev->bus->domain_nr;
+	struct cnss_plat_data *plat_priv;
+	int ret = 0;
+	bool suspend_pwroff = cnss_should_suspend_pwroff(pci_dev);
+
+	plat_priv = cnss_get_plat_priv_by_rc_num(rc_num);
+
+	if (suspend_pwroff) {
+		ret = cnss_suspend_pci_link(pci_priv);
+		if (ret)
+			cnss_pr_err("Failed to suspend PCI link, err = %d\n",
+				    ret);
+		cnss_power_off_device(plat_priv);
+	} else {
+		cnss_pr_dbg("bus suspend and dev power off disabled for device [0x%x]\n",
+			    pci_dev->device);
+		cnss_pci_link_retrain_trigger(pci_priv);
+	}
+}
 
 static int cnss_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
@@ -6929,17 +6964,8 @@ static int cnss_pci_enumerate(struct cnss_plat_data *plat_priv, u32 rc_num)
 {
 	int ret, retry = 0;
 
-	/* Always set initial target PCIe link speed to Gen2 for QCA6490 device
-	 * since there may be link issues if it boots up with Gen3 link speed.
-	 * Device is able to change it later at any time. It will be rejected
-	 * if requested speed is higher than the one specified in PCIe DT.
-	 */
 	if (plat_priv->device_id == QCA6490_DEVICE_ID) {
-		ret = cnss_pci_set_max_link_speed(plat_priv->bus_priv, rc_num,
-						  PCI_EXP_LNKSTA_CLS_5_0GB);
-		if (ret && ret != -EPROBE_DEFER)
-			cnss_pr_err("Failed to set max PCIe RC%x link speed to Gen2, err = %d\n",
-				    rc_num, ret);
+		cnss_pci_set_gen2_speed(plat_priv, rc_num);
 	} else {
 		cnss_pci_downgrade_rc_speed(plat_priv, rc_num);
 	}
