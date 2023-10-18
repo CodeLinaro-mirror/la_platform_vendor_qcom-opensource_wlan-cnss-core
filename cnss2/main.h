@@ -25,7 +25,6 @@
 #include <linux/time64.h>
 #if IS_ENABLED(CONFIG_MSM_QMP)
 #include <linux/mailbox/qmp.h>
-#include <linux/soc/qcom/qcom_aoss.h>
 #endif
 #ifdef CONFIG_CNSS_OUT_OF_TREE
 #include "cnss2.h"
@@ -280,7 +279,7 @@ enum cnss_fw_dump_type {
 };
 
 struct cnss_dump_entry {
-	u32 type;
+	int type;
 	u32 entry_start;
 	u32 entry_num;
 };
@@ -548,6 +547,7 @@ struct cnss_plat_data {
 	u32 fw_mem_seg_len;
 	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
 	struct cnss_fw_mem m3_mem;
+	struct cnss_fw_mem tme_lite_mem;
 	struct cnss_fw_mem *cal_mem;
 	struct cnss_fw_mem aux_mem;
 	u64 cal_time;
@@ -566,6 +566,7 @@ struct cnss_plat_data {
 	struct mutex dev_lock; /* mutex for register access through debugfs */
 	struct mutex driver_ops_lock; /* mutex for external driver ops */
 	struct cnss_wlan_driver *driver_ops;
+	u32 supported_link_speed;
 	u32 device_freq_hz;
 	u32 diag_reg_read_addr;
 	u32 diag_reg_read_mem_type;
@@ -743,4 +744,8 @@ int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num);
 bool cnss_check_driver_loading_allowed(void);
 int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv);
 void cnss_recovery_handler(struct cnss_plat_data *plat_priv);
+size_t cnss_get_platform_name(struct cnss_plat_data *plat_priv,
+			      char *buf, const size_t buf_len);
+int cnss_iommu_map(struct iommu_domain *domain, unsigned long iova,
+		   phys_addr_t paddr, size_t size, int prot);
 #endif /* _CNSS_MAIN_H */
