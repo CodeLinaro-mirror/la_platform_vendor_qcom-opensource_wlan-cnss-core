@@ -479,6 +479,9 @@ static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 int cnss_debugfs_create(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
+#ifdef REMOVE_DEBUGFS
+	return ret;
+#endif
 	struct dentry *root_dentry;
 
 	root_dentry = debugfs_create_dir("cnss", 0);
@@ -503,7 +506,9 @@ out:
 
 void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv)
 {
+#ifndef REMOVE_DEBUGFS
 	debugfs_remove_recursive(plat_priv->root_dentry);
+#endif
 }
 
 #ifdef CONFIG_ARCH_QCOM
