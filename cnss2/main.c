@@ -479,7 +479,7 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 
 	if (test_bit(CNSS_FW_BOOT_RECOVERY, &plat_priv->driver_state)) {
 		clear_bit(CNSS_FW_BOOT_RECOVERY, &plat_priv->driver_state);
-		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
+		//clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
 	}
 
 	if (test_bit(ENABLE_WALTEST, &plat_priv->ctrl_params.quirks)) {

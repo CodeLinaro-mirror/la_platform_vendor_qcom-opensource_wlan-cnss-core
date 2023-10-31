@@ -655,7 +655,7 @@ int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv)
 		return -ENODEV;
 
 	plat_priv = pci_priv->plat_priv;
-
+	cnss_pr_info("call driver probe, driver_state 0x%x\n", plat_priv->driver_state);
 	if (test_bit(CNSS_DRIVER_DEBUG, &plat_priv->driver_state)) {
 		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
 		cnss_pr_dbg("Skip driver probe\n");
@@ -670,6 +670,7 @@ int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv)
 
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
 	    test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state)) {
+		cnss_pr_info("call driver probe, reinit\n");
 		ret = pci_priv->driver_ops->reinit(pci_priv->pci_dev,
 						   pci_priv->pci_device_id);
 		if (ret) {
@@ -680,6 +681,7 @@ int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv)
 		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
 		complete(&plat_priv->recovery_complete);
 	} else if (test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state)) {
+		cnss_pr_info("call driver probe, probe\n");
 		ret = pci_priv->driver_ops->probe(pci_priv->pci_dev,
 						  pci_priv->pci_device_id);
 		if (ret) {
@@ -1247,10 +1249,14 @@ retry:
 	if (ret) {
 		cnss_fatal_err("Failed to start MHI, err = %d\n", ret);
 		CNSS_ASSERT(0);
-		if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
+		if (//!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
 		    !pci_priv->pci_link_down_ind && timeout)
-			mod_timer(&plat_priv->fw_boot_timer,
-				  jiffies + msecs_to_jiffies(timeout));
+			{
+				cnss_pr_info("setup fw boot timer, timeout = %d\n", timeout);
+				mod_timer(&plat_priv->fw_boot_timer,
+					  jiffies + msecs_to_jiffies(timeout));
+	    	}
+		
 		return 0;
 	}
 
@@ -2596,11 +2602,11 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 		return;
 	cnss_fatal_err("Timeout waiting for FW ready indication\n");
 	clear_bit(CNSS_DRIVER_LOADING, &pci_priv->plat_priv->driver_state);
-#ifdef SUPPORT_WLAN_EN	
-	cnss_schedule_recovery(&pci_priv->pci_dev->dev,
-			       CNSS_REASON_TIMEOUT);
+#ifndef SUPPORT_WLAN_EN	
+	mhi_pcie_sw_reset(pci_priv->mhi_ctrl);
 #endif
-				   
+	cnss_schedule_recovery(&pci_priv->pci_dev->dev,
+			       CNSS_REASON_TIMEOUT);				   
 }
 
 int cnss_pci_get_iova(struct cnss_pci_data *pci_priv, u64 *addr, u64 *size)

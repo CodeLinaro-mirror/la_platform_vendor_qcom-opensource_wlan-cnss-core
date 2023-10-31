@@ -1701,7 +1701,7 @@ int mhi_force_rddm_mode(struct mhi_controller *mhi_cntrl)
 	return ret;
 }
 EXPORT_SYMBOL(mhi_force_rddm_mode);
-#if 0
+
 #define PCIE_TXVECDB (0x360)
 #define PCIE_TXVECSTATUS (0x368)
 #define PCIE_RXVECDB (0x394)
@@ -1878,7 +1878,7 @@ void mhi_set_pcie_soc_global_reset(struct mhi_controller *mhi_cntrl)
 
 
 	/* TODO: exact time to sleep is uncertain */
-	delay = 10;
+	delay = 20;
 	mhi_mdelay(delay);
 
 	/* Need to toggle V bit back otherwise stuck in reset status */
@@ -1936,4 +1936,3 @@ void mhi_pcie_sw_reset(struct mhi_controller *mhi_cntrl)
 	mhi_set_pcie_mhictrl_reset(mhi_cntrl);
 }
 
-#endif

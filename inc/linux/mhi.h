@@ -883,6 +883,13 @@ void mhi_debug_reg_dump(struct mhi_controller *mhi_cntrl);
  */
 char *mhi_get_restart_reason(const char *name);
 
+/**
+ * mhi_pcie_sw_reset - do pcie sw reset
+ * @mhi_cntrl: MHI controller
+ */
+void mhi_pcie_sw_reset(struct mhi_controller *mhi_cntrl);
+
+
 #ifndef CONFIG_ARCH_QCOM
 
 #ifdef CONFIG_MHI_DEBUG
