@@ -529,7 +529,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	remaining = fw_entry->size;
 
 bypass_bdf:
-	cnss_pr_dbg("Downloading BDF: %s, size: %u\n", filename, remaining);
+	cnss_pr_info("Downloading BDF: %s, size: %u\n", filename, remaining);
 
 	while (remaining) {
 		req->valid = 1;
