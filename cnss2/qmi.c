@@ -52,6 +52,12 @@
 #define QMI_WLFW_MAC_READY_TIMEOUT_MS	50
 #define QMI_WLFW_MAC_READY_MAX_RETRY	200
 
+enum nm_modem_bit {
+	SLEEP_CLOCK_SELECT_INTERNAL_BIT = BIT(1),
+	HOST_CSTATE_BIT = BIT(2),
+};
+
+
 #ifdef CONFIG_CNSS2_DEBUG
 static bool ignore_qmi_failure;
 #define CNSS_QMI_ASSERT() CNSS_ASSERT(ignore_qmi_failure)
@@ -257,6 +263,15 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	req->cal_done_valid = 1;
 	req->cal_done = plat_priv->cal_done;
 	cnss_pr_dbg("Calibration done is %d\n", plat_priv->cal_done);
+
+#ifdef CONFIG_WLAN_INTERNAL_SLEEP_CLOCK
+		req->nm_modem_valid = 1;
+		/* Notify firmware about the sleep clock selection,
+		 * nm_modem_bit[1] is used for this purpose.
+		 */
+		req->nm_modem |= SLEEP_CLOCK_SELECT_INTERNAL_BIT;
+		cnss_pr_info("internal sleep clock selected %d\n", req.nm_modem);
+#endif
 
 	if (!cnss_bus_get_iova(plat_priv, &iova_start, &iova_size) &&
 	    !cnss_bus_get_iova_ipa(plat_priv, &iova_ipa_start,
