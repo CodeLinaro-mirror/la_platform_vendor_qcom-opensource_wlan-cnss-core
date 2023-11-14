@@ -44,7 +44,10 @@
 #include <linux/remoteproc/qcom_rproc.h>
 #include <linux/soc/qcom/pdr.h>
 #include <linux/remoteproc.h>
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0))
 #include <trace/hooks/remoteproc.h>
+#endif
 #ifdef SLATE_MODULE_ENABLED
 #include <linux/soc/qcom/slatecom_interface.h>
 #include <linux/soc/qcom/slate_events_bridge_intf.h>
@@ -162,7 +165,8 @@ static ssize_t icnss_sysfs_store(struct kobject *kobj,
 	icnss_pr_dbg("Received shutdown indication");
 
 	atomic_set(&priv->is_shutdown, true);
-	if (priv->wpss_supported && priv->device_id == ADRASTEA_DEVICE_ID)
+	if ((priv->wpss_supported || priv->rproc_fw_download) &&
+	    priv->device_id == ADRASTEA_DEVICE_ID)
 		icnss_wpss_unload(priv);
 	return count;
 }
@@ -1589,15 +1593,22 @@ out:
 static int icnss_fw_crashed(struct icnss_priv *priv,
 			    struct icnss_event_pd_service_down_data *event_data)
 {
+	struct icnss_uevent_fw_down_data fw_down_data = {0};
+
 	icnss_pr_dbg("FW crashed, state: 0x%lx\n", priv->state);
 
 	set_bit(ICNSS_PD_RESTART, &priv->state);
-	clear_bit(ICNSS_FW_READY, &priv->state);
 
 	icnss_pm_stay_awake(priv);
 
-	if (test_bit(ICNSS_DRIVER_PROBED, &priv->state))
-		icnss_call_driver_uevent(priv, ICNSS_UEVENT_FW_CRASHED, NULL);
+	if (test_bit(ICNSS_DRIVER_PROBED, &priv->state) &&
+	    test_bit(ICNSS_FW_READY, &priv->state)) {
+		clear_bit(ICNSS_FW_READY, &priv->state);
+		fw_down_data.crashed = true;
+		icnss_call_driver_uevent(priv,
+					 ICNSS_UEVENT_FW_DOWN,
+					 &fw_down_data);
+	}
 
 	if (event_data && event_data->fw_rejuvenate)
 		wlfw_rejuvenate_ack_send_sync_msg(priv);
@@ -2668,7 +2679,11 @@ static int icnss_ramdump_devnode_init(struct icnss_priv *priv)
 {
 	int ret = 0;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0))
 	priv->icnss_ramdump_class = class_create(THIS_MODULE, ICNSS_RAMDUMP_NAME);
+#else
+	priv->icnss_ramdump_class = class_create(ICNSS_RAMDUMP_NAME);
+#endif
 	if (IS_ERR_OR_NULL(priv->icnss_ramdump_class)) {
 		ret = PTR_ERR(priv->icnss_ramdump_class);
 		icnss_pr_err("%s:Class create failed for ramdump devices (%d)\n", __func__, ret);
@@ -2831,7 +2846,8 @@ static int icnss_enable_recovery(struct icnss_priv *priv)
 		return 0;
 	}
 
-	icnss_modem_ssr_register_notifier(priv);
+	if (!(priv->rproc_fw_download))
+		icnss_modem_ssr_register_notifier(priv);
 
 	if (priv->is_slate_rfa) {
 		icnss_slate_ssr_register_notifier(priv);
@@ -3120,10 +3136,11 @@ static struct icnss_msi_config msi_config_wcn6750 = {
 };
 
 static struct icnss_msi_config msi_config_wcn6450 = {
-	.total_vectors = 10,
-	.total_users = 1,
+	.total_vectors = 14,
+	.total_users = 2,
 	.users = (struct icnss_msi_user[]) {
-		{ .name = "CE", .num_vectors = 10, .base_vector = 0 },
+		{ .name = "CE", .num_vectors = 12, .base_vector = 0 },
+		{ .name = "DP", .num_vectors = 2, .base_vector = 12 },
 	},
 };
 
@@ -3696,6 +3713,20 @@ struct iommu_domain *icnss_smmu_get_domain(struct device *dev)
 }
 EXPORT_SYMBOL(icnss_smmu_get_domain);
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0))
+int icnss_iommu_map(struct iommu_domain *domain,
+				   unsigned long iova, phys_addr_t paddr, size_t size, int prot)
+{
+		return iommu_map(domain, iova, paddr, size, prot);
+}
+#else
+int icnss_iommu_map(struct iommu_domain *domain,
+				   unsigned long iova, phys_addr_t paddr, size_t size, int prot)
+{
+		return iommu_map(domain, iova, paddr, size, prot, GFP_KERNEL);
+}
+#endif
+
 int icnss_smmu_map(struct device *dev,
 		   phys_addr_t paddr, uint32_t *iova_addr, size_t size)
 {
@@ -3739,7 +3770,7 @@ int icnss_smmu_map(struct device *dev,
 
 	icnss_pr_dbg("IOMMU Map: iova %lx, len %zu\n", iova, len);
 
-	ret = iommu_map(priv->iommu_domain, iova,
+	ret = icnss_iommu_map(priv->iommu_domain, iova,
 			rounddown(paddr, PAGE_SIZE), len,
 			flag);
 	if (ret) {
@@ -4069,7 +4100,7 @@ static ssize_t wpss_boot_store(struct device *dev,
 	struct icnss_priv *priv = dev_get_drvdata(dev);
 	int wpss_rproc = 0;
 
-	if (!priv->wpss_supported)
+	if (!priv->wpss_supported && !priv->rproc_fw_download)
 		return count;
 
 	if (sscanf(buf, "%du", &wpss_rproc) != 1) {
@@ -4151,6 +4182,39 @@ static void icnss_remove_sysfs_link(struct icnss_priv *priv)
 	sysfs_remove_link(kernel_kobj, "icnss");
 }
 
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
+union icnss_device_group_devres {
+	const struct attribute_group *group;
+};
+
+static void devm_icnss_group_remove(struct device *dev, void *res)
+{
+	union icnss_device_group_devres *devres = res;
+	const struct attribute_group *group = devres->group;
+
+	icnss_pr_dbg("%s: removing group %p\n", __func__, group);
+	sysfs_remove_group(&dev->kobj, group);
+}
+
+static int devm_icnss_group_match(struct device *dev, void *res, void *data)
+{
+	return ((union icnss_device_group_devres *)res) == data;
+}
+
+static void icnss_devm_device_remove_group(struct icnss_priv *priv)
+{
+	WARN_ON(devres_release(&priv->pdev->dev,
+			       devm_icnss_group_remove, devm_icnss_group_match,
+			       (void *)&icnss_attr_group));
+}
+#else
+static void icnss_devm_device_remove_group(struct icnss_priv *priv)
+{
+	devm_device_remove_group(&priv->pdev->dev, &icnss_attr_group);
+}
+#endif
+
 static int icnss_sysfs_create(struct icnss_priv *priv)
 {
 	int ret = 0;
@@ -4171,7 +4235,7 @@ static int icnss_sysfs_create(struct icnss_priv *priv)
 
 	return 0;
 remove_icnss_group:
-	devm_device_remove_group(&priv->pdev->dev, &icnss_attr_group);
+	icnss_devm_device_remove_group(priv);
 out:
 	return ret;
 }
@@ -4180,7 +4244,7 @@ static void icnss_sysfs_destroy(struct icnss_priv *priv)
 {
 	icnss_destroy_shutdown_sysfs(priv);
 	icnss_remove_sysfs_link(priv);
-	devm_device_remove_group(&priv->pdev->dev, &icnss_attr_group);
+	icnss_devm_device_remove_group(priv);
 }
 
 static int icnss_resource_parse(struct icnss_priv *priv)
@@ -4561,6 +4625,10 @@ static void icnss_init_control_params(struct icnss_priv *priv)
 				  "bdf-download-support"))
 		priv->bdf_download_support = true;
 
+	if (of_property_read_bool(priv->pdev->dev.of_node,
+				  "rproc-fw-download"))
+		priv->rproc_fw_download = true;
+
 	if (priv->bdf_download_support && priv->device_id == ADRASTEA_DEVICE_ID)
 		priv->ctrl_params.bdf_type = ICNSS_BDF_BIN;
 }
@@ -4598,6 +4666,7 @@ static inline bool icnss_use_nv_mac(struct icnss_priv *priv)
 				     "use-nv-mac");
 }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0))
 static void rproc_restart_level_notifier(void *data, struct rproc *rproc)
 {
 	struct icnss_subsys_restart_level_data *restart_level_data;
@@ -4619,6 +4688,7 @@ static void rproc_restart_level_notifier(void *data, struct rproc *rproc)
 					0, restart_level_data);
 	}
 }
+#endif
 
 #if IS_ENABLED(CONFIG_WCNSS_MEM_PRE_ALLOC)
 static void icnss_initialize_mem_pool(unsigned long device_id)
@@ -4637,6 +4707,32 @@ static void icnss_deinitialize_mem_pool(void)
 {
 }
 #endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0))
+static void register_rproc_restart_level_notifier(void)
+{
+	register_trace_android_vh_rproc_recovery_set(rproc_restart_level_notifier, NULL);
+}
+#else
+static void register_rproc_restart_level_notifier(void)
+{
+	return;
+}
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0))
+static void unregister_rproc_restart_level_notifier(void)
+{
+	unregister_trace_android_vh_rproc_recovery_set(rproc_restart_level_notifier, NULL);
+}
+#else
+static void unregister_rproc_restart_level_notifier(void)
+{
+	return;
+}
+#endif
+
+
 
 static int icnss_probe(struct platform_device *pdev)
 {
@@ -4756,7 +4852,7 @@ static int icnss_probe(struct platform_device *pdev)
 		icnss_aop_interface_init(priv);
 		set_bit(ICNSS_COLD_BOOT_CAL, &priv->state);
 		priv->bdf_download_support = true;
-		register_trace_android_vh_rproc_recovery_set(rproc_restart_level_notifier, NULL);
+		register_rproc_restart_level_notifier();
 	}
 
 	if (priv->wpss_supported) {
@@ -4766,8 +4862,10 @@ static int icnss_probe(struct platform_device *pdev)
 		priv->use_nv_mac = icnss_use_nv_mac(priv);
 		icnss_pr_dbg("NV MAC feature is %s\n",
 			     priv->use_nv_mac ? "Mandatory":"Not Mandatory");
-		INIT_WORK(&wpss_loader, icnss_wpss_load);
 	}
+
+	if (priv->wpss_supported || priv->rproc_fw_download)
+		INIT_WORK(&wpss_loader, icnss_wpss_load);
 
 	timer_setup(&priv->recovery_timer,
 		    icnss_recovery_timeout_hdlr, 0);
@@ -4865,7 +4963,7 @@ static int icnss_remove(struct platform_device *pdev)
 	    priv->device_id == WCN6450_DEVICE_ID) {
 		icnss_genl_exit();
 		icnss_runtime_pm_deinit(priv);
-		unregister_trace_android_vh_rproc_recovery_set(rproc_restart_level_notifier, NULL);
+		unregister_rproc_restart_level_notifier();
 		complete_all(&priv->smp2p_soc_wake_wait);
 		icnss_destroy_ramdump_device(priv->m3_dump_phyareg);
 		icnss_destroy_ramdump_device(priv->m3_dump_phydbg);
