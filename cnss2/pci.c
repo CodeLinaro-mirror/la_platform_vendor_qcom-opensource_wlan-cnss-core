@@ -152,6 +152,10 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define LINK_TRAINING_RETRY_MAX_TIMES		3
 
 static void cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv);
+static void cnss_pci_update_link_event(struct cnss_pci_data *pci_priv,
+				       enum cnss_bus_event_type type,
+				       void *data);
+
 
 static struct cnss_pci_reg ce_src[] = {
 	{ "SRC_RING_BASE_LSB", QCA6390_CE_SRC_RING_BASE_LSB_OFFSET },
@@ -505,6 +509,8 @@ int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
 	ret = cnss_set_pci_link(pci_priv, PCI_LINK_UP);
 	if (ret) {
 		ret = -EAGAIN;
+		cnss_pci_update_link_event(pci_priv,
+					   BUS_EVENT_PCI_LINK_RESUME_FAIL, NULL);
 		goto out;
 	}
 
@@ -560,6 +566,18 @@ void cnss_pci_allow_l1(struct device *dev)
 #endif	
 }
 EXPORT_SYMBOL(cnss_pci_allow_l1);
+
+static void cnss_pci_update_link_event(struct cnss_pci_data *pci_priv,
+				       enum cnss_bus_event_type type,
+				       void *data)
+{
+	struct cnss_bus_event bus_event;
+
+	bus_event.etype = type;
+	bus_event.event_data = data;
+	cnss_pci_call_driver_uevent(pci_priv, CNSS_BUS_EVENT, &bus_event);
+}
+					   
 
 int cnss_pci_link_down(struct device *dev)
 {
@@ -2911,7 +2929,6 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	int num_vectors;
 	struct cnss_msi_config *msi_config;
-	struct msi_desc *msi_desc;
 
 	if (cnss_pci_is_force_one_msi(pci_priv)) {
 		ret = cnss_pci_get_one_msi_assignment(pci_priv);
@@ -3311,6 +3328,26 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 	}
 
 	return 0;
+}
+
+int cnss_pci_call_driver_uevent(struct cnss_pci_data *pci_priv,
+						enum cnss_driver_status status, void *data)
+{
+	struct cnss_uevent_data uevent_data;
+	struct cnss_wlan_driver *driver_ops;
+
+	driver_ops = pci_priv->driver_ops;
+	if (!driver_ops || !driver_ops->update_event) {
+	cnss_pr_dbg("Hang event driver ops is NULL\n");
+		return -EINVAL;
+	}
+
+	cnss_pr_dbg("Calling driver uevent: %d\n", status);
+
+	uevent_data.status = status;
+	uevent_data.data = data;
+
+	return driver_ops->update_event(pci_priv->pci_dev, &uevent_data);
 }
 
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)

@@ -816,7 +816,7 @@ int mhi_create_devices(struct mhi_controller *mhi_cntrl)
 	int i;
 	struct mhi_chan *mhi_chan;
 	struct mhi_device *mhi_dev;
-	int ret;
+	int ret = 0;
 
 	mhi_chan = mhi_cntrl->mhi_chan;
 	for (i = 0; i < mhi_cntrl->max_chan; i++, mhi_chan++) {
