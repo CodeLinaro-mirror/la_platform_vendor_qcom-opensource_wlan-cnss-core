@@ -1011,7 +1011,7 @@ err_req_fw:
 	if (!(bdf_type == CNSS_BDF_REGDB ||
 	      test_bit(CNSS_IN_REBOOT, &plat_priv->driver_state) ||
 	      ret == -EAGAIN))
-		CNSS_QMI_ASSERT();
+		cnss_pr_err("Failed to request firmware!");
 	kfree(req);
 	kfree(resp);
 	return ret;

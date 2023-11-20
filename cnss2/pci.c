@@ -3226,6 +3226,14 @@ retry:
 		cnss_fatal_err("Failed to start MHI, err = %d\n", ret);
 		if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
 		    !pci_priv->pci_link_down_ind && timeout) {
+			if (ret == -ETIMEDOUT){
+				/* When load firmware fail or timeout, raise
+				 * an error message and close MHI instead of
+				 * triggering kernel panic or SSR in this case
+				 */
+				cnss_fatal_err("Start MHI timeout!");
+				goto power_off;
+			}
 			/* Start recovery directly for MHI start failures */
 			cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 					       CNSS_REASON_DEFAULT);
