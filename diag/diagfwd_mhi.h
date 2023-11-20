@@ -30,8 +30,8 @@
 #include <linux/platform_device.h>
 #include <linux/tty.h>
 #include <linux/delay.h>
-#ifdef CONFIG_ARCH_QCOM
-#include <linux/ipc_logging.h>
+#ifdef CONFIG_IPC_LOGGING
+#include "ipc_logging.h"
 #endif
 #include "msm_mhi.h"
 

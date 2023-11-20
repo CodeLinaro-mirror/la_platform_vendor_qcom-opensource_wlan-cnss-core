@@ -2062,7 +2062,6 @@ static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 offset)
 static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
                              u32 offset, u32 *val)
 {
-        int ret;
         struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
 #if defined(CONFIG_PCI_MSM)
@@ -2097,10 +2096,10 @@ static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
         return 0;
 }
 
+#if 0
 static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
                               u32 val)
 {
-        int ret;
         struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 #if defined(CONFIG_PCI_MSM)
         if (!in_interrupt() && !irqs_disabled()) {
@@ -2130,6 +2129,7 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
 
         return 0;
 }
+#endif 
 
 /**
  * cnss_pci_dump_bl_sram_mem - Dump WLAN device bootloader debug log
@@ -2505,8 +2505,8 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 
 disable_msi:
 	pci_disable_msi(pci_priv->pci_dev);
-reset_msi_config:
-	pci_priv->msi_config = NULL;
+//reset_msi_config:
+//	pci_priv->msi_config = NULL;
 out:
 	return ret;
 }
@@ -3002,7 +3002,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_device *mhi_dev = &pci_priv->mhi_dev;
-	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_dev->mhi_dev_ctxt;
+	//struct mhi_device_ctxt *mhi_dev_ctxt = mhi_dev->mhi_dev_ctxt;
 #ifndef CONFIG_NAPIER_X86
 	mhi_dev->dev = &pci_priv->plat_priv->plat_dev->dev;
 #endif
@@ -3535,7 +3535,7 @@ void cnss_pci_shutdown(struct pci_dev *pci_dev)
 	struct cnss_plat_data *plat_priv;
 
 	if (pci_priv) {
-		struct mhi_device *mhi_dev = &pci_priv->mhi_dev;
+		//struct mhi_device *mhi_dev = &pci_priv->mhi_dev;
 		plat_priv = pci_priv->plat_priv;
 		set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 		/*

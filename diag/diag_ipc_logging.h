@@ -13,8 +13,8 @@
 #ifndef DIAGIPCLOG_H
 #define DIAGIPCLOG_H
 
-#ifdef CONFIG_ARCH_QCOM
-#include <linux/ipc_logging.h>
+#ifdef CONFIG_IPC_LOGGING
+#include "ipc_logging.h"
 #endif
 
 #define DIAG_IPC_LOG_PAGES	50

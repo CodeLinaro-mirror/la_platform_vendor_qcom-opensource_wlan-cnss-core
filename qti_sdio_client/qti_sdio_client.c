@@ -37,8 +37,8 @@
 #include <linux/delay.h>
 #include <linux/types.h>
 #include <uapi/linux/major.h>
-#ifndef CONFIG_NAPIER_X86
-#include <linux/ipc_logging.h>
+#ifdef CONFIG_IPC_LOGGING
+#include "ipc_logging.h"
 #endif
 #include <linux/kthread.h>
 #include <linux/completion.h>
@@ -90,7 +90,7 @@ module_param(ipc_log, bool, S_IRUGO | S_IWUSR | S_IWGRP);
 static DEFINE_MUTEX(work_lock);
 static spinlock_t list_lock;
 
-#ifdef CONFIG_NAPIER_X86
+#ifndef CONFIG_IPC_LOGGING
 #define qlog(qsb, _msg, ...) do {                                            \
         if (to_console)                                                      \
                 pr_err("[%s] " _msg, __func__, ##__VA_ARGS__);   \
@@ -732,7 +732,7 @@ int qti_client_debug_init(int id)
 	snprintf(name, sizeof(name), "%s_%s", "qcn_client",
 			(char *)(qsb->name + 15));
 
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_IPC_LOGGING
 	qsb->ipc_log_ctxt = ipc_log_context_create(QCN_IPC_LOG_PAGES, name, 0);
 	if (!qsb->ipc_log_ctxt) {
 		pr_err("failed to initialize ipc logging for client_%d", id);
@@ -756,7 +756,7 @@ void qti_client_debug_deinit(int id)
 	}
 
 	qsb = qsbdev[id];
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_IPC_LOGGING
 	if (qsb && qsb->ipc_log_ctxt) {
 		ipc_log_context_destroy(qsb->ipc_log_ctxt);
 		qsb->ipc_log_ctxt = NULL;
