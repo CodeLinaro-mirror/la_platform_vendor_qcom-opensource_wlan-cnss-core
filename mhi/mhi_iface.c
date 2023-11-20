@@ -200,6 +200,8 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 	u32 domain = pci_domain_nr(pcie_device->bus);
 	u32 bus = pcie_device->bus->number;
 	u32 slot = PCI_SLOT(pcie_device->devfn);
+#endif
+#ifdef CONFIG_IPC_LOGGING
 	char node[32];
 #endif
 	u32 dev_id = pcie_device->device;
@@ -231,12 +233,15 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 	if (!mhi_dev_ctxt)
 		return -EPROBE_DEFER;
 
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 	snprintf(node, sizeof(node), "mhi_%04x_%02u.%02u.%02u",
 		 core->dev_id, core->domain, core->bus, core->slot);
+
 	mhi_dev_ctxt->mhi_ipc_log =
 		ipc_log_context_create(MHI_IPC_LOG_PAGES, node, 0);
+#endif
 
+#ifdef CONFIG_ARCH_QCOM
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 		"Processing Domain:%02u Bus:%04u dev:0x%04x slot:%04u\n",
 		domain, bus, dev_id, slot);
@@ -657,7 +662,7 @@ static void __exit mhi_exit(void)
 
 static int __exit mhi_plat_remove(struct platform_device *pdev)
 {
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 	struct mhi_device_ctxt *mhi_dev_ctxt = platform_get_drvdata(pdev);
 	ipc_log_context_destroy(mhi_dev_ctxt->mhi_ipc_log);
 #endif

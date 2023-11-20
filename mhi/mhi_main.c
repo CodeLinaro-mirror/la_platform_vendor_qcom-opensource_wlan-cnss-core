@@ -2040,10 +2040,10 @@ int mhi_register_device(struct mhi_device *mhi_device,
 	/* perhaps we've not probed yet */
 	if (!mhi_dev_ctxt)
 		return -EPROBE_DEFER;
-
+	
+#ifdef CONFIG_IPC_LOGGING
 	snprintf(node, sizeof(node), "mhi_%04x_%02u.%02u.%02u",
 		 core->dev_id, core->domain, core->bus, core->slot);
-#ifdef CONFIG_ARCH_QCOM
 	mhi_dev_ctxt->mhi_ipc_log =
 		ipc_log_context_create(MHI_IPC_LOG_PAGES, node, 0);
 #endif

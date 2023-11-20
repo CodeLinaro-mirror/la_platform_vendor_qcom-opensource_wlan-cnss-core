@@ -12,14 +12,14 @@
 
 #ifndef _CNSS_DEBUG_H
 #define _CNSS_DEBUG_H
-#ifdef CONFIG_ARCH_QCOM
-#include <linux/ipc_logging.h>
+#ifdef CONFIG_IPC_LOGGING
+#include "ipc_logging.h"
 #endif
 #include <linux/printk.h>
-
+ 
 extern void *cnss_ipc_log_context;
 
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 #define cnss_ipc_log_string(_x...) do {					\
 		if (cnss_ipc_log_context)				\
 			ipc_log_string(cnss_ipc_log_context, _x);	\

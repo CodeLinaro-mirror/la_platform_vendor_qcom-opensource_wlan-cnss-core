@@ -28,8 +28,12 @@
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
 #include <linux/rwsem.h>
+
+#ifdef CONFIG_IPC_LOGGING
+#include "ipc_logging.h"
+#endif
+
 #ifdef CONFIG_ARCH_QCOM
-#include <linux/ipc_logging.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/smem_log.h>
@@ -56,7 +60,7 @@ module_param_named(ipc_router_debug_mask, msm_ipc_router_debug_mask,
 
 #define IPC_RTR_INFO_PAGES 6
 
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 #define IPC_RTR_INFO(log_ctx, x...) do { \
 if (log_ctx) \
 	ipc_log_string(log_ctx, x); \
@@ -3991,7 +3995,7 @@ static void *ipc_router_create_log_ctx(char *name)
 				GFP_KERNEL);
 	if (!sub_log_ctx)
 		return NULL;
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 	sub_log_ctx->log_ctx = ipc_log_context_create(
 				IPC_RTR_INFO_PAGES, name, 0);
 	if (!sub_log_ctx->log_ctx) {
