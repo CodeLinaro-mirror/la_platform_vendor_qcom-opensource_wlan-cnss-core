@@ -77,6 +77,10 @@ ifeq ($(CONFIG_WLAN_INTERNAL_SLEEP_CLOCK),y)
 KBUILD_CPPFLAGS += -DCONFIG_WLAN_INTERNAL_SLEEP_CLOCK
 endif
 
+ifeq ($(CONFIG_IPC_LOGGING),y)
+KBUILD_CPPFLAGS += -DCONFIG_IPC_LOGGING
+endif
+
 ifneq ($(CONFIG_WLAN_CNSS_CORE), y)
 ifeq ($(CONFIG_FULL_CORE_TECH),y)
 obj-$(CONFIG_QRTR) += qrtr/
@@ -94,6 +98,7 @@ CNSS_CORE_BASE=.
 QRTR_DIR := $(CNSS_CORE_BASE)/qrtr
 MHI_DIR := $(CNSS_CORE_BASE)/mhi/core
 QTI_DIR := $(CNSS_CORE_BASE)/qti
+IPCLOG_DIR := $(CNSS_CORE_BASE)/trace
 CNSS_DIR := $(CNSS_CORE_BASE)/cnss2
 CNSS_UTILS_DIR := $(CNSS_CORE_BASE)/cnss_utils
 CNSS_PREALLOC_DIR := $(CNSS_CORE_BASE)/cnss_prealloc
@@ -164,6 +169,12 @@ endif
 	CNSS_UTILS_INC := -I$(CNSS_UTILS_DIR)
 endif
 
+ifneq ($(CONFIG_IPC_LOGGING),)
+	IPCLOG_OBJS := $(IPCLOG_DIR)/ipc_logging.o           \
+				$(IPCLOG_DIR)/ipc_logging_debug.o      
+	IPCLOG_INC := -I$(ROOTDIR)/(IPCLOG_DIR)
+endif
+
 CNSS_PREALLOC_OBJS := $(CNSS_PREALLOC_DIR)/cnss_prealloc.o
 CNSS_PREALLOC_INC := $(CNSS_PREALLOC_DIR)
 
@@ -171,6 +182,7 @@ OBJS := $(INIT_OBJS)
 OBJS += $(QRTR_OBJS)                                                        \
 	    $(MHI_OBJS)                                                     \
 	    $(QMI_HELPERS_OBJS)                                             \
+	    $(IPCLOG_OBJS)                       \
 	    $(CNSS_OBJS)                                                    \
 	    $(CNSS_UTILS_OBJS)                                              \
 	    $(CNSS_PREALLOC_OBJS)
@@ -180,6 +192,7 @@ INCS := $(INIT_INC)
 INCS += $(QRTR_INC)                                                         \
         $(MHI_INC)                                                      \
         $(QMI_HELPERS_INC)                                              \
+        $(IPCLOG_INC)                                                   \
         $(CNSS_INC)                                                     \
         $(CNSS_UTILS_INC)                                               \
         $(CNSS_PREALLOC_INC)
