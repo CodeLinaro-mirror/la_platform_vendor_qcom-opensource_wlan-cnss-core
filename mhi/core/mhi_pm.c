@@ -952,11 +952,23 @@ int mhi_async_power_up(struct mhi_controller *mhi_cntrl)
 		}
 	}
 
+	if (mhi_cntrl->mhi_irq_setup)
+	{
+		MHI_CNTRL_ERR("mhi_irq_setup before, Free irq and retry\n");
+		mhi_deinit_free_irq(mhi_cntrl);
+	}
+	
 	ret = mhi_init_irq_setup(mhi_cntrl);
 	if (ret) {
-		MHI_CNTRL_ERR("Error setting up irq\n");
-		goto error_setup_irq;
+		MHI_CNTRL_ERR("Free irq and retry\n");
+		mhi_deinit_free_irq(mhi_cntrl);
+		ret = mhi_init_irq_setup(mhi_cntrl);
+		if (ret) {
+			MHI_CNTRL_ERR("Error setting up irq\n");
+			goto error_setup_irq;
+		}
 	}
+
 
 	/* setup bhi offset & intvec */
 	write_lock_irq(&mhi_cntrl->pm_lock);

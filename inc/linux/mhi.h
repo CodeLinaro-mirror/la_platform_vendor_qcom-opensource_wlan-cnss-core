@@ -421,6 +421,7 @@ struct mhi_controller {
 	atomic_t write_idx;
 	u32 read_idx;
 	unsigned long irq_flags;
+	bool mhi_irq_setup;
 };
 
 /**

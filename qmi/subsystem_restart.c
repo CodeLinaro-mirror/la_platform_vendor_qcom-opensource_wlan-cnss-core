@@ -1217,8 +1217,9 @@ static void __subsystem_restart_dev(struct subsys_device *dev)
 			panic("Subsystem %s crashed during SSR!", name);
 		}
 	} else
-		WARN(dev->track.state == SUBSYS_OFFLINE,
-			"SSR aborted: %s subsystem not online\n", name);
+		/*WARN(dev->track.state == SUBSYS_OFFLINE,
+			"SSR aborted: %s subsystem not online\n", name);*/
+		pr_info("SSR aborted track->p_state %d, dev->track.state %d\n", track->p_state, dev->track.state);
 	spin_unlock_irqrestore(&track->s_lock, flags);
 }
 

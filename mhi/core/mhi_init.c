@@ -394,6 +394,7 @@ void mhi_deinit_free_irq(struct mhi_controller *mhi_cntrl)
 {
 	int i;
 	struct mhi_event *mhi_event = mhi_cntrl->mhi_event;
+	MHI_LOG("mhi_deinit_free_irq\n");
 
 	for (i = 0; i < mhi_cntrl->total_ev_rings; i++, mhi_event++) {
 		if (!mhi_event->request_irq)
@@ -403,6 +404,7 @@ void mhi_deinit_free_irq(struct mhi_controller *mhi_cntrl)
 	}
 
 	free_irq(mhi_cntrl->irq[0], mhi_cntrl);
+	mhi_cntrl->mhi_irq_setup = false;
 }
 
 int mhi_init_irq_setup(struct mhi_controller *mhi_cntrl)
@@ -411,6 +413,7 @@ int mhi_init_irq_setup(struct mhi_controller *mhi_cntrl)
 	int ret;
 	struct mhi_event *mhi_event = mhi_cntrl->mhi_event;
 	unsigned long irq_flags = IRQF_SHARED | IRQF_NO_SUSPEND;
+	MHI_LOG("mhi_init_irq_setup\n");
 
 	/* if controller driver has set irq_flags, use it */
 	if (mhi_cntrl->irq_flags)
@@ -437,7 +440,7 @@ int mhi_init_irq_setup(struct mhi_controller *mhi_cntrl)
 			goto error_request;
 		}
 	}
-
+	mhi_cntrl->mhi_irq_setup = true;
 	return 0;
 
 error_request:

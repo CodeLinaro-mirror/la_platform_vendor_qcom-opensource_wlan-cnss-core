@@ -26,6 +26,8 @@
 #include "bus.h"
 #include "debug.h"
 #include "genl.h"
+#include "linux/mhi.h"
+#include "pci.h"
 
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
@@ -60,6 +62,11 @@ static struct cnss_plat_data *plat_env;
 static bool pm_notify_registered;
 
 static DECLARE_RWSEM(cnss_pm_sem);
+
+
+static unsigned int soft_reset_threshold = 3;
+module_param(soft_reset_threshold, uint, 0600);
+MODULE_PARM_DESC(soft_reset_threshold, "Default number of time for software reset");
 
 static struct cnss_fw_files FW_FILES_QCA6174_FW_3_0 = {
 	"qwlan30.bin", "bdwlan30.bin", "otp30.bin", "utf30.bin",
@@ -474,6 +481,8 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 	del_timer(&plat_priv->fw_boot_timer);
 	set_bit(CNSS_FW_READY, &plat_priv->driver_state);
 	clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
+	clear_bit(CNSS_FORCE_DRIVER_REMOVE, &plat_priv->driver_state);
+	plat_priv->soft_reset_count = soft_reset_threshold;
 
 	cnss_wlfw_send_pcie_gen_speed_sync(plat_priv);
 
@@ -665,8 +674,9 @@ int cnss_power_up(struct device *dev)
 		return -ENODEV;
 	}
 
-	cnss_pr_dbg("Powering up device\n");
-
+	cnss_pr_info("Powering up device\n");
+	plat_priv->soft_reset_count = soft_reset_threshold;
+	
 	ret = cnss_driver_event_post(plat_priv,
 				     CNSS_DRIVER_EVENT_POWER_UP,
 				     CNSS_EVENT_SYNC, NULL);
@@ -929,6 +939,7 @@ static int cnss_subsys_powerup(const struct subsys_desc *subsys_desc)
 		cnss_pr_err("plat_priv is NULL\n");
 		return -ENODEV;
 	}
+	pr_info("cnss_subsys_powerup plat_priv->driver_state 0x%x\n", plat_priv->driver_state);
 
 	if (!plat_priv->driver_state) {
 		cnss_pr_dbg("subsys powerup is ignored\n");
@@ -953,6 +964,7 @@ static int cnss_subsys_shutdown(const struct subsys_desc *subsys_desc,
 		cnss_pr_err("plat_priv is NULL\n");
 		return -ENODEV;
 	}
+	pr_info("cnss_subsys_shutdown plat_priv->driver_state 0x%x\n", plat_priv->driver_state);
 
 	if (!plat_priv->driver_state) {
 		cnss_pr_dbg("subsys shutdown is ignored\n");
@@ -1262,6 +1274,73 @@ int cnss_dump_fw_sram_to_file(struct device *dev)
 	return ret;
 }
 EXPORT_SYMBOL(cnss_dump_fw_sram_to_file);
+
+int cnss_stop_sw_reset(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int ret = 0;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	plat_priv->soft_reset_count = 0;
+	del_timer(&plat_priv->fw_boot_timer);
+
+	cnss_pr_info("cnss stop sw reset\n");
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_stop_sw_reset);
+
+int cnss_sw_reset(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_pci_data *pci_priv;
+	int ret = 0;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+	
+	pci_priv = (struct cnss_pci_data *)plat_priv->bus_priv;
+	if (!pci_priv) {
+		cnss_pr_err("pci_priv is NULL\n");
+		return -ENODEV;
+	}
+	mhi_pcie_sw_reset(pci_priv->mhi_ctrl);
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_sw_reset);
+
+int cnss_force_driver_remove(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_pci_data *pci_priv;
+	int ret = 0;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+	
+	pci_priv = (struct cnss_pci_data *)plat_priv->bus_priv;
+	if (!pci_priv) {
+		cnss_pr_err("pci_priv is NULL\n");
+		return -ENODEV;
+	}
+	
+	clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
+	set_bit(CNSS_FORCE_DRIVER_REMOVE, &plat_priv->driver_state);
+	cnss_pci_update_link_event(pci_priv,
+				   BUS_EVENT_PCI_LINK_RESUME_FAIL, NULL);
+
+	return ret;
+
+}
 
 
 static int cnss_wlfw_server_arrive_hdlr(struct cnss_plat_data *plat_priv,

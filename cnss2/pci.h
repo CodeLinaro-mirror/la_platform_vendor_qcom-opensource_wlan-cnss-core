@@ -197,4 +197,7 @@ int cnss_pci_fw_sram_dump_to_file(struct cnss_pci_data *pci_priv,
 		uint32_t fw_sram_start,
 		uint32_t fw_sram_end,
 		const char *fw_sram_dump_path);
+void cnss_pci_update_link_event(struct cnss_pci_data *pci_priv,
+				       enum cnss_bus_event_type type,
+				       void *data);
 #endif /* _CNSS_PCI_H */

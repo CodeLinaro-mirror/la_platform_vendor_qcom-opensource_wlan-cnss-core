@@ -197,6 +197,7 @@ enum cnss_driver_state {
 	CNSS_DEV_ERR_NOTIFY,
 	CNSS_DRIVER_DEBUG,
 	CNSS_IN_SUSPEND_RESUME,
+	CNSS_FORCE_DRIVER_REMOVE,
 };
 
 struct cnss_recovery_data {
@@ -329,6 +330,7 @@ struct cnss_plat_data {
 	u32 wlan_en_gpio;
 	u8 wlan_en_active;
 	u8 power_on;
+	unsigned int soft_reset_count;
 };
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
