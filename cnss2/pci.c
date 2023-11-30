@@ -443,6 +443,24 @@ static const struct mhi_controller_config cnss_mhi_config_no_satellite = {
 	.m2_no_db = true,
 };
 
+#ifdef CONFIG_PCIE_SWITCH_NTN3
+#define CNSS_MHI_BUS_MISC_EVT_COUNT 1
+static const struct mhi_controller_config cnss_mhi_config_pcie_switch_ntn3 = {
+	.max_channels = 32,
+	.timeout_ms = 10000,
+	.use_bounce_buf = false,
+	.buf_len = 0x8000,
+	.num_channels = ARRAY_SIZE(cnss_mhi_channels) -
+			CNSS_MHI_SATELLITE_CH_CFG_COUNT,
+	.ch_cfg = cnss_mhi_channels,
+	.num_events = ARRAY_SIZE(cnss_mhi_events) -
+			CNSS_MHI_SATELLITE_EVT_COUNT -
+			CNSS_MHI_BUS_MISC_EVT_COUNT,
+	.event_cfg = cnss_mhi_events,
+	.m2_no_db = true,
+};
+#endif
+
 static struct cnss_pci_reg ce_src[] = {
 	{ "SRC_RING_BASE_LSB", CE_SRC_RING_BASE_LSB_OFFSET },
 	{ "SRC_RING_BASE_MSB", CE_SRC_RING_BASE_MSB_OFFSET },
@@ -3208,6 +3226,14 @@ retry:
 		cnss_fatal_err("Failed to start MHI, err = %d\n", ret);
 		if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
 		    !pci_priv->pci_link_down_ind && timeout) {
+			if (ret == -ETIMEDOUT){
+				/* When load firmware fail or timeout, raise
+				 * an error message and close MHI instead of
+				 * triggering kernel panic or SSR in this case
+				 */
+				cnss_fatal_err("Start MHI timeout!");
+				goto power_off;
+			}
 			/* Start recovery directly for MHI start failures */
 			cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 					       CNSS_REASON_DEFAULT);
@@ -6583,6 +6609,11 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		else
 			cnss_mhi_config = &cnss_mhi_config_no_satellite;
 	}
+
+#ifdef CONFIG_PCIE_SWITCH_NTN3
+	if (pci_priv->pcie_switch_ntn3)
+		cnss_mhi_config = &cnss_mhi_config_pcie_switch_ntn3;
+#endif
 
 	mhi_ctrl->tme_supported_image = cnss_is_tme_supported(pci_priv);
 
