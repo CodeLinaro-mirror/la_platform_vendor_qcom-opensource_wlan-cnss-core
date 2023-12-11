@@ -124,6 +124,7 @@ enum cnss_host_dump_type {
 
 enum cnss_bus_event_type {
 	BUS_EVENT_PCI_LINK_DOWN = 0,
+	BUS_EVENT_PCI_LINK_RESUME_FAIL = 1,
 
 	BUS_EVENT_INVALID = 0xFFFF,
 };
@@ -353,6 +354,8 @@ extern int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
 			       dma_addr_t iova, size_t size);
 extern void cnss_audio_smmu_unmap(struct device *dev, dma_addr_t iova,
 				 size_t size);
+extern int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
+					size_t *size);
 extern int cnss_get_pci_slot(struct device *dev);
 extern struct kobject *cnss_get_wifi_kobj(struct device *dev);
 extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);

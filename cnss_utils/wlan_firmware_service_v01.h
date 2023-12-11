@@ -35,6 +35,7 @@
 #define QMI_WLFW_CAL_DOWNLOAD_REQ_V01 0x0027
 #define QMI_WLFW_IND_REGISTER_RESP_V01 0x0020
 #define QMI_WLFW_CAL_UPDATE_RESP_V01 0x0029
+#define QMI_WLFW_LPASS_SSR_RESP_V01 0x005E
 #define QMI_WLFW_M3_INFO_REQ_V01 0x003C
 #define QMI_WLFW_PCIE_GEN_SWITCH_REQ_V01 0x0053
 #define QMI_WLFW_ANTENNA_GRANT_RESP_V01 0x0048
@@ -62,6 +63,7 @@
 #define QMI_WLFW_FW_MEM_READY_IND_V01 0x0037
 #define QMI_WLFW_RESPOND_GET_INFO_IND_V01 0x004B
 #define QMI_WLFW_QDSS_TRACE_DATA_REQ_V01 0x0042
+#define QMI_WLFW_LPASS_SSR_REQ_V01 0x005E
 #define QMI_WLFW_CAL_DOWNLOAD_RESP_V01 0x0027
 #define QMI_WLFW_INI_RESP_V01 0x002F
 #define QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01 0x0040
@@ -178,6 +180,7 @@ enum wlfw_mem_type_enum_v01 {
 	QMI_WLFW_MLO_GLOBAL_MEM_V01 = 8,
 	QMI_WLFW_PAGEABLE_MEM_V01 = 9,
 	QMI_WLFW_AFC_MEM_V01 = 10,
+	QMI_WLFW_MEM_LPASS_SHARED_V01 = 11,
 	WLFW_MEM_TYPE_ENUM_MAX_VAL_V01 = INT_MAX,
 };
 
@@ -286,6 +289,20 @@ enum wlfw_ini_file_type_v01 {
 	WLFW_INI_FILE_TYPE_MIN_VAL_V01 = INT_MIN,
 	WLFW_INI_CFG_FILE_V01 = 0,
 	WLFW_INI_FILE_TYPE_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_fw_ssr_reason_v01 {
+	WLFW_FW_SSR_REASON_MIN_VAL_V01 = INT_MIN,
+	WLFW_FW_SSR_REASON_DEFAULT_V01 = 0,
+	WLFW_FW_SSR_REASON_XPAN_V01 = 1,
+	WLFW_FW_SSR_REASON_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_lpass_ssr_reason_v01 {
+	WLFW_LPASS_SSR_REASON_MIN_VAL_V01 = INT_MIN,
+	WLFW_LPASS_SSR_REASON_NON_CE_V01 = 0,
+	WLFW_LPASS_SSR_REASON_CE_V01 = 1,
+	WLFW_LPASS_SSR_REASON_MAX_VAL_V01 = INT_MAX,
 };
 
 #define QMI_WLFW_CE_ATTR_FLAGS_V01 ((u32)0x00)
@@ -1439,5 +1456,23 @@ struct wlfw_phy_cap_resp_msg_v01 {
 };
 #define WLFW_PHY_CAP_RESP_MSG_V01_MAX_MSG_LEN 18
 extern struct qmi_elem_info wlfw_phy_cap_resp_msg_v01_ei[];
+
+struct wlfw_fw_ssr_ind_msg_v01 {
+	enum wlfw_fw_ssr_reason_v01 reason_code;
+};
+#define WLFW_FW_SSR_IND_MSG_V01_MAX_MSG_LEN 7
+
+struct wlfw_lpass_ssr_req_msg_v01 {
+	enum wlfw_lpass_ssr_reason_v01 reason_code;
+};
+#define WLFW_LPASS_SSR_REQ_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info wlfw_lpass_ssr_req_msg_v01_ei[];
+
+struct wlfw_lpass_ssr_resp_msg_v01 {
+	struct qmi_response_type_v01 resp;
+};
+#define WLFW_LPASS_SSR_RESP_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info wlfw_lpass_ssr_resp_msg_v01_ei[];
+
 
 #endif
