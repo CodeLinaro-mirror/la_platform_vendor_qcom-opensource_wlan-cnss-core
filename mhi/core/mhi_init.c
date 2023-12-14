@@ -83,6 +83,7 @@ static const char * const mhi_pm_state_str[] = {
 };
 
 struct mhi_bus mhi_bus;
+static struct dentry *mhi_debugfs_root;
 
 struct mhi_controller *find_mhi_controller_by_name(const char *name)
 {
@@ -2056,13 +2057,28 @@ static int __init mhi_init(void)
 	INIT_LIST_HEAD(&mhi_bus.controller_list);
 
 	/* parent directory */
-	debugfs_create_dir(mhi_bus_type.name, NULL);
+	mhi_debugfs_root = debugfs_create_dir(mhi_bus_type.name, NULL);
 
 	ret = bus_register(&mhi_bus_type);
 
 	if (!ret)
 		mhi_dtr_init();
 	return ret;
+}
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+void mhi_exit(void)
+#else
+static void __exit mhi_exit(void)
+#endif
+{
+	debugfs_remove_recursive(mhi_debugfs_root);
+	
+	mhi_dtr_exit();
+	
+	bus_unregister(&mhi_bus_type);
+	
+	mutex_destroy(&mhi_bus.lock);
 }
 
 #ifndef CONFIG_WLAN_CNSS_CORE
