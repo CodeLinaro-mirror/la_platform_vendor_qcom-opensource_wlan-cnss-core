@@ -19,6 +19,7 @@ void diagchar_exit(void);
 int cnss_initialize(void);
 void cnss_exit(void);
 int mhi_init(void);
+void mhi_exit(void);
 int mhi_driver_init(void);
 void mhi_driver_exit(void);
 int diag_rpmsg_driver_init(void);
@@ -28,6 +29,7 @@ void cld80211_exit(void);
 int qrtr_proto_init(void);
 void qrtr_proto_fini(void);
 int subsys_restart_init(void);
+void subsys_restart_exit(void);
 
 
 #endif

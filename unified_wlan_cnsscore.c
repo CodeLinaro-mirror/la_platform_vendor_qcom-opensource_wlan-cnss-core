@@ -115,7 +115,7 @@ fail4:
 #endif
 #ifdef CONFIG_MSM_SUBSYSTEM_RESTART
 fail3:
-
+	subsys_restart_exit();
 #endif
 #ifdef CONFIG_QRTR
 fail2: 
@@ -123,6 +123,7 @@ fail2:
 #endif
 #ifdef CONFIG_MHI_BUS
 fail1:
+	mhi_exit();
 #endif
 	printk("unified_pdrv_init failure %d\n", ret);
 	return ret;
@@ -144,12 +145,13 @@ static void unified_pdrv_deinit(void)
 	mhi_driver_exit();
 #endif
 #ifdef CONFIG_MSM_SUBSYSTEM_RESTART
-
+	subsys_restart_exit();
 #endif
 #ifdef CONFIG_QRTR
 	qrtr_proto_fini();	
 #endif
 #ifdef CONFIG_MHI_BUS
+	mhi_exit();
 #endif
 }
 

@@ -2017,6 +2017,21 @@ err_bus:
 	destroy_workqueue(ssr_wq);
 	return ret;
 }
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+void subsys_restart_exit(void)
+#else
+static void __init subsys_restart_exit(void)
+#endif
+{
+	class_destroy(char_class);
+
+	bus_unregister(&subsys_bus_type);
+
+	destroy_workqueue(ssr_wq);
+	
+}
+
 #ifndef CONFIG_WLAN_CNSS_CORE
 arch_initcall(subsys_restart_init);
 
