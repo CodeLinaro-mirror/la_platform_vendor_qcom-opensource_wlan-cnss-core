@@ -59,6 +59,7 @@
 #define CNSS_RAMDUMP_MAGIC		0x574C414E
 #define CNSS_RAMDUMP_VERSION		0
 #define MAX_FIRMWARE_NAME_LEN		40
+#define FW_V1_NUMBER                    1
 #define FW_V2_NUMBER                    2
 #ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
 #define POWER_ON_RETRY_MAX_TIMES	2
@@ -132,6 +133,8 @@ struct cnss_pinctrl_info {
 	struct pinctrl_state *sol_default;
 	struct pinctrl_state *wlan_en_active;
 	struct pinctrl_state *wlan_en_sleep;
+	struct pinctrl_state *sw_ctrl;
+	struct pinctrl_state *sw_ctrl_wl_cx;
 	int bt_en_gpio;
 	int wlan_en_gpio;
 	int xo_clk_gpio; /*qca6490 only */
@@ -275,6 +278,7 @@ enum cnss_fw_dump_type {
 	CNSS_FW_IMAGE,
 	CNSS_FW_RDDM,
 	CNSS_FW_REMOTE_HEAP,
+	CNSS_FW_CAL,
 	CNSS_FW_DUMP_TYPE_MAX,
 };
 

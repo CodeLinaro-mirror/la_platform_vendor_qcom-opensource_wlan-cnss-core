@@ -4617,6 +4617,7 @@ static void icnss_init_control_params(struct icnss_priv *priv)
 	priv->ctrl_params.bdf_type = ICNSS_BDF_TYPE_DEFAULT;
 
 	if (priv->device_id == WCN6750_DEVICE_ID ||
+	    priv->device_id == WCN6450_DEVICE_ID ||
 	    of_property_read_bool(priv->pdev->dev.of_node,
 				  "wpss-support-enable"))
 		priv->wpss_supported = true;
@@ -4814,6 +4815,7 @@ static int icnss_probe(struct platform_device *pdev)
 		icnss_pr_err("fw service registration failed: %d\n", ret);
 		goto out_destroy_wq;
 	}
+	icnss_power_misc_params_init(priv);
 
 	icnss_enable_recovery(priv);
 
