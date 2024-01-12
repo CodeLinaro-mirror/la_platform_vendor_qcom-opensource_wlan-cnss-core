@@ -7309,7 +7309,6 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		cnss_pci_get_link_status(pci_priv);
 		cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, true, false);
 		cnss_pci_wake_gpio_init(pci_priv);
-		init_completion(&pci_priv->wake_event_complete);
 		break;
 	default:
 		cnss_pr_err("Unknown PCI device found: 0x%x\n",
@@ -7318,6 +7317,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		goto unreg_mhi;
 	}
 
+	init_completion(&pci_priv->wake_event_complete);
 	cnss_pci_config_regs(pci_priv);
 	if (EMULATION_HW)
 		goto out;
