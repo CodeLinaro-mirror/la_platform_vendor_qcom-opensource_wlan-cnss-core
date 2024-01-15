@@ -255,6 +255,124 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 #endif
 };
 
+static const struct mhi_channel_config cnss_mhi_channels_no_diag[] = {
+	{
+		.num = 0,
+		.name = "LOOPBACK",
+		.num_elements = 32,
+		.event_ring = 1,
+		.dir = DMA_TO_DEVICE,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = false,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+	},
+	{
+		.num = 1,
+		.name = "LOOPBACK",
+		.num_elements = 32,
+		.event_ring = 1,
+		.dir = DMA_FROM_DEVICE,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = false,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+	},
+	{
+		.num = 20,
+		.name = "IPCR",
+		.num_elements = 64,
+		.event_ring = 1,
+		.dir = DMA_TO_DEVICE,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = false,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+	},
+	{
+		.num = 21,
+		.name = "IPCR",
+		.num_elements = 64,
+		.event_ring = 1,
+		.dir = DMA_FROM_DEVICE,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = false,
+		.doorbell_mode_switch = false,
+		.auto_queue = true,
+	},
+/* All MHI satellite config to be at the end of data struct */
+#if IS_ENABLED(CONFIG_MHI_SATELLITE)
+	{
+		.num = 50,
+		.name = "ADSP_0",
+		.num_elements = 64,
+		.event_ring = 3,
+		.dir = DMA_BIDIRECTIONAL,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = true,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+	},
+	{
+		.num = 51,
+		.name = "ADSP_1",
+		.num_elements = 64,
+		.event_ring = 3,
+		.dir = DMA_BIDIRECTIONAL,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = true,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+	},
+	{
+		.num = 70,
+		.name = "ADSP_2",
+		.num_elements = 64,
+		.event_ring = 3,
+		.dir = DMA_BIDIRECTIONAL,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = true,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+	},
+	{
+		.num = 71,
+		.name = "ADSP_3",
+		.num_elements = 64,
+		.event_ring = 3,
+		.dir = DMA_BIDIRECTIONAL,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = true,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+	},
+#endif
+};
+
 static const struct mhi_channel_config cnss_mhi_channels_genoa[] = {
 	{
 		.num = 0,
@@ -403,6 +521,22 @@ static const struct mhi_event_config cnss_mhi_events[] = {
 #define CNSS_MHI_SATELLITE_CH_CFG_COUNT 0
 #define CNSS_MHI_SATELLITE_EVT_COUNT 0
 #endif
+
+static const struct mhi_controller_config cnss_mhi_config_no_diag = {
+#if IS_ENABLED(CONFIG_MHI_SATELLITE)
+	.max_channels = 72,
+#else
+	.max_channels = 32,
+#endif
+	.timeout_ms = 10000,
+	.use_bounce_buf = false,
+	.buf_len = 0x8000,
+	.num_channels = ARRAY_SIZE(cnss_mhi_channels_no_diag),
+	.ch_cfg = cnss_mhi_channels_no_diag,
+	.num_events = ARRAY_SIZE(cnss_mhi_events),
+	.event_cfg = cnss_mhi_events,
+	.m2_no_db = true,
+};
 
 static const struct mhi_controller_config cnss_mhi_config_default = {
 #if IS_ENABLED(CONFIG_MHI_SATELLITE)
@@ -4919,6 +5053,91 @@ static void cnss_pci_free_tme_lite_mem(struct cnss_pci_data *pci_priv)
 	tme_lite_mem->size = 0;
 }
 
+int cnss_pci_load_tme_opt_file(struct cnss_pci_data *pci_priv,
+				enum wlfw_tme_lite_file_type_v01 file)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_fw_mem *tme_lite_mem = NULL;
+	char filename[MAX_FIRMWARE_NAME_LEN];
+	char *tme_opt_filename = NULL;
+	const struct firmware *fw_entry;
+	int ret = 0;
+
+	switch (pci_priv->device_id) {
+	case PEACH_DEVICE_ID:
+		if (file == WLFW_TME_LITE_OEM_FUSE_FILE_V01) {
+			tme_opt_filename = TME_OEM_FUSE_FILE_NAME;
+			tme_lite_mem = &plat_priv->tme_opt_file_mem[0];
+		} else if (file == WLFW_TME_LITE_RPR_FILE_V01) {
+			tme_opt_filename = TME_RPR_FILE_NAME;
+			tme_lite_mem = &plat_priv->tme_opt_file_mem[1];
+		} else if (file == WLFW_TME_LITE_DPR_FILE_V01) {
+			tme_opt_filename = TME_DPR_FILE_NAME;
+			tme_lite_mem = &plat_priv->tme_opt_file_mem[2];
+		}
+		break;
+	case QCA6174_DEVICE_ID:
+	case QCA6290_DEVICE_ID:
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
+	default:
+		cnss_pr_dbg("TME-L opt file: %s not supported for device ID: (0x%x)\n",
+			    tme_opt_filename, pci_priv->device_id);
+		return 0;
+	}
+
+	if (!tme_lite_mem->va && !tme_lite_mem->size) {
+		cnss_pci_add_fw_prefix_name(pci_priv, filename,
+					    tme_opt_filename);
+
+		ret = firmware_request_nowarn(&fw_entry, filename,
+					      &pci_priv->pci_dev->dev);
+		if (ret) {
+			cnss_pr_err("Failed to load TME-L opt file: %s, ret: %d\n",
+				    filename, ret);
+			return ret;
+		}
+
+		tme_lite_mem->va = dma_alloc_coherent(&pci_priv->pci_dev->dev,
+						fw_entry->size, &tme_lite_mem->pa,
+						GFP_KERNEL);
+		if (!tme_lite_mem->va) {
+			cnss_pr_err("Failed to allocate memory for TME-L opt file %s,size: 0x%zx\n",
+				    filename, fw_entry->size);
+			release_firmware(fw_entry);
+			return -ENOMEM;
+		}
+
+		memcpy(tme_lite_mem->va, fw_entry->data, fw_entry->size);
+		tme_lite_mem->size = fw_entry->size;
+		release_firmware(fw_entry);
+	}
+
+	return 0;
+}
+
+static void cnss_pci_free_tme_opt_file_mem(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_fw_mem *tme_opt_file_mem = plat_priv->tme_opt_file_mem;
+	int i = 0;
+
+	for (i = 0; i < QMI_WLFW_MAX_TME_OPT_FILE_NUM; i++) {
+		if (tme_opt_file_mem[i].va && tme_opt_file_mem[i].size) {
+			cnss_pr_dbg("Free memory for TME opt file,va:0x%pK, pa:%pa, size:0x%zx\n",
+				tme_opt_file_mem[i].va, &tme_opt_file_mem[i].pa,
+				tme_opt_file_mem[i].size);
+			dma_free_coherent(&pci_priv->pci_dev->dev, tme_opt_file_mem[i].size,
+				tme_opt_file_mem[i].va, tme_opt_file_mem[i].pa);
+		}
+		tme_opt_file_mem[i].va = NULL;
+		tme_opt_file_mem[i].pa = 0;
+		tme_opt_file_mem[i].size = 0;
+	}
+}
+
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -6874,6 +7093,11 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 			cnss_mhi_config = &cnss_mhi_config_no_satellite;
 	}
 
+	/* DIAG no longer supported on PEACH and later chipset */
+	if (plat_priv->device_id >= PEACH_DEVICE_ID) {
+		cnss_mhi_config = &cnss_mhi_config_no_diag;
+	}
+
 	mhi_ctrl->tme_supported_image = cnss_is_tme_supported(pci_priv);
 
 	ret = mhi_register_controller(mhi_ctrl, cnss_mhi_config);
@@ -7465,6 +7689,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	cnss_pci_unregister_driver_hdlr(pci_priv);
 	cnss_pci_free_aux_mem(pci_priv);
 	cnss_pci_free_tme_lite_mem(pci_priv);
+	cnss_pci_free_tme_opt_file_mem(pci_priv);
 	cnss_pci_free_m3_mem(pci_priv);
 	cnss_pci_free_fw_mem(pci_priv);
 	cnss_pci_free_qdss_mem(pci_priv);
