@@ -196,6 +196,7 @@ void set_cld_deregister_pid(int reg_pid, int dereg_pid)
 {
 	struct cld80211_nl_data *nl;
 
+	pr_info("CLD80211: reg pid %d, de-reg pid %d", reg_pid, dereg_pid);
 	nl = get_local_ctx_by_register_pid(reg_pid);
 	if (!nl) {
 		pr_err("CLD80211: Can't find valid nl data for register pid 0x%x\n", reg_pid);
@@ -212,7 +213,7 @@ void set_cld_radio_info(int pid, u8 ifindex, bool set)
 	int number;
 	int i;
 
-	pr_info("CLD80211: %s ifindex: %d\n", set ? "set" : "clean", ifindex);
+	pr_info("CLD80211: %s ifindex: %d\n, pid %d", set ? "set" : "clean", ifindex, pid);
 	nl = get_local_ctx_by_register_pid(pid);
 	if (!nl) {
 		pr_err("CLD80211: Can't find valid nl data for pid 0x%x\n", pid);
@@ -243,7 +244,7 @@ int register_cld_cmd_cb(u8 cmd_id, cld80211_cb func, void *cb_ctx)
 	struct cld80211_nl_data *nl;
 	int pid = current->pid;
 
-	pr_info("CLD80211: Registering command: %d\n", cmd_id);
+	pr_info("CLD80211: Registering command: %d, pid %d\n", cmd_id, pid);
 	if (!cmd_id || cmd_id > CLD80211_MAX_COMMANDS) {
 		pr_debug("CLD80211: radio %d invalid command: %d\n", cmd_id);
 		return -EINVAL;
@@ -272,8 +273,12 @@ static bool need_disable_nl(struct cld80211_nl_data *nl)
 {
 	u8 i;
 
+	/* already disabled */
+	if (!nl->initialized)
+		return false;
+
 	for (i = 0; i < CLD80211_MAX_COMMANDS; i++) {
-		if (!nl->cld_ops[i].cb)
+		if (nl->cld_ops[i].cb)
 			return false;
 	}
 
@@ -285,7 +290,7 @@ int deregister_cld_cmd_cb(u8 cmd_id)
 	struct cld80211_nl_data *nl;
 	int pid = current->pid;
 
-	pr_err("CLD80211: De-registering command: %d\n", cmd_id);
+	pr_info("CLD80211: De-registering command: %d, pid %d\n", cmd_id, pid);
 	if (!cmd_id || cmd_id > CLD80211_MAX_COMMANDS) {
 		pr_debug("CLD80211: invalid command: %d\n", cmd_id);
 		return -EINVAL;
