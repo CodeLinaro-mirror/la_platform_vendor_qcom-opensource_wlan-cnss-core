@@ -132,6 +132,8 @@ struct cnss_pinctrl_info {
 	struct pinctrl_state *sol_default;
 	struct pinctrl_state *wlan_en_active;
 	struct pinctrl_state *wlan_en_sleep;
+	struct pinctrl_state *sw_ctrl;
+	struct pinctrl_state *sw_ctrl_wl_cx;
 	int bt_en_gpio;
 	int wlan_en_gpio;
 	int xo_clk_gpio; /*qca6490 only */
@@ -279,7 +281,7 @@ enum cnss_fw_dump_type {
 };
 
 struct cnss_dump_entry {
-	u32 type;
+	int type;
 	u32 entry_start;
 	u32 entry_num;
 };
