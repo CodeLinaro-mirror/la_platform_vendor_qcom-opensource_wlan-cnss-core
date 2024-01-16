@@ -149,6 +149,20 @@ struct cnss_plat_data *cnss_get_plat_priv(struct platform_device
 	return NULL;
 }
 
+struct cnss_plat_data *cnss_get_first_plat_priv(struct platform_device
+						 *plat_dev)
+{
+	int i;
+
+	if (!plat_dev) {
+		for (i = 0; i < plat_env_count; i++) {
+			if (plat_env[i])
+				return plat_env[i];
+		}
+	}
+	return NULL;
+}
+
 static void cnss_clear_plat_priv(struct cnss_plat_data *plat_priv)
 {
 	cnss_pr_dbg("Clear plat_priv at %d", plat_priv->plat_idx);
@@ -272,6 +286,14 @@ cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 #endif
+
+void cnss_get_sleep_clk_supported(struct cnss_plat_data *plat_priv)
+{
+	plat_priv->sleep_clk = of_property_read_bool(plat_priv->dev_node,
+						     "qcom,sleep-clk-support");
+	cnss_pr_dbg("qcom,sleep-clk-support is %d\n",
+		    plat_priv->sleep_clk);
+}
 
 void cnss_get_bwscal_info(struct cnss_plat_data *plat_priv)
 {
@@ -1885,8 +1907,10 @@ static void cnss_recovery_work_handler(struct work_struct *work)
 	msleep(POWER_RESET_MIN_DELAY_MS);
 
 	ret = cnss_bus_dev_powerup(plat_priv);
-	if (ret)
+	if (ret) {
 		__pm_relax(plat_priv->recovery_ws);
+		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
+	}
 
 	return;
 }
@@ -1938,6 +1962,8 @@ static const char *cnss_recovery_reason_to_str(enum cnss_recovery_reason reason)
 static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			    enum cnss_recovery_reason reason)
 {
+	int ret;
+
 	plat_priv->recovery_count++;
 
 	if (plat_priv->device_id == QCA6174_DEVICE_ID)
@@ -1998,7 +2024,9 @@ self_recovery:
 		clear_bit(LINK_DOWN_SELF_RECOVERY,
 			  &plat_priv->ctrl_params.quirks);
 
-	cnss_bus_dev_powerup(plat_priv);
+	ret = cnss_bus_dev_powerup(plat_priv);
+	if (ret)
+		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
 
 	return 0;
 }
@@ -4519,8 +4547,16 @@ end:
 
 int cnss_wlan_hw_enable(void)
 {
-	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(NULL);
+	struct cnss_plat_data *plat_priv;
 	int ret = 0;
+
+	if (cnss_is_dual_wlan_enabled())
+		plat_priv = cnss_get_first_plat_priv(NULL);
+	else
+		plat_priv = cnss_get_plat_priv(NULL);
+
+	if (!plat_priv)
+		return -ENODEV;
 
 	clear_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state);
 
@@ -4617,8 +4653,8 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 	ret = cnss_get_pld_bus_ops_name(plat_priv);
 	if (ret)
-		cnss_pr_err("Failed to find bus ops name, err = %d\n",
-			    ret);
+		cnss_pr_vdbg("Failed to find bus ops name, err = %d\n",
+			     ret);
 
 	ret = cnss_get_rc_num(plat_priv);
 

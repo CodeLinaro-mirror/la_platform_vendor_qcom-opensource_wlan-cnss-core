@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #ifndef _NET_CNSS_GENETLINK_H_
 #define _NET_CNSS_GENETLINK_H_
@@ -80,6 +81,25 @@ typedef void (*cld80211_cb)(const void *data, int data_len,
 			    void *cb_ctx, int pid);
 
 /**
+ * set_cld_deregister_pid() - Allows cld driver to set function
+ *           deregister_cld_cmd_cb() process id to nl_data[].
+ * @reg_pid: function register_cld_cmd_cb process id. It is already
+ *           in nl_data[].
+ * @dereg_pid: function deregister_cld_cmd_cb process id. It will be
+ *           saved in nl_data[].
+ */
+void set_cld_deregister_pid(int reg_pid, int dereg_pid);
+
+/**
+ * set_cld_radio_info() - Allows cld driver to set ifindex to nl_data[]
+ * @pid: function register_cld_cmd_cb process id. It is saved in nl_data[].
+ *       It can distinguish different cld driver.
+ * @ifindex: interface index which is assigned by platform.
+ * @set: set or clean radio info.
+ */
+void set_cld_radio_info(int pid, u8 ifindex, bool set);
+
+/**
  * register_cld_cmd_cb() - Allows cld driver to register for commands with
  *	callback
  * @cmd_id: Command to be registered. Valid range [1, CLD80211_MAX_COMMANDS]
@@ -88,7 +108,7 @@ typedef void (*cld80211_cb)(const void *data, int data_len,
  * @cb_ctx: context provided by driver; Send this as cb_ctx of func()
  *         to driver
  */
-int register_cld_cmd_cb(u8 cmd_id, cld80211_cb cb, void *cb_ctx);
+int register_cld_cmd_cb(u8 cmd_id, cld80211_cb func, void *cb_ctx);
 
 /**
  * deregister_cld_cmd_cb() - Allows cld driver to de-register the command it
