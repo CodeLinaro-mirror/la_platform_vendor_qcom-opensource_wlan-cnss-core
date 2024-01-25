@@ -406,6 +406,7 @@ void destroy_ramdump_device(void *dev)
 		return;
 
 	cdev_del(&rd_dev->cdev);
+	mutex_destroy(&rd_dev->consumer_lock);
 	device_unregister(rd_dev->dev);
 	ida_simple_remove(&rd_minor_id, minor);
 	kfree(rd_dev);
