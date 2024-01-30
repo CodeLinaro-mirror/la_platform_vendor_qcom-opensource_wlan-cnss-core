@@ -37,6 +37,12 @@
 /*********net link ***********/
 static struct sock *srv_sock;
 
+uint16_t diag_debug_mask;
+void *diag_ipc_log;
+
+#define DIAG_IPC_LOG_PAGES		6
+
+
 typedef struct sAniHdr {
    unsigned short type;
    unsigned short length;
@@ -841,6 +847,16 @@ int diag_mhi_init()
 	/* Create NL srv */
 	nl_srv_create();
 
+#ifdef CONFIG_IPC_LOGGING
+	diag_debug_mask = DIAG_DEBUG_BRIDGE;
+	diag_ipc_log = ipc_log_context_create(DIAG_IPC_LOG_PAGES,
+						      "diag", 0);
+	if (!diag_ipc_log) {
+		DIAG_LOG(DIAG_DEBUG_BRIDGE, "Unable to create DIAG IPC log context!\n");
+		return -EINVAL;
+	}
+
+#endif
 	for (i = 0; i < NUM_MHI_DEV; i++) {
 		mhi_info = &diag_mhi[i];
 		spin_lock_init(&mhi_info->lock);

@@ -335,7 +335,7 @@ static int mhi_init_state_change_thread_work_queue(
 	return 0;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 static void mhi_init_wakelock(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	mhi_dev_ctxt->w_lock = wakeup_source_register(NULL, "mhi_wakeup_source");

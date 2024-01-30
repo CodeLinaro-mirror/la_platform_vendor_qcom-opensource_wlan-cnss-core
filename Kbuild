@@ -130,6 +130,10 @@ ifeq ($(DUMP_TO_FS),y)
     KBUILD_CPPFLAGS += -DDUMP_TO_FS
 endif 
 
+ifeq ($(CONFIG_IPC_LOGGING),y)
+KBUILD_CPPFLAGS += -DCONFIG_IPC_LOGGING
+endif
+
 CDEFINES :=	-Wall\
 		-Werror
 KBUILD_CPPFLAGS += $(CDEFINES)
@@ -148,6 +152,7 @@ obj-$(CONFIG_DIAG_IPC_BRIDGE) += diag_ipc_bridge/
 obj-$(CONFIG_QTI_SDIO_CLIENT) += qti_sdio_client/
 obj-$(CONFIG_QCN) += qcn/
 obj-$(CONFIG_CNSS_UTILS) += cnss_utils/
+obj-$(CONFIG_IPC_LOGGING) += trace/
 else
 
 KS_BRIDGE_DIR := ks_bridge
@@ -163,6 +168,7 @@ DIAG_IPC_BRIDGE_DIR := diag_ipc_bridge
 QTI_SDIO_CLIENT_DIR := qti_sdio_client
 QCN_DIR := qcn
 CNSS_UTILS_DIR := cnss_utils
+IPCLOG_DIR := trace
 
 INIT_OBJS := unified_wlan_cnsscore.o
 INIT_INC := -I$(ROOTDIR)
@@ -273,6 +279,12 @@ ifneq ($(CONFIG_CNSS_UTILS), )
 	CNSS_UTILS_INC := -I$(ROOTDIR)/$(CNSS_UTILS_DIR)
 endif
 
+ifneq ($(CONFIG_IPC_LOGGING),)
+	IPCLOG_OBJS := $(IPCLOG_DIR)/ipc_logging.o           \
+				$(IPCLOG_DIR)/ipc_logging_debug.o      
+	IPCLOG_INC := -I$(ROOTDIR)/(IPCLOG_DIR)
+endif
+
 OBJS := $(INIT_OBJS)                      \
 	$(IPC_ROUTER_OBJS)                 \
 	$(QMI_OBJS)                        \
@@ -287,6 +299,7 @@ OBJS := $(INIT_OBJS)                      \
 	$(DIAG_OBJS)                       \
 	$(CNSS_OBJS)                       \
 	$(CNSS_UTILS_OBJS)                 \
+	$(IPCLOG_OBJS)                       \
 
 INCS := $(INIT_INC)                     \
         $(CNSS_INC)                     \
@@ -295,6 +308,7 @@ INCS := $(INIT_INC)                     \
         $(DIAG_INC)                     \
         $(QMI_INC)                      \
         $(CNSS_UTILS_INC)               \
+	$(IPCLOG_INC)                   \
 
 
 cflags-y += $(INCS)

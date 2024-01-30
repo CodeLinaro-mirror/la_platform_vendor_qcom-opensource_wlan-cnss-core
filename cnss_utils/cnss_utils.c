@@ -436,6 +436,9 @@ static const struct file_operations cnss_utils_mac_fops = {
 static int cnss_utils_debugfs_create(struct cnss_utils_priv *priv)
 {
 	int ret = 0;
+#ifdef REMOVE_DEBUGFS
+	return ret;
+#endif
 	struct dentry *root_dentry;
 
 	root_dentry = debugfs_create_dir("cnss_utils", NULL);

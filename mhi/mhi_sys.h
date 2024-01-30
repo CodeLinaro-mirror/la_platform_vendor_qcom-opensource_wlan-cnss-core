@@ -14,8 +14,8 @@
 #define _H_MHI_SYS_
 
 #include <linux/mutex.h>
-#ifdef CONFIG_ARCH_QCOM
-#include <linux/ipc_logging.h>
+#ifdef CONFIG_IPC_LOGGING
+#include "ipc_logging.h"
 #endif
 #include <linux/sysfs.h>
 #include <linux/delay.h>
@@ -40,7 +40,7 @@ extern void *mhi_ipc_log;
 		} \
 	} while (0)
 
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 #define mhi_log(mhi_dev_ctxt, _msg_lvl, _msg, ...) do {	\
 		if ((_msg_lvl) >= mhi_msg_lvl) \
 			pr_alert("[%s] " _msg, __func__, ##__VA_ARGS__);\

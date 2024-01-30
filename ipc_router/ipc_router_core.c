@@ -28,8 +28,12 @@
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
 #include <linux/rwsem.h>
+
+#ifdef CONFIG_IPC_LOGGING
+#include "ipc_logging.h"
+#endif
+
 #ifdef CONFIG_ARCH_QCOM
-#include <linux/ipc_logging.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/smem_log.h>
@@ -56,7 +60,7 @@ module_param_named(ipc_router_debug_mask, msm_ipc_router_debug_mask,
 
 #define IPC_RTR_INFO_PAGES 6
 
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 #define IPC_RTR_INFO(log_ctx, x...) do { \
 if (log_ctx) \
 	ipc_log_string(log_ctx, x); \
@@ -1363,7 +1367,7 @@ struct msm_ipc_port *msm_ipc_router_create_raw_port(void *endpoint,
 		 port_ptr->this_port.port_id,
 		 task_pid_nr(current),
 		 current->comm);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 	port_ptr->port_rx_ws = wakeup_source_register(NULL, port_ptr->rx_ws_name);
 #else
 	port_ptr->port_rx_ws = wakeup_source_register(port_ptr->rx_ws_name);
@@ -3991,7 +3995,7 @@ static void *ipc_router_create_log_ctx(char *name)
 				GFP_KERNEL);
 	if (!sub_log_ctx)
 		return NULL;
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 	sub_log_ctx->log_ctx = ipc_log_context_create(
 				IPC_RTR_INFO_PAGES, name, 0);
 	if (!sub_log_ctx->log_ctx) {
@@ -4116,7 +4120,7 @@ static int msm_ipc_router_add_xprt(struct msm_ipc_router_xprt *xprt)
 	INIT_LIST_HEAD(&xprt_info->pkt_list);
 	mutex_init(&xprt_info->rx_lock_lhb2);
 	mutex_init(&xprt_info->tx_lock_lhb2);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 	xprt_info->ws = wakeup_source_register(NULL, xprt->name);
 #else
 	xprt_info->ws = wakeup_source_register(xprt->name);

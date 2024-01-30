@@ -29,8 +29,8 @@
 #include <linux/mutex.h>
 #include <linux/hashtable.h>
 #include "ipc_router.h"
-#ifdef CONFIG_ARCH_QCOM
-#include <linux/ipc_logging.h>
+#ifdef CONFIG_IPC_LOGGING
+#include "ipc_logging.h"
 #endif
 
 #include "msm_qmi_interface.h"
@@ -42,7 +42,7 @@
 #define MAX_WQ_NAME_LEN 20
 #define QMI_REQ_RESP_LOG_PAGES 3
 #define QMI_IND_LOG_PAGES 2
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 #define QMI_REQ_RESP_LOG(buf...) \
 do { \
 	if (qmi_req_resp_log_ctx) { \
@@ -2153,7 +2153,7 @@ static void qmi_svc_event_notifier_init(void)
  */
 void qmi_log_init(void)
 {
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 	qmi_req_resp_log_ctx =
 		ipc_log_context_create(QMI_REQ_RESP_LOG_PAGES,
 			"kqmi_req_resp", 0);

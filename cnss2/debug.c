@@ -105,6 +105,9 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_DEV_REMOVED:
 			seq_puts(s, "DEV_REMOVED");
 			continue;
+		case CNSS_IN_PANIC:
+			seq_puts(s, "IN_PANIC");
+			continue;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);
@@ -479,6 +482,9 @@ static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 int cnss_debugfs_create(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
+#ifdef REMOVE_DEBUGFS
+	return ret;
+#endif
 	struct dentry *root_dentry;
 
 	root_dentry = debugfs_create_dir("cnss", 0);
@@ -503,10 +509,12 @@ out:
 
 void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv)
 {
+#ifndef REMOVE_DEBUGFS
 	debugfs_remove_recursive(plat_priv->root_dentry);
+#endif
 }
 
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 int cnss_debug_init(void)
 {
 	cnss_ipc_log_context = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
