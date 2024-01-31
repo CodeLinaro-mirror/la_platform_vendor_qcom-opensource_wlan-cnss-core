@@ -33,6 +33,16 @@
 #define CNSS_MAX_DEV_MEM_NUM		4
 #define CNSS_CHIP_VER_ANY		0
 
+enum bus_pm_state {
+	BUS_RESUME,
+	BUS_SUSPEND,
+};
+
+enum cnss_recovery_policy {
+	FULL_RECOVERY,
+	ONLY_SHUTDOWN,
+};
+
 /*
  * Temporary change for compilation, will be removed
  * after WLAN host driver switched to use new APIs
@@ -160,6 +170,7 @@ struct cnss_wlan_driver {
 	int (*set_therm_cdev_state)(struct pci_dev *pci_dev,
 				    unsigned long thermal_state,
 				    int tcdev_id);
+	int (*get_bus_pm_state)(struct pci_dev *pdev, const struct pci_device_id *id);
 };
 
 struct cnss_usb_wlan_driver {

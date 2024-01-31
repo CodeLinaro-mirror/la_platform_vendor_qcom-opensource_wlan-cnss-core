@@ -3651,3 +3651,17 @@ void cnss_pci_deinit(struct cnss_plat_data *plat_priv)
 {
 	pci_unregister_driver(&cnss_pci_driver);
 }
+
+int cnss_pci_get_bus_pm_state(struct cnss_pci_data *pci_priv)
+{
+	int ret = BUS_RESUME;
+	struct cnss_wlan_driver *driver_ops;
+	driver_ops = pci_priv->driver_ops;
+
+	if (driver_ops && driver_ops->get_bus_pm_state) {
+		ret = driver_ops->get_bus_pm_state(pci_priv->pci_dev,
+						   pci_priv->pci_device_id);
+	}
+
+	return ret;
+}

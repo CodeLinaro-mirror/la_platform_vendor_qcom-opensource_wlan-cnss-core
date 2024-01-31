@@ -34,6 +34,16 @@ enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev)
 		return CNSS_BUS_NONE;
 }
 
+enum bus_pm_state cnss_get_bus_pm_state(struct cnss_plat_data *plat_priv)
+{
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_get_bus_pm_state(plat_priv->bus_priv);
+	default:
+		return BUS_RESUME;
+	}
+}
+
 enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 {
 	int ret;

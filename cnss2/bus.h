@@ -89,4 +89,5 @@ int cnss_bus_fw_sram_dump_to_file(struct cnss_plat_data *plat_priv,
 		uint32_t fw_sram_end,
 		const char *fw_sram_dump_path);
 #endif
+enum bus_pm_state cnss_get_bus_pm_state(struct cnss_plat_data *plat_priv);
 #endif /* _CNSS_BUS_H */

@@ -280,6 +280,8 @@ struct cnss_plat_data {
 	u8 wlan_en_active;
 	u8 power_on;
 	bool single_msi;
+	u32 wow_ssr_count;
+	u8 wow_ssr_suppressed;
 };
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
