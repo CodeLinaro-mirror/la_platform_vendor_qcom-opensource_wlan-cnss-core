@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _NET_CNSS2_H
@@ -346,6 +346,7 @@ enum cnss_recovery_reason {
 enum cnss_fw_caps {
 	CNSS_FW_CAP_DIRECT_LINK_SUPPORT,
 	CNSS_FW_CAP_AUX_UC_SUPPORT,
+	CNSS_FW_CAP_CALDB_SEG_DDR_SUPPORT,
 };
 
 enum cnss_remote_mem_type {
@@ -440,6 +441,8 @@ extern int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
 			       dma_addr_t iova, size_t size);
 extern void cnss_audio_smmu_unmap(struct device *dev, dma_addr_t iova,
 				 size_t size);
+extern int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
+					size_t *size);
 extern int cnss_get_pci_slot(struct device *dev);
 extern int cnss_pci_get_reg_dump(struct device *dev, uint8_t *buffer,
 				 uint32_t len);
@@ -448,6 +451,7 @@ extern int cnss_send_buffer_to_afcmem(struct device *dev, const uint8_t *afcdb,
 				      uint32_t len, uint8_t slotid);
 extern int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
 extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);
+extern bool cnss_audio_is_direct_link_supported(struct device *dev);
 extern int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg);
 extern int cnss_thermal_cdev_register(struct device *dev,
 				      unsigned long max_state,
