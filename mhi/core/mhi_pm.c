@@ -980,6 +980,8 @@ int mhi_async_power_up(struct mhi_controller *mhi_cntrl)
 	}
 
 	mhi_cntrl->bhi = mhi_cntrl->regs + val;
+	MHI_CNTRL_LOG("mhi_async_power_up mhi_ctrl->bhi %pa, val 0x%x\n",
+		    mhi_cntrl->bhi, val);
 
 	/* setup bhie offset if not set */
 	if (mhi_cntrl->fbc_download && !mhi_cntrl->bhie) {

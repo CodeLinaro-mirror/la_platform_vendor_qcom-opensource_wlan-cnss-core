@@ -395,17 +395,19 @@ void mhi_deinit_free_irq(struct mhi_controller *mhi_cntrl)
 {
 	int i;
 	struct mhi_event *mhi_event = mhi_cntrl->mhi_event;
-	MHI_LOG("mhi_deinit_free_irq\n");
+	MHI_LOG("mhi_deinit_free_irq mhi_irq_setup %d\n", mhi_cntrl->mhi_irq_setup);
+	if (mhi_cntrl->mhi_irq_setup)
+	{
+		for (i = 0; i < mhi_cntrl->total_ev_rings; i++, mhi_event++) {
+			if (!mhi_event->request_irq)
+				continue;
 
-	for (i = 0; i < mhi_cntrl->total_ev_rings; i++, mhi_event++) {
-		if (!mhi_event->request_irq)
-			continue;
+			free_irq(mhi_cntrl->irq[mhi_event->msi], mhi_event);
+		}
 
-		free_irq(mhi_cntrl->irq[mhi_event->msi], mhi_event);
+		free_irq(mhi_cntrl->irq[0], mhi_cntrl);
+		mhi_cntrl->mhi_irq_setup = false;
 	}
-
-	free_irq(mhi_cntrl->irq[0], mhi_cntrl);
-	mhi_cntrl->mhi_irq_setup = false;
 }
 
 int mhi_init_irq_setup(struct mhi_controller *mhi_cntrl)
@@ -1802,6 +1804,7 @@ void mhi_unprepare_after_power_down(struct mhi_controller *mhi_cntrl)
 		mhi_free_bhie_table(mhi_cntrl, mhi_cntrl->rddm_image);
 		mhi_cntrl->rddm_image = NULL;
 	}
+	mhi_deinit_free_irq(mhi_cntrl);
 
 	mhi_deinit_dev_ctxt(mhi_cntrl);
 	mhi_cntrl->pre_init = false;

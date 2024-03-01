@@ -656,7 +656,7 @@ static int cnss_pci_config_msi_data(struct cnss_pci_data *pci_priv)
 	}
 
 	pci_priv->msi_ep_base_data = msi_desc->msg.data;
-	cnss_pr_dbg("MSI base data is %d\n", pci_priv->msi_ep_base_data);
+	cnss_pr_info("MSI base data is %d\n", pci_priv->msi_ep_base_data);
 
 	return 0;
 }
@@ -1296,6 +1296,7 @@ retry:
 			clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
 			cnss_pci_update_link_event(pci_priv,
 						   BUS_EVENT_PCI_LINK_RESUME_FAIL, NULL);
+			goto stop_mhi;
 		}
 		return 0;
 	}
@@ -2992,6 +2993,8 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 			ret = -EINVAL;
 		goto reset_msi_config;
 	}
+	pci_priv->pci_irq_alloc = true;
+	cnss_pr_info("cnss_pci_enable_msi alloc irq %d\n", pci_priv->pci_irq_alloc);
 
 	if (cnss_pci_config_msi_data(pci_priv)) {
 		ret = -EINVAL;
@@ -3001,7 +3004,12 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 	return 0;
 
 free_msi_vector:
-	pci_free_irq_vectors(pci_priv->pci_dev);
+	if (pci_priv->pci_irq_alloc)
+	{
+		cnss_pr_info("cnss_pci_enable_msi free irq %d\n", pci_priv->pci_irq_alloc);
+		pci_free_irq_vectors(pci_priv->pci_dev);
+		pci_priv->pci_irq_alloc = false;
+	}
 reset_msi_config:
 	pci_priv->msi_config = NULL;
 out:
@@ -3010,8 +3018,12 @@ out:
 
 static void cnss_pci_disable_msi(struct cnss_pci_data *pci_priv)
 {
-	cnss_pr_info("cnss_pci_disable_msi");
-	pci_free_irq_vectors(pci_priv->pci_dev);
+	cnss_pr_info("cnss_pci_disable_msi free irq %d\n", pci_priv->pci_irq_alloc);
+	if (pci_priv->pci_irq_alloc)
+	{
+		pci_free_irq_vectors(pci_priv->pci_dev);
+		pci_priv->pci_irq_alloc = false;
+	}
 }
 
 int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
@@ -3734,8 +3746,9 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->fw_image = plat_priv->firmware_name;
 
 	mhi_ctrl->regs = pci_priv->bar;
-	cnss_pr_dbg("BAR starts at %pa\n",
-		    &pci_resource_start(pci_priv->pci_dev, PCI_BAR_NUM));
+	cnss_pr_info("cnss_pci_register_mhi BAR starts at %pa mhi_ctrl->regs %pa\n",
+		    &pci_resource_start(pci_priv->pci_dev, PCI_BAR_NUM), mhi_ctrl->regs);
+
 
 	ret = cnss_pci_get_mhi_msi(pci_priv);
 	if (ret) {
@@ -3913,7 +3926,7 @@ int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 	if (ret)
 		goto out;
 
-	cnss_pr_dbg("Setting MHI state: %s(%d)\n",
+	cnss_pr_info("Setting MHI state: %s(%d)\n",
 		    cnss_mhi_state_to_str(mhi_state), mhi_state);
 
 	switch (mhi_state) {

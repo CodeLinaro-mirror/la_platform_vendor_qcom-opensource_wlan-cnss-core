@@ -92,6 +92,7 @@ struct cnss_pci_data {
 	bool disable_pc;
 	struct cnss_pci_debug_reg *debug_reg;
 	u32 iommu_geometry;
+	bool pci_irq_alloc;
 };
 
 static inline void cnss_set_pci_priv(struct pci_dev *pci_dev, void *data)
