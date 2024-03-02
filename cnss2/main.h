@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CNSS_MAIN_H
@@ -362,6 +362,7 @@ enum cnss_driver_state {
 	CNSS_FS_READY = 25,
 	CNSS_DRIVER_REGISTERED,
 	CNSS_DMS_DEL_SERVER,
+	CNSS_POWER_OFF,
 };
 
 struct cnss_recovery_data {
@@ -612,6 +613,7 @@ struct cnss_plat_data {
 	u64 fw_caps;
 	u8 pcie_gen_speed;
 	struct iommu_domain *audio_iommu_domain;
+	bool is_audio_shared_iommu_group;
 	struct cnss_dms_data dms;
 	int power_up_error;
 	u32 hw_trc_override;
@@ -633,7 +635,6 @@ struct cnss_plat_data {
 	u32 hang_data_addr_offset;
 	/* bitmap to detect FEM combination */
 	u8 hwid_bitmap;
-	enum cnss_driver_mode driver_mode;
 	uint32_t num_shadow_regs_v3;
 	bool sec_peri_feature_disable;
 	struct device_node *dev_node;
