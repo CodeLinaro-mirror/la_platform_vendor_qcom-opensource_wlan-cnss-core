@@ -37,21 +37,94 @@ static const struct genl_multicast_group nl_mcgrps[] = {
 			CLD80211_MULTICAST_GROUP_OEM_MSGS},
 };
 
+#define MAX_ADAPTER_NUMBER 16
+
 struct cld_ops {
 	cld80211_cb cb;
 	void *cb_ctx;
 };
 
+struct radio_info {
+	int adapter_list[MAX_ADAPTER_NUMBER];
+	u8 adapter_num;
+};
+
 struct cld80211_nl_data {
+	bool initialized;
+	int register_pid;
+	int deregister_pid;
+	struct radio_info radio;
 	struct cld_ops cld_ops[CLD80211_MAX_COMMANDS];
 };
 
-static struct cld80211_nl_data nl_data;
+#define NUM_OF_DRIVERS  2
+static struct cld80211_nl_data nl_data[NUM_OF_DRIVERS];
 
-static inline struct cld80211_nl_data *get_local_ctx(void)
+static inline struct cld80211_nl_data *get_local_ctx_free()
 {
-	return &nl_data;
+	u8 i;
+	struct cld80211_nl_data *nl;
+	
+	for(i = 0; i < NUM_OF_DRIVERS; i++) {
+		nl = &nl_data[i];
+		if (!nl->initialized)
+			return nl;
+	}
+
+	return NULL;
 }
+
+static inline struct cld80211_nl_data *get_local_ctx_default()
+{
+	return &nl_data[0];
+}
+
+static inline struct cld80211_nl_data
+*get_local_ctx_by_register_pid(int pid)
+{
+	u8 i;
+	struct cld80211_nl_data *nl;
+
+	for(i = 0; i < NUM_OF_DRIVERS; i++) {
+		nl = &nl_data[i];
+		if (nl->initialized && nl->register_pid == pid)
+			return nl;
+	}
+
+	return NULL;
+}
+
+static inline struct cld80211_nl_data
+*get_local_ctx_by_deregister_pid(int pid)
+{
+	u8 i;
+	struct cld80211_nl_data *nl;
+
+	for(i = 0; i < NUM_OF_DRIVERS; i++) {
+		nl = &nl_data[i];
+		if (nl->initialized && nl->deregister_pid == pid)
+			return nl;
+	}
+
+	return NULL;
+}
+
+static inline struct cld80211_nl_data 
+*get_local_ctx_by_ifindex(int ifindex)
+{
+	u8 i, j;
+	struct cld80211_nl_data *nl;
+
+	for(i = 0; i < NUM_OF_DRIVERS; i++) {
+		nl = &nl_data[i];
+		for (j = 0; j < nl->radio.adapter_num; j++)
+			if (ifindex == nl->radio.adapter_list[j])
+				return nl;
+	}
+
+	return NULL;
+}
+
 
 static struct genl_ops nl_ops[CLD80211_MAX_COMMANDS];
 
@@ -64,18 +137,33 @@ static const struct nla_policy cld80211_policy[CLD80211_ATTR_MAX + 1] = {
 				 .len = CLD80211_MAX_NL_DATA },
 	[CLD80211_ATTR_CMD] = { .type = NLA_U32 },
 	[CLD80211_ATTR_CMD_TAG_DATA] = { .type = NLA_NESTED },
+	[CLD80211_ATTR_IFINDEX] = { .type = NLA_U32 },
 };
 
 static int cld80211_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			     struct genl_info *info)
 {
 	u8 cmd_id = ops->cmd;
-	struct cld80211_nl_data *nl = get_local_ctx();
+	struct cld80211_nl_data *nl;
+	int ifidx = -1;
 
 	if (cmd_id < 1 || cmd_id > CLD80211_MAX_COMMANDS) {
 		pr_err("CLD80211: Command Not supported: %u\n", cmd_id);
 		return -EOPNOTSUPP;
 	}
+
+	if (info->attrs[CLD80211_ATTR_IFINDEX]) {
+		ifidx = nla_get_u32(info->attrs[CLD80211_ATTR_IFINDEX]);
+		pr_info("CLD80211: Get ifindex %d\n", ifidx);
+		nl = get_local_ctx_by_ifindex(ifidx);
+		if (!nl) {
+			pr_err("CLD80211: Can't find nl data for ifidx %d\n", ifidx);
+			return -EOPNOTSUPP;
+		}
+	} else {
+		nl = get_local_ctx_default();
+	}
+
 	info->user_ptr[0] = nl->cld_ops[cmd_id - 1].cb;
 	info->user_ptr[1] = nl->cld_ops[cmd_id - 1].cb_ctx;
 
@@ -99,35 +187,127 @@ static struct genl_family cld80211_fam __ro_after_init = {
 	.n_mcgrps = ARRAY_SIZE(nl_mcgrps),
 };
 
+static void set_cld_register_pid(struct cld80211_nl_data *nl, int reg_pid)
+{
+	nl->register_pid = reg_pid;
+}
+
+void set_cld_deregister_pid(int reg_pid, int dereg_pid)
+{
+	struct cld80211_nl_data *nl;
+
+	pr_info("CLD80211: reg pid %d, de-reg pid %d", reg_pid, dereg_pid);
+	nl = get_local_ctx_by_register_pid(reg_pid);
+	if (!nl) {
+		pr_err("CLD80211: Can't find valid nl data for register pid 0x%x\n", reg_pid);
+		return;
+	}
+
+	nl->deregister_pid = dereg_pid;
+}
+EXPORT_SYMBOL(set_cld_deregister_pid);
+
+void set_cld_radio_info(int pid, u8 ifindex, bool set)
+{
+	struct cld80211_nl_data *nl;
+	int number;
+	int i;
+
+	pr_info("CLD80211: %s ifindex: %d\n, pid %d", set ? "set" : "clean", ifindex, pid);
+	nl = get_local_ctx_by_register_pid(pid);
+	if (!nl) {
+		pr_err("CLD80211: Can't find valid nl data for pid 0x%x\n", pid);
+		return;
+	}
+
+	number = nl->radio.adapter_num;
+	if (set) {
+		if (number >= MAX_ADAPTER_NUMBER) {
+			pr_err("CLD80211: adapter number %d exceed max\n", number);
+			return;
+		}
+		nl->radio.adapter_list[number] = ifindex;
+		nl->radio.adapter_num++;
+	} else {
+		for (i = 0; i < number; i++) {
+			if (nl->radio.adapter_list[i] == ifindex) {
+				nl->radio.adapter_list[i] = 0;
+				nl->radio.adapter_num--;
+			}
+		}
+	}
+}
+EXPORT_SYMBOL(set_cld_radio_info);
+
 int register_cld_cmd_cb(u8 cmd_id, cld80211_cb func, void *cb_ctx)
 {
-	struct cld80211_nl_data *nl = get_local_ctx();
+	struct cld80211_nl_data *nl;
+	int pid = current->pid;
 
-	pr_debug("CLD80211: Registering command: %d\n", cmd_id);
+	pr_info("CLD80211: Registering command: %d, pid %d\n", cmd_id, pid);
 	if (!cmd_id || cmd_id > CLD80211_MAX_COMMANDS) {
-		pr_debug("CLD80211: invalid command: %d\n", cmd_id);
+		pr_debug("CLD80211: radio %d invalid command: %d\n", cmd_id);
 		return -EINVAL;
+	}
+
+	nl = get_local_ctx_by_register_pid(pid);
+	if (!nl) {
+		nl = get_local_ctx_free();
+		if (!nl) {
+			pr_err("CLD80211: no free nl data for cmd %d\n", cmd_id);
+			return -EINVAL;
+		}
 	}
 
 	nl->cld_ops[cmd_id - 1].cb = func;
 	nl->cld_ops[cmd_id - 1].cb_ctx = cb_ctx;
+	set_cld_register_pid(nl, pid);
+	nl->initialized = true;
 
 	return 0;
 }
 EXPORT_SYMBOL(register_cld_cmd_cb);
 
+/* if all cmds are deregistered, need to set nl data flag to disabled */
+static bool need_disable_nl(struct cld80211_nl_data *nl)
+{
+	u8 i;
+
+	/* already disabled */
+	if (!nl->initialized)
+		return false;
+
+	for (i = 0; i < CLD80211_MAX_COMMANDS; i++) {
+		if (nl->cld_ops[i].cb)
+			return false;
+	}
+
+	return true;
+}
+
 int deregister_cld_cmd_cb(u8 cmd_id)
 {
-	struct cld80211_nl_data *nl = get_local_ctx();
+	struct cld80211_nl_data *nl;
+	int pid = current->pid;
 
-	pr_debug("CLD80211: De-registering command: %d\n", cmd_id);
+	pr_info("CLD80211: De-registering command: %d, pid %d\n", cmd_id, pid);
 	if (!cmd_id || cmd_id > CLD80211_MAX_COMMANDS) {
 		pr_debug("CLD80211: invalid command: %d\n", cmd_id);
 		return -EINVAL;
 	}
 
+	nl = get_local_ctx_by_deregister_pid(pid);
+	if (!nl) {
+		pr_debug("CLD80211: can't find correct nl_data for cmd %d\n", cmd_id);
+		pr_debug("CLD80211: may not upgrade cld driver, and get default\n");
+		nl = get_local_ctx_default();
+	}
+
 	nl->cld_ops[cmd_id - 1].cb = NULL;
 	nl->cld_ops[cmd_id - 1].cb_ctx = NULL;
+
+	if (need_disable_nl(nl))
+		nl->initialized = false;
 
 	return 0;
 }
