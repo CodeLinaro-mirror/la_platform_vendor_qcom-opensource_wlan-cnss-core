@@ -191,6 +191,11 @@ enum wlfw_pcie_gen_speed_v01 {
 
 #define QMI_WLFW_HOST_PCIE_GEN_SWITCH_V01 ((u64)0x01ULL)
 
+struct wlchip_serial_id_v01 {
+	u32 serial_id_msb;
+	u32 serial_id_lsb;
+};
+
 struct wlfw_ce_tgt_pipe_cfg_s_v01 {
 	u32 pipe_num;
 	enum wlfw_pipedir_enum_v01 pipe_dir;
@@ -439,6 +444,8 @@ struct wlfw_cap_resp_msg_v01 {
 	u8 dev_mem_info_valid;
 	struct wlfw_dev_mem_info_s_v01
 		dev_mem_info[QMI_WLFW_MAX_DEV_MEM_NUM_V01];
+	u8 serial_id_valid;
+	struct wlchip_serial_id_v01 serial_id;
 };
 
 #define WLFW_CAP_RESP_MSG_V01_MAX_MSG_LEN 351

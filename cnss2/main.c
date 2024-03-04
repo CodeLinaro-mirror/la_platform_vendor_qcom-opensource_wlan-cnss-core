@@ -2291,6 +2291,24 @@ static ssize_t cnss_wow_ssr_suppressed_show(struct device *dev,
 
 static DEVICE_ATTR(wow_ssr_suppressed, 0444, cnss_wow_ssr_suppressed_show, NULL);
 
+static ssize_t cnss_serial_id_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
+	u32 msb = plat_priv->serial_id.serial_id_msb;
+	u32 lsb = plat_priv->serial_id.serial_id_lsb;
+	u64 serial_id;
+
+	msb &= 0xFFFF;
+	serial_id = ((u64)msb << 32) | lsb;
+	int ret = scnprintf(buf, PAGE_SIZE, "\n%lx\n", serial_id);
+
+	return ret;
+}
+
+static DEVICE_ATTR(serial_id, 0444, cnss_serial_id_show, NULL);
+
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
 #ifdef CONFIG_NAPIER_X86
@@ -2395,6 +2413,28 @@ static void cnss_remove_sysfs_wow_ssr_suppressed(struct cnss_plat_data *plat_pri
 static void cnss_event_work_deinit(struct cnss_plat_data *plat_priv)
 {
 	destroy_workqueue(plat_priv->event_wq);
+}
+
+static int cnss_create_sysfs_serial_id(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	ret = device_create_file(&plat_priv->plat_dev->dev,
+                                 &dev_attr_serial_id);
+	if (ret) {
+		cnss_pr_err("Failed to create device file, err = %d\n", ret);
+		goto out;
+	}
+
+	cnss_pr_dbg("created sysfs for serial_id\n");
+	return 0;
+out:
+	return ret;
+}
+
+static void cnss_remove_sysfs_serial_id(struct cnss_plat_data *plat_priv)
+{
+	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_serial_id);
 }
 
 static int cnss_alloc_caldb_mem(struct cnss_plat_data *plat_priv)
@@ -2572,9 +2612,13 @@ retry:
 	if (ret)
 		goto cnss_remove_sysfs_cssr;
 
-	ret = cnss_event_work_init(plat_priv);
+	ret = cnss_create_sysfs_serial_id(plat_priv);
 	if (ret)
 		goto remove_sysfs_wow_ssr_suppressed;
+
+	ret = cnss_event_work_init(plat_priv);
+	if (ret)
+		goto remove_sysfs_serial_id;
 
 	ret = cnss_qmi_init(plat_priv);
 	if (ret)
@@ -2624,6 +2668,8 @@ deinit_qmi:
 	cnss_qmi_deinit(plat_priv);
 deinit_event_work:
 	cnss_event_work_deinit(plat_priv);
+remove_sysfs_serial_id:
+	cnss_remove_sysfs_serial_id(plat_priv);
 remove_sysfs_wow_ssr_suppressed:
 	cnss_remove_sysfs_wow_ssr_suppressed(plat_priv);
 cnss_remove_sysfs_cssr:
@@ -2677,6 +2723,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_debugfs_destroy(plat_priv);
 	cnss_qmi_deinit(plat_priv);
 	cnss_event_work_deinit(plat_priv);
+	cnss_remove_sysfs_serial_id(plat_priv);
 	cnss_remove_sysfs_wow_ssr_suppressed(plat_priv);
 	cnss_remove_sysfs_cssr(plat_priv);
 	cnss_remove_sysfs(plat_priv);

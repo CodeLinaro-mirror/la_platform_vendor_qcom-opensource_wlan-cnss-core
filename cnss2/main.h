@@ -282,6 +282,7 @@ struct cnss_plat_data {
 	bool single_msi;
 	u32 wow_ssr_count;
 	u8 wow_ssr_suppressed;
+	struct wlchip_serial_id_v01 serial_id;
 };
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
