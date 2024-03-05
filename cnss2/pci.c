@@ -1856,6 +1856,25 @@ int cnss_reset_time_sync_period(struct device *dev)
 	return 0;
 }
 EXPORT_SYMBOL(cnss_reset_time_sync_period);
+
+bool cnss_audio_is_direct_link_supported(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_audio_is_direct_link_supported);
+
+bool cnss_get_audio_shared_iommu_group_cap(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_get_audio_shared_iommu_group_cap);
+
+int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
+					size_t *size)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_get_fw_lpass_shared_mem);
 #else
 int cnss_pci_force_wake_request(struct device *dev)
 {

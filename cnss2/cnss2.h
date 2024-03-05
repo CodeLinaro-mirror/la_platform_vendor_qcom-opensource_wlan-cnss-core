@@ -109,7 +109,8 @@ enum cnss_driver_status {
 
 enum cnss_bus_event_type {
 	BUS_EVENT_PCI_LINK_DOWN = 0,
-
+	BUS_EVENT_PCI_LINK_RESUME_FAIL = 1,
+	
 	BUS_EVENT_INVALID = 0xFFFF,
 };
 
@@ -369,7 +370,10 @@ extern int cnss_pci_force_wake_request_sync(struct device *dev, int timeout);
 extern int cnss_update_time_sync_period(struct device *dev,
 					 uint32_t time_sync_period);
 extern int cnss_reset_time_sync_period(struct device *dev);
-
+extern bool cnss_audio_is_direct_link_supported(struct device *dev);
+extern bool cnss_get_audio_shared_iommu_group_cap(struct device *dev);
+extern int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
+					size_t *size);
 #ifdef CONFIG_SDIO_QCN
 extern int cnss_sdio_wlan_register_driver(struct cnss_sdio_wlan_driver *
 					  driver_ops);
