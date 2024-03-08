@@ -5199,7 +5199,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 
 	ret = pci_assign_resource(pci_dev, PCI_BAR_NUM);
 	if (ret) {
-		pr_err("Failed to assign PCI resource, err = %d\n", ret);
+		cnss_pr_err("Failed to assign PCI resource, err = %d\n", ret);
 		goto out;
 	}
 

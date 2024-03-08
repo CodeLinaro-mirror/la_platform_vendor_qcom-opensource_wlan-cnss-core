@@ -917,8 +917,6 @@ void cnss_debug_ipc_log_print(void *log_ctx, char *process, const char *fn,
 	vaf.fmt = fmt;
 	vaf.va = &va_args;
 
-	if (log_level)
-		printk("%scnss: %pV", log_level, &vaf);
 
 	ipc_log_string(log_ctx, "[%s] %s: %pV", process, fn, &vaf);
 

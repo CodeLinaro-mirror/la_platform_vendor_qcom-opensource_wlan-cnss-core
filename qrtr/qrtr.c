@@ -490,7 +490,6 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 		size = le32_to_cpu(v2->size);
 		break;
 	default:
-		pr_err("qrtr: Invalid version %d\n", ver);
 		goto err;
 	}
 
