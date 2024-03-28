@@ -529,7 +529,7 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 	return 0;
 
 shutdown:
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 	clear_bit(CNSS_FW_READY, &plat_priv->driver_state);
 	clear_bit(CNSS_FW_MEM_READY, &plat_priv->driver_state);
@@ -990,7 +990,7 @@ static int cnss_subsys_shutdown(const struct subsys_desc *subsys_desc,
 		return 0;
 	}
 
-	return cnss_bus_dev_shutdown(plat_priv);
+	return cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 }
 
 void cnss_device_crashed(struct device *dev)
@@ -1113,7 +1113,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	return 0;
 
 self_recovery:
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 	ret = cnss_bus_dev_powerup(plat_priv);
 	if (ret)
 		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
@@ -1514,7 +1514,7 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv)
 	    plat_priv->device_id == QCN7605_STANDALONE_DEVICE_ID ||
 	    plat_priv->device_id == QCN7605_COMPOSITE_DEVICE_ID)
 		goto skip_shutdown;
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 skip_shutdown:
 	complete(&plat_priv->cal_complete);
@@ -1536,7 +1536,7 @@ static int cnss_power_up_hdlr(struct cnss_plat_data *plat_priv)
 
 static int cnss_power_down_hdlr(struct cnss_plat_data *plat_priv)
 {
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 	return 0;
 }

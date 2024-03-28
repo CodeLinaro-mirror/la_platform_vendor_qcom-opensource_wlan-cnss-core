@@ -313,7 +313,7 @@ int cnss_bus_call_driver_remove(struct cnss_plat_data *plat_priv)
 
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
-		return cnss_pci_call_driver_remove(plat_priv->bus_priv);
+		return cnss_pci_call_driver_remove(plat_priv->bus_priv, FULL_RECOVERY);
 	case CNSS_BUS_USB:
 		return cnss_usb_call_driver_remove(plat_priv->bus_priv);
 	default:
@@ -340,14 +340,14 @@ int cnss_bus_dev_powerup(struct cnss_plat_data *plat_priv)
 	}
 }
 
-int cnss_bus_dev_shutdown(struct cnss_plat_data *plat_priv)
+int cnss_bus_dev_shutdown(struct cnss_plat_data *plat_priv, int type)
 {
 	if (!plat_priv)
 		return -ENODEV;
 
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
-		return cnss_pci_dev_shutdown(plat_priv->bus_priv);
+		return cnss_pci_dev_shutdown(plat_priv->bus_priv, type);
 	case CNSS_BUS_USB:
 		return 0;
 	default:

@@ -26,6 +26,11 @@
  */
 #define CNSS_API_WITH_DEV
 
+enum cnss_recovery_policy {
+	FULL_RECOVERY,
+	ONLY_SHUTDOWN,
+};
+
 enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_NONE,
 	CNSS_BUS_WIDTH_IDLE,
@@ -92,7 +97,7 @@ struct cnss_wlan_driver {
 			    const struct pci_device_id *id);
 	int  (*idle_shutdown)(struct pci_dev *pdev);
 	int  (*reinit)(struct pci_dev *pdev, const struct pci_device_id *id);
-	void (*shutdown)(struct pci_dev *pdev);
+	void (*shutdown)(struct pci_dev *pdev, int type);
 	void (*crash_shutdown)(struct pci_dev *pdev);
 	int  (*suspend)(struct pci_dev *pdev, pm_message_t state);
 	int  (*resume)(struct pci_dev *pdev);
