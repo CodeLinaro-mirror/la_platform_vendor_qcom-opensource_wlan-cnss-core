@@ -782,7 +782,7 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 	return 0;
 
 shutdown:
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 	clear_bit(CNSS_FW_READY, &plat_priv->driver_state);
 	clear_bit(CNSS_FW_MEM_READY, &plat_priv->driver_state);
@@ -1381,7 +1381,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	case CNSS_REASON_DEFAULT:
 			cnss_pr_info("CNSS_REASON_DEFAULT, shutdown device\n");
 			complete(&plat_priv->rddm_complete);
-			cnss_bus_dev_shutdown(plat_priv);
+			cnss_bus_dev_shutdown(plat_priv, ONLY_SHUTDOWN);
 		break;
 	case CNSS_REASON_TIMEOUT:
 #ifdef DUMP_TO_FS
@@ -1420,7 +1420,7 @@ self_recovery:
 		set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
 	}
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 	if (policy == FULL_RECOVERY)
 		cnss_bus_dev_powerup(plat_priv);
 
@@ -1720,7 +1720,7 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv)
 	if (plat_priv->device_id == QCN7605_DEVICE_ID ||
 	    plat_priv->bus_type == CNSS_BUS_USB)
 		goto skip_shutdown;
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 skip_shutdown:
 	clear_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state);
@@ -1734,7 +1734,7 @@ static int cnss_power_up_hdlr(struct cnss_plat_data *plat_priv)
 
 static int cnss_power_down_hdlr(struct cnss_plat_data *plat_priv)
 {
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 	return 0;
 }
