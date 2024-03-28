@@ -432,6 +432,15 @@ int cnss_set_pcie_gen_speed(struct device *dev, u8 pcie_gen_speed)
 }
 EXPORT_SYMBOL(cnss_set_pcie_gen_speed);
 
+int cnss_set_lost_connection(struct device *dev, u8 lost_connection)
+{
+	cnss_pr_dbg("cnss_set_lost_connection: %d\n", lost_connection);
+	if (lost_connection)
+		cnss_force_driver_remove(dev);
+	return 0;
+}
+EXPORT_SYMBOL(cnss_set_lost_connection);
+
 static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
