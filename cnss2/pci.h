@@ -158,13 +158,13 @@ int cnss_pci_fw_sram_dump_to_file(struct cnss_pci_data *pci_priv,
 u32 cnss_pci_get_wake_msi(struct cnss_pci_data *pci_priv);
 int cnss_pci_dev_crash_shutdown(struct cnss_pci_data *pci_priv);
 int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv);
-int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv);
+int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv, int type);
 int cnss_pci_call_driver_modem_status(struct cnss_pci_data *pci_priv,
 				      int modem_current_status);
 int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 			   enum cnss_mhi_state state);
 int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv);
-int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv);
+int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv, int type);
 int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv);
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv);
 void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv);

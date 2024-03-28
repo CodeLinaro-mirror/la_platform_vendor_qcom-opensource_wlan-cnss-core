@@ -510,7 +510,7 @@ out:
 	return ret;
 }
 
-int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv)
+int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv, int type)
 {
 	struct cnss_plat_data *plat_priv;
 
@@ -533,7 +533,7 @@ int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv)
 
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
 	    test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state)) {
-		pci_priv->driver_ops->shutdown(pci_priv->pci_dev);
+		pci_priv->driver_ops->shutdown(pci_priv->pci_dev, type);
 		set_bit(CNSS_DEV_SHUTDOWN, &plat_priv->driver_state);
 	} else if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state)) {
 		pci_priv->driver_ops->remove(pci_priv->pci_dev);
@@ -597,7 +597,7 @@ static int cnss_qca6174_shutdown(struct cnss_pci_data *pci_priv)
 
 	cnss_pm_request_resume(pci_priv);
 
-	cnss_pci_call_driver_remove(pci_priv);
+	cnss_pci_call_driver_remove(pci_priv, FULL_RECOVERY);
 
 #ifdef CONFIG_NAPIER_X86
 	cnss_request_bus_bandwidth(&pci_priv->pci_dev->dev,
@@ -711,14 +711,14 @@ out:
 	return ret;
 }
 
-static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
+static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv, int type)
 {
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
 	cnss_pm_request_resume(pci_priv);
 
-	cnss_pci_call_driver_remove(pci_priv);
+	cnss_pci_call_driver_remove(pci_priv, type);
 #ifdef CONFIG_NAPIER_X86
 	cnss_request_bus_bandwidth(&pci_priv->pci_dev->dev,
 				   CNSS_BUS_WIDTH_NONE);
@@ -727,7 +727,7 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 				   CNSS_BUS_WIDTH_NONE);
 #endif
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
-	cnss_pci_set_auto_suspended(pci_priv, 0);
+	cnss_pci_set_auto_suspended(pci_priv, FULL_RECOVERY);
 
 	cnss_pci_stop_mhi(pci_priv);
 
@@ -846,7 +846,7 @@ int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv)
 	return ret;
 }
 
-int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv)
+int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv, int type)
 {
 	int ret = 0;
 
@@ -864,7 +864,7 @@ int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
-		ret = cnss_qca6290_shutdown(pci_priv);
+		ret = cnss_qca6290_shutdown(pci_priv, type);
 		break;
 	default:
 		cnss_pr_err("Unknown device_id found: 0x%x\n",
@@ -1011,7 +1011,7 @@ int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 
 	plat_priv = pci_priv->plat_priv;
 	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
-	cnss_pci_dev_shutdown(pci_priv);
+	cnss_pci_dev_shutdown(pci_priv, FULL_RECOVERY);
 	pci_priv->driver_ops = NULL;
 
 	return 0;
