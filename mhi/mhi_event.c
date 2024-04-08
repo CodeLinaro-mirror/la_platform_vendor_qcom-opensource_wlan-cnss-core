@@ -40,8 +40,8 @@ int mhi_populate_event_cfg(struct mhi_device_ctxt *mhi_dev_ctxt)
 	int i;
 	u32 evt_cfgs[2][6] = {{0xa, 0x0, 0x1, 0, 1, 0x31},
 			{0x80, 0x1, 0x1, 0, 1, 0x31}};
-	mhi_dev_ctxt->mmio_info.nr_event_rings = 2;
 	struct mhi_device *mhi_device = mhi_dev_ctxt->mhi_dev;
+	mhi_dev_ctxt->mmio_info.nr_event_rings = 2;
 #endif
 	mhi_dev_ctxt->ev_ring_props =
 				kzalloc(sizeof(struct mhi_event_ring_cfg) *

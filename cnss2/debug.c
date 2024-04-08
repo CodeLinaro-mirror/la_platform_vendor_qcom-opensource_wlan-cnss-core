@@ -514,7 +514,7 @@ void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv)
 #endif
 }
 
-#ifdef CONFIG_ARCH_QCOM
+#ifdef CONFIG_IPC_LOGGING
 int cnss_debug_init(void)
 {
 	cnss_ipc_log_context = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
