@@ -40,7 +40,12 @@
 
 #define PCI_BAR_NUM			0
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
 #define PCI_DMA_MASK			36
+#else
+#define PCI_DMA_MASK			32
+#endif
+
 #define PCI_DMA_COHERENT_MASK			32
 
 #define MHI_NODE_NAME			"qcom,mhi"
