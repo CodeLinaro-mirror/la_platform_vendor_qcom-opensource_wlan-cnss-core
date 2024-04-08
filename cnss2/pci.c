@@ -40,7 +40,11 @@
 
 #define PCI_BAR_NUM			0
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+#define PCI_DMA_MASK			36
+#else
 #define PCI_DMA_MASK			32
+#endif
 
 #define PCI_DMA_COHERENT_MASK			32
 
