@@ -5159,6 +5159,12 @@ int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info)
 	       sizeof(info->dev_mem_info));
 	memcpy(&info->fw_build_id, &plat_priv->fw_build_id,
 	       sizeof(info->fw_build_id));
+#ifdef CONFIG_PCIE_SWITCH_NTN3
+	info->pcie_switch_attached = pci_priv->pcie_switch_ntn3;
+#else
+	info->pcie_switch_attached = 0;
+#endif
+
 
 	return 0;
 }
