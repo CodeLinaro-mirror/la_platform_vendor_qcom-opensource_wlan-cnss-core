@@ -25,7 +25,7 @@
 #include <soc/qcom/minidump.h>
 #endif
 
-#ifdef CONFIG_DUMP_FW_TO_FILE
+#ifdef CONFIG_DUMP_FW_TO_FILE_AT_KERNEL
 #include <linux/export.h>
 #include <linux/rtc.h>
 #include <linux/fs.h>
@@ -4317,7 +4317,7 @@ int cnss_get_curr_therm_cdev_state(struct device *dev,
 }
 EXPORT_SYMBOL(cnss_get_curr_therm_cdev_state);
 
-#ifdef CONFIG_DUMP_FW_TO_FILE
+#ifdef CONFIG_DUMP_FW_TO_FILE_AT_KERNEL
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 #define vfs_write kernel_write
 #endif
