@@ -13,6 +13,7 @@
 #ifndef _CNSS_MAIN_H
 #define _CNSS_MAIN_H
 
+#include <linux/version.h>
 #include <linux/esoc_client.h>
 #include <linux/etherdevice.h>
 #include <linux/msm-bus.h>
@@ -282,7 +283,11 @@ struct cnss_plat_data {
 	struct cnss_bus_bw_info bus_bw_info;
 	struct notifier_block modem_nb;
 	struct cnss_platform_cap cap;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+	struct dev_pm_qos_request qos_request;
+#else
 	struct pm_qos_request qos_request;
+#endif
 	struct cnss_device_version device_version;
 	unsigned long device_id;
 	enum cnss_driver_status driver_status;

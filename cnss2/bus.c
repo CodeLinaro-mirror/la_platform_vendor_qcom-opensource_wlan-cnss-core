@@ -134,9 +134,9 @@ void cnss_bus_deinit(struct cnss_plat_data *plat_priv)
 
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
-		cnss_pci_deinit(plat_priv);
+		return cnss_pci_deinit(plat_priv);
 	case CNSS_BUS_USB:
-		cnss_usb_deinit(plat_priv);
+		return cnss_usb_deinit(plat_priv);
 	default:
 		cnss_pr_err("Unsupported bus type: %d\n",
 			    plat_priv->bus_type);
@@ -235,9 +235,11 @@ int cnss_bus_force_fw_assert_hdlr(struct cnss_plat_data *plat_priv)
 	}
 }
 
-void cnss_bus_fw_boot_timeout_hdlr(unsigned long data)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *t)
 {
-	struct cnss_plat_data *plat_priv = (struct cnss_plat_data *)data;
+	struct cnss_plat_data *plat_priv =
+		from_timer(plat_priv, t, fw_boot_timer);
 
 	if (!plat_priv)
 		return;
@@ -251,6 +253,25 @@ void cnss_bus_fw_boot_timeout_hdlr(unsigned long data)
 		return;
 	}
 }
+
+#else
+void cnss_bus_fw_boot_timeout_hdlr(unsigned long data)
+{
+	struct cnss_plat_data *plat_priv = (struct cnss_plat_data *)data;
+
+	if (!plat_priv)
+		return;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_fw_boot_timeout_hdlr(plat_priv->bus_priv);
+	default:
+		cnss_pr_err("%s Unsupported bus type: %d\n", __func__,
+			    plat_priv->bus_type);
+		return;
+	}
+}
+#endif
 
 void cnss_bus_collect_dump_info(struct cnss_plat_data *plat_priv, bool in_panic)
 {

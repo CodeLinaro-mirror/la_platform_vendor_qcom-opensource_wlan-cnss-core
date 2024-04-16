@@ -258,9 +258,14 @@ void cnss_request_pm_qos(struct device *dev, u32 qos_val)
 
 	if (!plat_priv)
 		return;
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+	dev_pm_qos_add_request(dev, &plat_priv->qos_request,
+				       DEV_PM_QOS_RESUME_LATENCY,
+				       qos_val);
+#else
 	pm_qos_add_request(&plat_priv->qos_request, PM_QOS_CPU_DMA_LATENCY,
 			   qos_val);
+#endif
 }
 EXPORT_SYMBOL(cnss_request_pm_qos);
 
@@ -270,8 +275,11 @@ void cnss_remove_pm_qos(struct device *dev)
 
 	if (!plat_priv)
 		return;
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+	dev_pm_qos_remove_request(&plat_priv->qos_request);
+#else
 	pm_qos_remove_request(&plat_priv->qos_request);
+#endif
 }
 EXPORT_SYMBOL(cnss_remove_pm_qos);
 
@@ -889,7 +897,7 @@ static int cnss_register_esoc(struct cnss_plat_data *plat_priv)
 	} else {
 		esoc_desc = devm_register_esoc_client(dev, client_desc);
 		if (IS_ERR_OR_NULL(esoc_desc)) {
-			ret = PTR_RET(esoc_desc);
+			ret = PTR_ERR_OR_ZERO(esoc_desc);
 			cnss_pr_err("Failed to register esoc_desc, err = %d\n",
 				    ret);
 			goto out;
@@ -2114,9 +2122,12 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 {
 	int ret;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+	timer_setup(&plat_priv->fw_boot_timer, cnss_bus_fw_boot_timeout_hdlr, 0);
+#else
 	setup_timer(&plat_priv->fw_boot_timer, cnss_bus_fw_boot_timeout_hdlr,
 		    (unsigned long)plat_priv);
-
+#endif
 	if (!pm_notify_registered) {
 		register_pm_notifier(&cnss_pm_notifier);
 		pm_notify_registered = true;

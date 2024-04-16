@@ -3512,7 +3512,23 @@ static char *cnss_mhi_notify_status_to_str(enum MHI_CB status)
 		return "UNKNOWN";
 	}
 };
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+static void cnss_dev_rddm_timeout_hdlr(struct timer_list *t)
+{
+	struct cnss_pci_data *pci_priv =
+		from_timer(pci_priv, t, dev_rddm_timer);
 
+	if (!pci_priv) {
+		cnss_pr_err("pci_priv is NULL\n");
+		return;
+	}
+
+	cnss_fatal_err("Timeout waiting for RDDM notification\n");
+
+	cnss_schedule_recovery(&pci_priv->pci_dev->dev, CNSS_REASON_TIMEOUT);
+}
+
+#else
 static void cnss_dev_rddm_timeout_hdlr(unsigned long data)
 {
 	struct cnss_pci_data *pci_priv = (struct cnss_pci_data *)data;
@@ -3524,6 +3540,7 @@ static void cnss_dev_rddm_timeout_hdlr(unsigned long data)
 
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev, CNSS_REASON_TIMEOUT);
 }
+#endif
 
 static int cnss_mhi_link_status(struct mhi_controller *mhi_ctrl, void *priv)
 {
@@ -3543,7 +3560,9 @@ int cnss_pci_fw_sram_dump_to_file(struct cnss_pci_data *pci_priv,
 		const char *fw_sram_dump_path)
 {
 	struct file *fp = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	mm_segment_t fs;
+#endif
 	uint32_t offset;
 	loff_t pos = 0;
 	int status;
@@ -3562,8 +3581,10 @@ int cnss_pci_fw_sram_dump_to_file(struct cnss_pci_data *pci_priv,
 		return -EACCES;
 	}
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
 	pos = 0;
 
 	for (offset = fw_sram_start; offset < fw_sram_end; offset += 4) {
@@ -3590,7 +3611,9 @@ out:
 		return status;
 	}
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	set_fs(fs);
+#endif
 
 	return status;
 }
@@ -4266,11 +4289,18 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 		cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, false, false);
+		break;
 	case QCN7605_DEVICE_ID:
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+		timer_setup(&pci_priv->dev_rddm_timer, 
+			cnss_dev_rddm_timeout_hdlr, 0);
+#else
 		setup_timer(&pci_priv->dev_rddm_timer,
 			    cnss_dev_rddm_timeout_hdlr,
 			    (unsigned long)pci_priv);
 
+#endif
 		ret = cnss_pci_enable_msi(pci_priv);
 		if (ret)
 			goto disable_bus;
