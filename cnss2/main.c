@@ -23,6 +23,7 @@
 #include <linux/suspend.h>
 #include <linux/timer.h>
 #include <linux/delay.h>
+#include <linux/irq.h>
 #ifdef CONFIG_ARCH_QCOM
 #include <soc/qcom/ramdump.h>
 #include <soc/qcom/subsystem_notif.h>
@@ -153,6 +154,35 @@ struct cnss_driver_event {
 	int ret;
 	void *data;
 };
+
+static void cnss_msi_interrupt_check(struct cnss_plat_data *plat_priv)
+{
+	struct cnss_pci_data *pci_priv;
+	struct pci_dev *pci_dev;
+	struct irq_desc *desc;
+	int irq;
+	bool single_msi = false;
+
+	pci_priv = plat_priv ? plat_priv->bus_priv : NULL;
+	pci_dev = pci_priv ? pci_priv->pci_dev : NULL;
+
+	if (!pci_dev)
+		return;
+
+	single_msi = cnss_get_pci_msi_vectors(pci_priv) == 1;
+	if (!single_msi)
+		return;
+
+	irq = pci_dev->irq;
+	desc = irq_to_desc(irq);
+	/* positive irq depth means irq is disabled */
+	while (desc->depth) {
+		enable_irq(irq);
+		cnss_pr_info("enable irq %d\n", irq);
+	}
+
+	return;
+}
 
 static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
@@ -464,6 +494,7 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 	if (qmi_bypass)
 		return 0;
 
+	cnss_msi_interrupt_check(plat_priv);
 	return cnss_wlfw_wlan_mode_send_sync(plat_priv, QMI_WLFW_OFF_V01);
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
