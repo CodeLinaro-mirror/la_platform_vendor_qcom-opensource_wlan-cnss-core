@@ -18,6 +18,7 @@
 #include <linux/timer.h>
 #include <linux/thermal.h>
 #include <linux/version.h>
+#include <linux/irq.h>
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0))
 #include <linux/panic_notifier.h>
 #endif
@@ -106,6 +107,34 @@ struct cnss_driver_event {
 	int ret;
 	void *data;
 };
+
+static void cnss_msi_interrupt_check(struct cnss_plat_data *plat_priv)
+{
+	struct cnss_pci_data *pci_priv;
+	struct pci_dev *pci_dev;
+	struct irq_desc *desc;
+	int irq;
+	
+	pci_priv = plat_priv ? plat_priv->bus_priv : NULL;
+	pci_dev = pci_priv ? pci_priv->pci_dev : NULL;
+
+	if (!pci_dev)
+		return;
+
+	if (!cnss_pci_is_one_msi(pci_priv))
+		return;
+	cnss_pr_info("cnss_msi_interrupt_check: one msi\n");
+	
+	irq = pci_dev->irq;
+	desc = irq_to_desc(irq);
+	/* positive irq depth means irq is disabled */
+	while (desc->depth) {
+		enable_irq(irq);
+		cnss_pr_info("enable irq %d\n", irq);
+	}
+
+	return;
+}
 
 static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
@@ -604,7 +633,8 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 
 	if (test_bit(QMI_BYPASS, &plat_priv->ctrl_params.quirks))
 		return 0;
-
+	
+	cnss_msi_interrupt_check(plat_priv);
 	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
 	cnss_bus_free_qdss_mem(plat_priv);
 

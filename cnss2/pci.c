@@ -2269,13 +2269,13 @@ static int cnss_wlan_adsp_pc_enable(struct cnss_pci_data *pci_priv,
 #endif
 
 #ifdef CONFIG_ONE_MSI_VECTOR
-static bool cnss_pci_is_one_msi(struct cnss_pci_data *pci_priv)
+bool cnss_pci_is_one_msi(struct cnss_pci_data *pci_priv)
 {
 	return pci_priv && pci_priv->msi_config &&
 	       (pci_priv->msi_config->total_vectors == 1);
 }
 #else
-static bool cnss_pci_is_one_msi(struct cnss_pci_data *pci_priv)
+bool cnss_pci_is_one_msi(struct cnss_pci_data *pci_priv)
 {
 	return false;
 }
