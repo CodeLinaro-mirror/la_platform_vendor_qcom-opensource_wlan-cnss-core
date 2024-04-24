@@ -4770,7 +4770,7 @@ int cnss_smmu_map(struct device *dev,
 
 	cnss_pr_dbg("IOMMU map: iova %lx, len %zu\n", iova, len);
 
-	ret = iommu_map(pci_priv->iommu_domain, iova,
+	ret = cnss_iommu_map(pci_priv->iommu_domain, iova,
 			rounddown(paddr, PAGE_SIZE), len, flag);
 	if (ret) {
 		cnss_pr_err("PA to IOVA mapping failed, ret %d\n", ret);

@@ -1263,7 +1263,9 @@ static const struct proto_ops qrtr_proto_ops = {
 	.shutdown	= sock_no_shutdown,
 	.release	= qrtr_release,
 	.mmap		= sock_no_mmap,
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(6, 4, 16))	
 	.sendpage	= sock_no_sendpage,
+#endif
 };
 
 static struct proto qrtr_proto = {

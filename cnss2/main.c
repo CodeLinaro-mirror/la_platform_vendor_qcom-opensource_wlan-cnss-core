@@ -556,6 +556,19 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0))
+int cnss_iommu_map(struct iommu_domain *domain,
+		   unsigned long iova, phys_addr_t paddr, size_t size, int prot)
+{
+	return iommu_map(domain, iova, paddr, size, prot, GFP_KERNEL);
+}
+#else
+int cnss_iommu_map(struct iommu_domain *domain,
+		   unsigned long iova, phys_addr_t paddr, size_t size, int prot)
+{
+	return iommu_map(domain, iova, paddr, size, prot);
+}
+#endif
 int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
 			dma_addr_t iova, size_t size)
 {
@@ -568,6 +581,9 @@ int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
 	if (!plat_priv->audio_iommu_domain)
 		return -EINVAL;
 
+	if (plat_priv->is_audio_shared_iommu_group)
+		return 0;
+		
 	page_offset = iova & (PAGE_SIZE - 1);
 	if (page_offset + size > PAGE_SIZE)
 		size += PAGE_SIZE;
@@ -575,8 +591,9 @@ int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
 	iova -= page_offset;
 	paddr -= page_offset;
 
-	return iommu_map(plat_priv->audio_iommu_domain, iova, paddr,
-			 roundup(size, PAGE_SIZE), IOMMU_READ | IOMMU_WRITE);
+	return cnss_iommu_map(plat_priv->audio_iommu_domain, iova, paddr,
+			      roundup(size, PAGE_SIZE), IOMMU_READ |
+			      IOMMU_WRITE | IOMMU_CACHE);
 }
 EXPORT_SYMBOL(cnss_audio_smmu_map);
 
@@ -2290,14 +2307,14 @@ static void cnss_driver_event_work(struct work_struct *work)
 		case CNSS_DRIVER_EVENT_IDLE_RESTART:
 			set_bit(CNSS_DRIVER_IDLE_RESTART,
 				&plat_priv->driver_state);
-			/* fall through */
+		/* fall-thru */
 		case CNSS_DRIVER_EVENT_POWER_UP:
 			ret = cnss_power_up_hdlr(plat_priv);
 			break;
 		case CNSS_DRIVER_EVENT_IDLE_SHUTDOWN:
 			set_bit(CNSS_DRIVER_IDLE_SHUTDOWN,
 				&plat_priv->driver_state);
-			/* fall through */
+		/* fall-thru */
 		case CNSS_DRIVER_EVENT_POWER_DOWN:
 			ret = cnss_power_down_hdlr(plat_priv);
 			break;
@@ -3868,6 +3885,33 @@ out:
 	return ret;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
+union cnss_device_group_devres {
+	const struct attribute_group *group;
+};
+
+static void devm_cnss_group_remove(struct device *dev, void *res)
+{
+	union cnss_device_group_devres *devres = res;
+	const struct attribute_group *group = devres->group;
+
+	cnss_pr_dbg("%s: removing group %p\n", __func__, group);
+	sysfs_remove_group(&dev->kobj, group);
+}
+
+static int devm_cnss_group_match(struct device *dev, void *res, void *data)
+{
+	return ((union cnss_device_group_devres *)res) == data;
+}
+
+static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
+{
+	cnss_remove_sysfs_link(plat_priv);
+	WARN_ON(devres_release(&plat_priv->plat_dev->dev,
+			       devm_cnss_group_remove, devm_cnss_group_match,
+			       (void *)&cnss_attr_group));
+}
+#else
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
 	if (!plat_priv->plat_dev)
@@ -3876,6 +3920,7 @@ static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 	cnss_remove_sysfs_link(plat_priv);
 	devm_device_remove_group(&plat_priv->plat_dev->dev, &cnss_attr_group);
 }
+#endif
 
 static int cnss_event_work_init(struct cnss_plat_data *plat_priv)
 {

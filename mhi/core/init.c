@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
+#include <linux/version.h>
 #include "internal.h"
 
 static DEFINE_IDA(mhi_controller_ida);
@@ -1371,10 +1372,17 @@ void mhi_driver_unregister(struct mhi_driver *mhi_drv)
 }
 EXPORT_SYMBOL_GPL(mhi_driver_unregister);
 
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 3, 0))
+static int mhi_uevent(const struct device *dev, struct kobj_uevent_env *env)
+#else
 static int mhi_uevent(struct device *dev, struct kobj_uevent_env *env)
+#endif
 {
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 3, 0))
+	const struct mhi_device *mhi_dev = to_mhi_device(dev);
+#else
 	struct mhi_device *mhi_dev = to_mhi_device(dev);
-
+#endif
 	return add_uevent_var(env, "MODALIAS=" MHI_DEVICE_MODALIAS_FMT,
 					mhi_dev->name);
 }
