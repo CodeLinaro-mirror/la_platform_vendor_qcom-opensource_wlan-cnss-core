@@ -685,7 +685,7 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 	return 0;
 
 shutdown:
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 	clear_bit(CNSS_FW_READY, &plat_priv->driver_state);
 	clear_bit(CNSS_FW_MEM_READY, &plat_priv->driver_state);
@@ -1088,7 +1088,7 @@ static int cnss_subsys_shutdown(const struct subsys_desc *subsys_desc,
 		return 0;
 	}
 
-	return cnss_bus_dev_shutdown(plat_priv);
+	return cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 }
 
 static int cnss_subsys_ramdump(int enable,
@@ -1307,8 +1307,8 @@ self_recovery:
 	if (cssr_enable)
 		plat_priv->cssr_count += 1;
 
-	cnss_bus_dev_shutdown(plat_priv);
 	policy = cnss_determine_recovery_policy(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, policy);
 	switch (policy) {
 		case FULL_RECOVERY:
 			cnss_bus_dev_powerup(plat_priv);
@@ -1611,7 +1611,7 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv)
 	if (plat_priv->device_id == QCN7605_DEVICE_ID ||
 	    plat_priv->bus_type == CNSS_BUS_USB)
 		goto skip_shutdown;
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 skip_shutdown:
 	clear_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state);
@@ -1625,7 +1625,7 @@ static int cnss_power_up_hdlr(struct cnss_plat_data *plat_priv)
 
 static int cnss_power_down_hdlr(struct cnss_plat_data *plat_priv)
 {
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 	return 0;
 }
