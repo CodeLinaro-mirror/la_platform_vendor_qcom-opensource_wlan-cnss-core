@@ -661,6 +661,7 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 #ifdef CONFIG_NAPIER_X86
 	s_mhi_dev_ctxt = mhi_dev_ctxt;
 #endif
+	mhi_enable_ltssm(mhi_dev_ctxt);
 
 	/* expose dev node to userspace */
 	if (bhi_ctxt->manage_boot == false)
