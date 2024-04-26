@@ -396,3 +396,27 @@ dma_addr_t mhi_v2p_addr(struct mhi_device_ctxt *mhi_dev_ctxt,
 		}
 		return phy_ptr;
 }
+
+void mhi_enable_ltssm(struct mhi_device_ctxt *mhi_dev_ctxt)
+{
+	u32 val;
+	int count = 10;
+
+	do {
+		val = mhi_reg_read_remap(mhi_dev_ctxt,
+					 mhi_dev_ctxt->mmio_info.mmio_addr,
+					 PCIE_PCIE_PARF_LTSSM);
+		if (val == 0x111)
+			break;
+
+		if (val == 0xffffffff)
+			msleep(100);
+
+		mhi_reg_write_remap(mhi_dev_ctxt,
+				    mhi_dev_ctxt->mmio_info.mmio_addr,
+				    PCIE_PCIE_PARF_LTSSM, 0x111);
+	} while (count--);
+
+	mhi_log(mhi_dev_ctxt, MHI_MSG_DBG,
+			"PCIE_PCIE_PARF_LTSSM 0x%x\n", val);
+}

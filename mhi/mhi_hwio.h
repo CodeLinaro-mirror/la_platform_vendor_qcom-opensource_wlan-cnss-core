@@ -186,4 +186,5 @@
 #endif
 
 #define JTAGID (0x1910010)
+#define PCIE_PCIE_PARF_LTSSM	(0x1E081B0)
 #endif
