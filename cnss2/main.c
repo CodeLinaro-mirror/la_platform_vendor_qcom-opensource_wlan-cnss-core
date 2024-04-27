@@ -123,11 +123,6 @@ bool cnss_check_driver_loading_allowed(void)
 }
 
 #ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
-static void cnss_init_plat_env_count(void)
-{
-	atomic_set(&plat_env_count, 0);
-}
-
 static void cnss_inc_plat_env_count(void)
 {
 	atomic_inc(&plat_env_count);
@@ -266,10 +261,6 @@ cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
 }
 
 #else
-static void cnss_init_plat_env_count(void)
-{
-}
-
 static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
 {
@@ -4881,7 +4872,6 @@ static int __init cnss_initialize(void)
 	if (ret < 0)
 		cnss_pr_err("CNSS genl init failed %d\n", ret);
 
-	cnss_init_plat_env_count();
 	return ret;
 }
 
