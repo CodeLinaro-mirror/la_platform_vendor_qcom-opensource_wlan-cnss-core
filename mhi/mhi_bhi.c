@@ -294,10 +294,8 @@ int bhi_rddm(struct mhi_device_ctxt *mhi_dev_ctxt, bool in_panic)
 
 	if (!in_panic) {
 		ret = bhi_rddm_graceful(mhi_dev_ctxt);
-#ifdef CONFIG_NAPIER_X86
 		if (!ret)
 			dump_fw_to_file(mhi_dev_ctxt);
-#endif
 		return ret;
 	}
 	/*
@@ -586,7 +584,7 @@ int bhi_expose_dev_bhi(struct mhi_device_ctxt *mhi_dev_ctxt)
 	if (IS_ERR(bhi_ctxt->dev)) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_CRITICAL,
 			"Failed to add bhi cdev\n");
-		ret_val = PTR_RET(bhi_ctxt->dev);
+		ret_val = PTR_ERR_OR_ZERO(bhi_ctxt->dev);
 		goto err_dev_create;
 	}
 	return 0;

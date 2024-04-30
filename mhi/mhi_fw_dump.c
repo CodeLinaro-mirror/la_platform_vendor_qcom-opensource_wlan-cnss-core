@@ -32,7 +32,7 @@ static int get_time_of_the_day_in_hr_min_sec(char *tbuf, int len)
 	ktime_get_real_ts64(&tv);
 	/* Convert rtc to local time */
 	tv.tv_sec -= sys_tz.tz_minuteswest * 60;
-	rtc_time_to_tm(tv.tv_sec, &tm);
+	rtc_time64_to_tm(tv.tv_sec, &tm);
 	time_len = scnprintf(tbuf, len,
 		"%04d-%02d-%02d-%02d-%02d-%02d-",
 		tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
@@ -46,7 +46,9 @@ static int firmware_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			 char *file_full_path)
 {
 	struct file *fp = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	mm_segment_t fs;
+#endif
 	loff_t pos = 0;
 	int seg = 0;
 	int status = 0;
@@ -54,8 +56,10 @@ static int firmware_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 	unsigned int size = 0;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "enter\n");
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 		"to create file:%s\n", file_full_path);
@@ -92,7 +96,9 @@ static int firmware_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			"close file: %s, error\n", file_full_path);
 		return status;
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	set_fs(fs);
+#3ndif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "exit\n");
 	return status;
 }
@@ -104,7 +110,9 @@ static int extract_fw_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			 unsigned int target_size)
 {
 	struct file *fp = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	mm_segment_t fs;
+#endif
 	loff_t pos = 0;
 	int seg = 0;
 	int status = 0;
@@ -116,9 +124,10 @@ static int extract_fw_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 	bool complete = false;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "enter\n");
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-
+#endif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 		"to create file:%s\n", file_full_path);
 	fp = filp_open(file_full_path, O_RDWR | O_CREAT, 0644);
@@ -181,7 +190,9 @@ static int extract_fw_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			"close file: %s, error\n", file_full_path);
 		return status;
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	set_fs(fs);
+#endif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "exit\n");
 	return status;
 }
@@ -200,7 +211,9 @@ static int fw_paging_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			 char *file_full_path)
 {
 	struct file *fp = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	mm_segment_t fs;
+#endif
 	loff_t pos = 0;
 	int seg = 0;
 	int status = 0;
@@ -208,8 +221,10 @@ static int fw_paging_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 	unsigned int size = 0;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "enter\n");
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 		"to create file:%s\n", file_full_path);
@@ -267,7 +282,9 @@ static int fw_paging_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			"close file: %s, error\n", file_full_path);
 		return status;
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	set_fs(fs);
+#endif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "exit\n");
 	return status;
 }
@@ -278,7 +295,9 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 		       char *file_full_path)
 {
 	struct file *fp;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	mm_segment_t fs;
+#endif
 	loff_t pos;
 	int status = 0;
 
@@ -290,8 +309,10 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			file_full_path);
 		return -EIO;
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
 	pos = 0;
 	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 		"to write file:%s, mem: 0x%p, size: 0x%x\n",
@@ -319,7 +340,9 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 			file_full_path);
 		return status;
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	set_fs(fs);
+#endif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "exit\n");
 	return status;
 

@@ -196,7 +196,7 @@ int mhi_init_pcie_device(struct mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 		"Successfully enabled pcie device.\n");
 
-	core->bar0_base = ioremap_nocache(pci_resource_start(pcie_device, 0),
+	core->bar0_base = ioremap(pci_resource_start(pcie_device, 0),
 					  pci_resource_len(pcie_device, 0));
 	if (!core->bar0_base)
 		goto mhi_device_list_error;
