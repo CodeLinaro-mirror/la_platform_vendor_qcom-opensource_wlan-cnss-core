@@ -74,6 +74,7 @@ int cnss_dump_fw_sram_to_file(struct device *dev);
 int cnss_stop_sw_reset(struct device *dev);
 int cnss_sw_reset(struct device *dev);
 int cnss_force_driver_remove(struct device *dev);
+int cnss_set_force_remove_state(struct device *dev);
 
 
 #endif /* _CNSS_DEBUG_H */

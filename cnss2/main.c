@@ -444,7 +444,7 @@ int cnss_set_lost_connection(struct device *dev, u8 lost_connection)
 {
 	cnss_pr_dbg("cnss_set_lost_connection: %d\n", lost_connection);
 	if (lost_connection)
-		cnss_force_driver_remove(dev);
+		cnss_set_force_remove_state(dev);
 	return 0;
 }
 EXPORT_SYMBOL(cnss_set_lost_connection);
@@ -1354,6 +1354,30 @@ int cnss_force_driver_remove(struct device *dev)
 	set_bit(CNSS_FORCE_DRIVER_REMOVE, &plat_priv->driver_state);
 	cnss_pci_update_link_event(pci_priv,
 				   BUS_EVENT_PCI_LINK_RESUME_FAIL, NULL);
+
+	return ret;
+
+}
+
+int cnss_set_force_remove_state(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_pci_data *pci_priv;
+	int ret = 0;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+	
+	pci_priv = (struct cnss_pci_data *)plat_priv->bus_priv;
+	if (!pci_priv) {
+		cnss_pr_err("pci_priv is NULL\n");
+		return -ENODEV;
+	}
+	
+	clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
+	set_bit(CNSS_FORCE_DRIVER_REMOVE, &plat_priv->driver_state);
 
 	return ret;
 
