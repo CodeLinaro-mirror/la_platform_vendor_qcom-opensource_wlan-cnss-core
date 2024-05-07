@@ -199,4 +199,5 @@ int cnss_pci_call_driver_modem_status(struct cnss_pci_data *pci_priv,
 				      int modem_current_status);
 int cnss_pci_recovery_update_status(struct cnss_pci_data *pci_priv);
 void cnss_pci_shutdown(struct pci_dev *pci_dev);
+int cnss_get_pci_msi_vectors(struct cnss_pci_data *pci_priv);
 #endif /* _CNSS_PCI_H */
