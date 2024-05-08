@@ -71,6 +71,7 @@ struct cnss_soc_info {
 	struct cnss_device_version device_version;
 	struct cnss_dev_mem_info dev_mem_info[CNSS_MAX_DEV_MEM_NUM];
 	char fw_build_id[CNSS_WLFW_MAX_BUILD_ID_LEN + 1];
+	bool pcie_switch_attached;
 };
 
 struct cnss_wlan_runtime_ops {

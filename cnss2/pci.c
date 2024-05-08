@@ -454,8 +454,7 @@ static const struct mhi_controller_config cnss_mhi_config_pcie_switch_ntn3 = {
 			CNSS_MHI_SATELLITE_CH_CFG_COUNT,
 	.ch_cfg = cnss_mhi_channels,
 	.num_events = ARRAY_SIZE(cnss_mhi_events) -
-			CNSS_MHI_SATELLITE_EVT_COUNT -
-			CNSS_MHI_BUS_MISC_EVT_COUNT,
+			CNSS_MHI_SATELLITE_EVT_COUNT,
 	.event_cfg = cnss_mhi_events,
 	.m2_no_db = true,
 };
@@ -5159,6 +5158,12 @@ int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info)
 	       sizeof(info->dev_mem_info));
 	memcpy(&info->fw_build_id, &plat_priv->fw_build_id,
 	       sizeof(info->fw_build_id));
+#ifdef CONFIG_PCIE_SWITCH_NTN3
+	info->pcie_switch_attached = pci_priv->pcie_switch_ntn3;
+#else
+	info->pcie_switch_attached = 0;
+#endif
+
 
 	return 0;
 }
@@ -6427,6 +6432,27 @@ static int cnss_mhi_bw_scale(struct mhi_controller *mhi_ctrl,
 	struct cnss_pci_data *pci_priv = dev_get_drvdata(mhi_ctrl->cntrl_dev);
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int ret = 0;
+
+#ifdef CONFIG_PCIE_SWITCH_NTN3
+	if (pci_priv->pcie_switch_ntn3) {
+		/* If device is attached to PCIe switch, it should
+		 * set and retrain DSP <-> EP link instead of RC link.
+		 * Currently link width setting is not supported yet.
+		 */
+		cnss_pr_dbg("Setting DSP <-> EP link speed:0x%x\n",
+			    link_info->target_link_speed);
+
+		ret = msm_pcie_retrain_port_link(pci_priv->pci_dev,
+						 link_info->target_link_speed);
+		if (ret) {
+			cnss_pr_err("Failed to retrain link, err = %d\n", ret);
+			return ret;
+		}
+		pci_priv->def_link_speed = link_info->target_link_speed;
+
+		return 0;
+	}
+#endif
 
 	cnss_pr_dbg("Setting link speed:0x%x, width:0x%x\n",
 		    link_info->target_link_speed,
