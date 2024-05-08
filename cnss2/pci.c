@@ -5423,6 +5423,14 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 		}
 		pci_priv->pci_link_state = PCI_LINK_UP;
 
+#ifdef CONFIG_PCIE_SWITCH_NTN3
+		ret = cnss_bus_dsp_link_enable(pci_priv->plat_priv);
+		if (ret) {
+			cnss_pr_err("Failed to enable bus dsp link, err = %d\n", ret);
+			goto out;
+		}
+#endif
+
 		if (pci_priv->pci_dev->device != QCA6174_DEVICE_ID) {
 			ret = pci_set_power_state(pci_priv->pci_dev, PCI_D0);
 			if (ret) {
