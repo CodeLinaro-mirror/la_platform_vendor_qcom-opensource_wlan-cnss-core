@@ -484,7 +484,6 @@ struct icnss_priv {
 	struct list_head icnss_tcdev_list;
 	struct mutex tcdev_lock;
 	bool is_chain1_supported;
-	bool chain_reg_info_updated;
 	u32 hw_trc_override;
 	struct icnss_dms_data dms;
 	u8 use_nv_mac;
@@ -520,7 +519,7 @@ struct icnss_priv {
 	u32 rf_subtype;
 	u8 is_slate_rfa;
 	struct completion slate_boot_complete;
-#ifdef SLATE_MODULE_ENABLED
+#ifdef CONFIG_SLATE_MODULE_ENABLED
 	struct seb_notif_info *seb_handle;
 	struct notifier_block seb_nb;
 #endif
