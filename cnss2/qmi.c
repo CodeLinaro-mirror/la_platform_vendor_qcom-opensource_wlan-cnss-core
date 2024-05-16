@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -649,6 +649,13 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 		}
 	}
 
+	if (resp->serial_id_valid) {
+		plat_priv->serial_id = resp->serial_id;
+		cnss_pr_info("serial id  0x%x 0x%x\n",
+			     resp->serial_id.serial_id_msb,
+			     resp->serial_id.serial_id_lsb);
+	}
+
 	cnss_pr_dbg("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, otp_version: 0x%x\n",
 		    plat_priv->chip_info.chip_id,
 		    plat_priv->chip_info.chip_family,
@@ -1023,7 +1030,8 @@ int cnss_wlfw_tme_opt_file_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		file_name = TME_DPR_FILE_NAME;
 	}
 
-	if (!tme_opt_file_mem->pa || !tme_opt_file_mem->size) {
+	if (!tme_opt_file_mem || !tme_opt_file_mem->pa ||
+	    !tme_opt_file_mem->size) {
 		cnss_pr_err("Memory for TME opt file is not available\n");
 		ret = -ENOMEM;
 		goto out;
@@ -3942,7 +3950,7 @@ int ims_subscribe_for_indication_send_async(struct cnss_plat_data *plat_priv)
 	(&plat_priv->ims_qmi, NULL, txn,
 	QMI_IMS_PRIVATE_SERVICE_SUBSCRIBE_FOR_INDICATIONS_REQ_V01,
 	IMS_PRIVATE_SERVICE_SUBSCRIBE_FOR_INDICATIONS_REQ_MSG_V01_MAX_MSG_LEN,
-	ims_private_service_subscribe_for_indications_req_msg_v01_ei, req);
+	ims_private_service_subscribe_ind_req_msg_v01_ei, req);
 	if (ret < 0) {
 		qmi_txn_cancel(txn);
 		cnss_pr_err("Fail to send ims subscribe for indication req %d\n",
@@ -4033,7 +4041,7 @@ static struct qmi_msg_handler qmi_ims_msg_handlers[] = {
 		.msg_id =
 		QMI_IMS_PRIVATE_SERVICE_SUBSCRIBE_FOR_INDICATIONS_REQ_V01,
 		.ei =
-		ims_private_service_subscribe_for_indications_rsp_msg_v01_ei,
+		ims_private_service_subscribe_ind_rsp_msg_v01_ei,
 		.decoded_size = sizeof(struct
 		ims_private_service_subscribe_for_indications_rsp_msg_v01),
 		.fn = ims_subscribe_for_indication_resp_cb
