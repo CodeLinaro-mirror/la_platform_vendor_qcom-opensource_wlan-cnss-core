@@ -40,8 +40,6 @@ static struct sock *srv_sock;
 uint16_t diag_debug_mask;
 void *diag_ipc_log;
 
-#define DIAG_IPC_LOG_PAGES		6
-
 
 typedef struct sAniHdr {
    unsigned short type;

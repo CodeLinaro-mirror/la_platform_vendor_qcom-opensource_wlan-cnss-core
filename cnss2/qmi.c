@@ -819,7 +819,7 @@ static void cnss_wlfw_bdf_get_file_name(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_BDF_ELF:
 		bdf_type = cnss_wlfw_bdf_elf_bin_override(plat_priv);
-		/*fall-through*/
+		/* fall-thru */
 	case CNSS_BDF_BIN:
 		if (plat_priv->board_info.board_id == 0xFF) {
 			if (bdf_type == CNSS_BDF_BIN)

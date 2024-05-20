@@ -3529,6 +3529,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		/* Disable L1SS for QCA6390 */
 		pci_read_config_byte(pci_dev, 0x1F4, &aspm_state);
 		cnss_pr_err("Current L1SS status: 0x%x", aspm_state);
+		/* fall-thru */
 		if (aspm_state & 0xF) {
 			pci_write_config_byte(pci_dev, 0x1F4, aspm_state & ~0xF);
 			pci_read_config_byte(pci_dev, 0x1F4, &aspm_state);
