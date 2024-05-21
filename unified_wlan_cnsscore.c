@@ -283,9 +283,7 @@ fail:
 
 static void unified_pdrv_deinit(void)
 {
-#ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
-	wcnss_pre_alloc_exit();
-#endif
+
 #ifdef CONFIG_SINGLE_KO_FEATURE
 	hdd_module_exit();
 #endif
@@ -310,6 +308,9 @@ static void unified_pdrv_deinit(void)
 	msm_ipc_router_deinit();
 #ifdef CONFIG_USB_QTI_KS_BRIDGE
 	ksb_exit();
+#endif
+#ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
+	wcnss_pre_alloc_exit();
 #endif
 #ifdef CONFIG_MSM_MHI
 	mhi_exit();
