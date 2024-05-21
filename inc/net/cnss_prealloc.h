@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016,2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,5 +19,11 @@ extern void *wcnss_prealloc_get(size_t size);
 extern int wcnss_prealloc_put(void *ptr);
 extern int wcnss_pre_alloc_reset(void);
 void wcnss_prealloc_check_memory_leak(void);
+
+#ifdef FEATURE_SKB_PRE_ALLOC
+#define WCNSS_PRE_SKB_ALLOC_GET_THRESHOLD (16*1024)
+extern struct sk_buff *wcnss_skb_prealloc_get(unsigned int size);
+extern int wcnss_skb_prealloc_put(struct sk_buff *skb);
+#endif
 
 #endif /* _NET_CNSS__PREALLOC_H_ */

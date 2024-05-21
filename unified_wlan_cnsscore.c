@@ -91,10 +91,21 @@ static int unified_pdrv_init(void)
 		goto fail8;
 	}
 #endif
+#ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
+	/* cnss prealloc initialise */
+	ret = wcnss_pre_alloc_init();
+	if (ret){
+		printk("%s: updrv: failed to pre alloc memory\n",__func__);
+		goto fail9;
+	}
+#endif
 	printk("unified_pdrv_init success\n");
 
 	return 0;
 
+#ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
+fail9:
+#endif
 #ifdef CONFIG_CNSS_GENL
 fail8:
 	cld80211_exit();
@@ -149,6 +160,9 @@ static void unified_pdrv_deinit(void)
 #endif
 #ifdef CONFIG_QRTR
 	qrtr_proto_fini();	
+#endif
+#ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
+	wcnss_pre_alloc_exit();
 #endif
 #ifdef CONFIG_MHI_BUS
 	mhi_exit();

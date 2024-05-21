@@ -30,6 +30,7 @@ int qrtr_proto_init(void);
 void qrtr_proto_fini(void);
 int subsys_restart_init(void);
 void subsys_restart_exit(void);
-
+int wcnss_pre_alloc_init(void);
+void wcnss_pre_alloc_exit(void);
 
 #endif
