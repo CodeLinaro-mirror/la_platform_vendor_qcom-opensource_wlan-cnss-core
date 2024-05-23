@@ -296,8 +296,10 @@ int fw_paging_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 
 int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 		       struct fw_remote_mem *fw_mem,
+		       u32 mem_count,
 		       char *file_full_path)
 {
+	u32 i;
 	struct file *fp;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	mm_segment_t fs;
@@ -317,21 +319,23 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 #endif
-	pos = 0;
-	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
-		"to write file:%s, mem: 0x%p, size: 0x%x\n",
-		file_full_path,
-		fw_mem->vaddr,
-		(unsigned int)(fw_mem->size));
-	status = vfs_write(fp,
-			   (const char __user *)(fw_mem->vaddr),
-			   fw_mem->size,
-			   &pos);
-	if (status < 0) {
+	for (i = 0; i < mem_count; i++, fw_mem++) {
+		pos = 0;
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
-			"write file:%s error\n",
-			file_full_path);
-		return status;
+			"to write file:%s, mem: 0x%p, size: 0x%x\n",
+			file_full_path,
+			fw_mem->vaddr,
+			(unsigned int)(fw_mem->size));
+		status = vfs_write(fp,
+				   (const char __user *)(fw_mem->vaddr),
+				   fw_mem->size,
+				   &pos);
+		if (status < 0) {
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+				"write file:%s error\n",
+				file_full_path);
+			return status;
+		}
 	}
 
 	/* flush write to file */
@@ -375,7 +379,8 @@ void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt)
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
 	struct bhie_vec_table *rddm_table = &bhi_ctxt->rddm_table;
 	struct bhie_vec_table *fw_table =   &bhi_ctxt->fw_table;
-	struct fw_remote_mem *fw_mem = &bhi_ctxt->fw_mem;
+	struct fw_remote_mem *fw_mem = &bhi_ctxt->fw_mem[0];
+	u32 count = bhi_ctxt->mem_seg_id;
 	char file_full_path[BUF_SIZE];
 	char time_buf[24];
 	int len, i = 0;
@@ -397,7 +402,7 @@ void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt)
 	ret = fw_paging_dump(mhi_dev_ctxt, fw_table, file_full_path);
 
 	len = scnprintf(p, len_left, "remote.bin");
-	ret = fw_remote_mem_dump(mhi_dev_ctxt, fw_mem, file_full_path);
+	ret = fw_remote_mem_dump(mhi_dev_ctxt, fw_mem, count, file_full_path);
 
 	len = scnprintf(p, len_left, "fwsram.bin");
 	ret = firmware_dump(mhi_dev_ctxt, rddm_table, file_full_path);
@@ -447,7 +452,9 @@ void dump_fw_info_to_kmsg(struct mhi_device_ctxt *mhi_dev_ctxt)
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
 	struct bhie_vec_table *rddm_table = &bhi_ctxt->rddm_table;
 	struct bhie_vec_table *fw_table =   &bhi_ctxt->fw_table;
-	struct fw_remote_mem *fw_mem = &bhi_ctxt->fw_mem;
+	struct fw_remote_mem *fw_mem = &bhi_ctxt->fw_mem[0];
+	u32 mem_seg_id = bhi_ctxt->mem_seg_id;
+	u32 i;
 	int seg = 0;
 	char *buf = NULL;
 	unsigned int size = 0;
@@ -475,9 +482,11 @@ void dump_fw_info_to_kmsg(struct mhi_device_ctxt *mhi_dev_ctxt)
 		pr_alert(FW_DUMP_INFO_FORMAT_STR, "fw_paging_dump", buf, size);
 	}
 
-	/* fw_remote_mem_dump */
-	pr_alert(FW_DUMP_INFO_FORMAT_STR, "fw_remote_mem_dump",
-		fw_mem->vaddr, (unsigned int)(fw_mem->size));
+	for (i = 0; i < mem_seg_id; i++, fw_mem++) {
+		/* fw_remote_mem_dump */
+		pr_alert(FW_DUMP_INFO_FORMAT_STR, "fw_remote_mem_dump",
+			fw_mem->vaddr, (unsigned int)(fw_mem->size));
+	}
 }
 #endif
 
@@ -487,8 +496,13 @@ void mhi_set_fw_remote_mem(struct mhi_device *mhi_device,
 {
 	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_device->mhi_dev_ctxt;
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+	u32 i;
 
-	bhi_ctxt->fw_mem.vaddr = vaddr;
-	bhi_ctxt->fw_mem.size = size;
+	i = bhi_ctxt->mem_set_id;
+	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE,
+		"fw remote mem seg index %d\n", i);
+	bhi_ctxt->fw_mem[i].vaddr = vaddr;
+	bhi_ctxt->fw_mem[i].size = size;
+	bhi_ctxt->mem_set_id++;
 }
 EXPORT_SYMBOL(mhi_set_fw_remote_mem);

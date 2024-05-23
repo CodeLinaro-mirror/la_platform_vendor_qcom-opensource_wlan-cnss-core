@@ -1654,9 +1654,7 @@ static void cnss_driver_event_work(struct work_struct *work)
 			break;
 		case CNSS_DRIVER_EVENT_REQUEST_MEM:
 			ret = cnss_bus_alloc_fw_mem(plat_priv);
-			if (ret)
-				break;
-			ret = cnss_wlfw_respond_mem_send_sync(plat_priv);
+			ret = cnss_wlfw_respond_mem_send_sync(plat_priv, ret);
 			break;
 		case CNSS_DRIVER_EVENT_FW_MEM_READY:
 			ret = cnss_fw_mem_ready_hdlr(plat_priv);
