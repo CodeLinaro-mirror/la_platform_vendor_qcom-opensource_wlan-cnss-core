@@ -450,7 +450,7 @@ static int cnss_qmi_pin_result_ind_hdlr(struct cnss_plat_data *plat_priv,
 	return ret;
 }
 
-int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv)
+int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv, int status)
 {
 	struct wlfw_respond_mem_req_msg_v01 *req;
 	struct wlfw_respond_mem_resp_msg_v01 *resp;
@@ -469,28 +469,30 @@ int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv)
 	if (!resp)
 		return -ENOMEM;
 
-	req->mem_seg_len = plat_priv->fw_mem_seg_len;
-	for (i = 0; i < req->mem_seg_len; i++) {
-		if (!fw_mem[i].pa || !fw_mem[i].size) {
-			if (fw_mem[i].type == 0) {
-				cnss_pr_err("Invalid memory for FW type, segment = %d\n",
-					    i);
-				ret = -EINVAL;
+	if (!status) {
+		req->mem_seg_len = plat_priv->fw_mem_seg_len;
+		for (i = 0; i < req->mem_seg_len; i++) {
+			if (!fw_mem[i].pa || !fw_mem[i].size) {
+				if (fw_mem[i].type == 0) {
+					cnss_pr_err("Invalid memory for FW type, segment = %d\n",
+						    i);
+					ret = -EINVAL;
+					goto out;
+				}
+				cnss_pr_err("Memory for FW is not available for type: %u\n",
+					    fw_mem[i].type);
+				ret = -ENOMEM;
 				goto out;
 			}
-			cnss_pr_err("Memory for FW is not available for type: %u\n",
-				    fw_mem[i].type);
-			ret = -ENOMEM;
-			goto out;
+
+			cnss_pr_info("Memory for FW, va: 0x%pK, pa: %pa, size: 0x%zx, type: %u\n",
+				    fw_mem[i].va, &fw_mem[i].pa,
+				    fw_mem[i].size, fw_mem[i].type);
+
+			req->mem_seg[i].addr = fw_mem[i].pa;
+			req->mem_seg[i].size = fw_mem[i].size;
+			req->mem_seg[i].type = fw_mem[i].type;
 		}
-
-		cnss_pr_info("Memory for FW, va: 0x%pK, pa: %pa, size: 0x%zx, type: %u\n",
-			    fw_mem[i].va, &fw_mem[i].pa,
-			    fw_mem[i].size, fw_mem[i].type);
-
-		req->mem_seg[i].addr = fw_mem[i].pa;
-		req->mem_seg[i].size = fw_mem[i].size;
-		req->mem_seg[i].type = fw_mem[i].type;
 	}
 
 	req_desc.max_msg_len = WLFW_RESPOND_MEM_REQ_MSG_V01_MAX_MSG_LEN;
@@ -517,12 +519,7 @@ int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv)
 		goto out;
 	}
 
-	kfree(req);
-	kfree(resp);
-	return 0;
-
 out:
-	CNSS_ASSERT(0);
 	kfree(req);
 	kfree(resp);
 	return ret;
