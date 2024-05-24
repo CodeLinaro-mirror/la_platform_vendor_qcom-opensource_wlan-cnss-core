@@ -96,6 +96,7 @@ struct cnss_pci_data {
 	u32 device_id;
 	u16 revision_id;
 	u64 dma_bit_mask;
+	u64 dma_coherent_bit_mask;
 	struct cnss_wlan_driver *driver_ops;
 	u8 pci_link_state;
 	u8 pci_link_down_ind;

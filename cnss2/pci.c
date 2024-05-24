@@ -5218,18 +5218,22 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	switch (device_id) {
 	case QCA6174_DEVICE_ID:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
 		break;
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
 #ifdef CONFIG_CNSS2_X86
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
 #else
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_36_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
 #endif
 		break;
 	default:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
 		break;
 	}
 
@@ -5240,8 +5244,10 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("Failed to set PCI DMA mask, err = %d\n", ret);
 		goto release_region;
 	}
+	
+	cnss_pr_dbg("Set PCI COHERENT DMA MASK (0x%llx)\n", pci_priv->dma_coherent_bit_mask);
 
-	ret = cnss_pci_set_coherent_dma_mask(pci_dev, pci_priv->dma_bit_mask);
+	ret = cnss_pci_set_coherent_dma_mask(pci_dev, pci_priv->dma_coherent_bit_mask);
 	if (ret) {
 		cnss_pr_err("Failed to set PCI coherent DMA mask, err = %d\n",
 			    ret);
