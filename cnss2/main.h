@@ -603,6 +603,8 @@ struct cnss_plat_data {
 	u64 dynamic_feature;
 	void *get_info_cb_ctx;
 	int (*get_info_cb)(void *ctx, void *event, int event_len);
+	void *get_driver_async_data_ctx;
+	int (*get_driver_async_data_cb)(void *ctx, uint16_t type, void *event, int event_len);
 	bool cbc_enabled;
 	u8 use_pm_domain;
 	u8 use_nv_mac;
@@ -613,16 +615,14 @@ struct cnss_plat_data {
 	u64 fw_caps;
 	u8 pcie_gen_speed;
 	struct iommu_domain *audio_iommu_domain;
+	bool is_audio_shared_iommu_group;
 	struct cnss_dms_data dms;
 	int power_up_error;
 	u32 hw_trc_override;
 	u8 charger_mode;
 	struct mbox_client mbox_client_data;
 	struct mbox_chan *mbox_chan;
-#if IS_ENABLED(CONFIG_MSM_QMP)
 	struct qmp *qmp;
-#endif
-	bool use_direct_qmp;
 	const char *vreg_ol_cpr, *vreg_ipa;
 	const char **pdc_init_table, **vreg_pdc_map, **pmu_vreg_map;
 	int pdc_init_table_len, vreg_pdc_map_len, pmu_vreg_map_len;
@@ -647,6 +647,7 @@ struct cnss_plat_data {
 	u32 *on_chip_pmic_board_ids;
 	bool no_bwscale;
 	bool sleep_clk;
+	struct wlchip_serial_id_v01 serial_id;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
@@ -676,7 +677,7 @@ struct cnss_plat_data *cnss_get_first_plat_priv(struct platform_device *plat_dev
 void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv);
 void cnss_pm_relax(struct cnss_plat_data *plat_priv);
 struct cnss_plat_data *cnss_get_plat_priv_by_rc_num(int rc_num);
-int cnss_get_plat_env_count(void);
+int cnss_get_max_plat_env_count(void);
 struct cnss_plat_data *cnss_get_plat_env(int index);
 void cnss_get_qrtr_info(struct cnss_plat_data *plat_priv);
 void cnss_get_sleep_clk_supported(struct cnss_plat_data *plat_priv);
