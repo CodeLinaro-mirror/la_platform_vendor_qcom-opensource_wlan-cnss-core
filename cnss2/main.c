@@ -2497,6 +2497,25 @@ int cnss_qmi_send(struct device *dev, int type, void *cmd,
 }
 EXPORT_SYMBOL(cnss_qmi_send);
 
+int cnss_register_driver_async_data_cb(struct device *dev, void *cb_ctx,
+				       int (*cb)(void *ctx, uint16_t type,
+						 void *event, int event_len))
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (!test_bit(CNSS_QMI_WLFW_CONNECTED, &plat_priv->driver_state))
+		return -EINVAL;
+
+	plat_priv->get_driver_async_data_cb = cb;
+	plat_priv->get_driver_async_data_ctx = cb_ctx;
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_register_driver_async_data_cb);
+
 static int cnss_cold_boot_cal_start_hdlr(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -3099,6 +3118,10 @@ int cnss_do_ramdump(struct cnss_plat_data *plat_priv)
 	struct qcom_dump_segment segment;
 	struct list_head head;
 
+	if (!dump_enabled()) {
+		cnss_pr_info("Dump collection is not enabled\n");
+		return 0;
+	}
 	INIT_LIST_HEAD(&head);
 	memset(&segment, 0, sizeof(segment));
 	segment.va = ramdump_info->ramdump_va;
