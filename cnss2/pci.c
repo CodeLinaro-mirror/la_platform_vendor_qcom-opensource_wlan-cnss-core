@@ -108,6 +108,8 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define AFC_AUTH_SUCCESS                1
 #define AFC_AUTH_ERROR                  0
 
+#define GET_PCI_DEVICE_ID_RETRY_COUNT_MAX 2
+
 static const struct mhi_channel_config cnss_mhi_channels[] = {
 	{
 		.num = 0,
@@ -5774,9 +5776,34 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	u16 device_id;
+	int retry_count = 0;
 
-	pci_read_config_word(pci_dev, PCI_DEVICE_ID, &device_id);
-	if (device_id != pci_priv->pci_device_id->device)  {
+	while (retry_count < GET_PCI_DEVICE_ID_RETRY_COUNT_MAX) {
+		pci_read_config_word(pci_dev, PCI_DEVICE_ID, &device_id);
+		if (device_id == pci_priv->pci_device_id->device)
+			break;
+
+		cnss_pr_err("Pci link may be down, set it up and try again\n");
+
+		ret = cnss_set_pci_link(pci_priv, PCI_LINK_UP);
+		if (ret) {
+			cnss_pr_err("Failed to set pci link up, err = %d\n", ret);
+			goto out;
+		}
+		pci_priv->pci_link_state = PCI_LINK_UP;
+
+		if (pci_priv->pci_dev->device != QCA6174_DEVICE_ID) {
+			ret = pci_set_power_state(pci_priv->pci_dev, PCI_D0);
+			if (ret) {
+				cnss_pr_err("Failed to set D0, err = %d\n", ret);
+				goto out;
+			}
+		}
+
+		retry_count++;
+	}
+
+	if (device_id != pci_priv->pci_device_id->device) {
 		cnss_pr_err("PCI device ID mismatch, config ID: 0x%x, probe ID: 0x%x\n",
 			    device_id, pci_priv->pci_device_id->device);
 		ret = -EIO;
@@ -7718,6 +7745,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
 	struct cnss_plat_data *plat_priv =
 		cnss_bus_dev_to_plat_priv(&pci_dev->dev);
+	struct device *dev = &pci_dev->dev;
 
 	clear_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state);
 	cnss_pci_unregister_driver_hdlr(pci_priv);
@@ -7749,6 +7777,9 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	cnss_pci_disable_bus(pci_priv);
 	cnss_dereg_pci_event(pci_priv);
 	cnss_pci_deinit_smmu(pci_priv);
+	if (plat_priv->use_pm_domain) {
+		dev->pm_domain = NULL;
+	}
 	if (plat_priv) {
 		cnss_unregister_ramdump(plat_priv);
 		cnss_unregister_subsys(plat_priv);
