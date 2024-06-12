@@ -79,4 +79,5 @@ int cnss_bus_get_msi_assignment(struct cnss_plat_data *plat_priv,
 				u32 *base_vector);
 int cnss_bus_dsp_link_control(struct cnss_plat_data *plat_priv,
 			      bool link_enable);
+int cnss_bus_dsp_link_enable(struct cnss_plat_data *plat_priv);
 #endif /* _CNSS_BUS_H */
