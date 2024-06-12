@@ -118,6 +118,11 @@ enum cnss_vreg_type {
 	CNSS_VREG_PRIM,
 };
 
+enum cnss_pci_switch_type {
+        PCIE_DIRECT_ATTACH = 0,
+        PCIE_SWITCH_NTN3,
+};
+
 struct cnss_clk_cfg {
 	const char *name;
 	u32 freq;
@@ -648,6 +653,7 @@ struct cnss_plat_data {
 	bool no_bwscale;
 	bool sleep_clk;
 	struct wlchip_serial_id_v01 serial_id;
+	u32 pcie_switch_type;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
