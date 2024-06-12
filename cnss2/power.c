@@ -129,6 +129,10 @@ enum cnss_aop_tcs_seq_param {
 	CNSS_TCS_SEQ_MAX
 };
 
+#define DSP_LINK_ENABLE_DELAY_TIME_US_MIN (25000)
+#define DSP_LINK_ENABLE_DELAY_TIME_US_MAX (25100)
+#define DSP_LINK_ENABLE_RETRY_COUNT_MAX   (3)
+
 static int cnss_get_vreg_single(struct cnss_plat_data *plat_priv,
 				struct cnss_vreg_info *vreg)
 {
@@ -1157,6 +1161,8 @@ int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num)
 int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset)
 {
 	int ret = 0;
+	bool dsp_link_disabled = false;
+	int retry_count = 0;
 
 	if (plat_priv->powered_on) {
 		cnss_pr_dbg("Already powered up");
@@ -1167,6 +1173,12 @@ int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset)
 	if (test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state)) {
 		cnss_pr_dbg("Avoid WLAN Power On. WLAN HW Disbaled");
 		return -EINVAL;
+	}
+
+	if (plat_priv->bus_priv &&
+	    (plat_priv->bus_type == CNSS_BUS_PCI)) {
+		cnss_bus_dsp_link_control(plat_priv, false);
+		dsp_link_disabled = true;
 	}
 
 	ret = cnss_vreg_on_type(plat_priv, CNSS_VREG_PRIM);
@@ -1207,6 +1219,26 @@ int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset)
 		goto clk_off;
 	}
 
+	while (dsp_link_disabled &&
+	       (retry_count++ < DSP_LINK_ENABLE_RETRY_COUNT_MAX)) {
+		ret = cnss_bus_dsp_link_control(plat_priv, true);
+		if (!ret)
+			break;
+
+		cnss_bus_dsp_link_control(plat_priv, false);
+		cnss_pr_err("DSP<->WLAN link train failed, retry...\n");
+		cnss_select_pinctrl_state(plat_priv, false);
+		usleep_range(DSP_LINK_ENABLE_DELAY_TIME_US_MIN,
+			     DSP_LINK_ENABLE_DELAY_TIME_US_MAX);
+		ret = cnss_select_pinctrl_enable(plat_priv);
+		if (ret) {
+			cnss_pr_err("Failed to select pinctrl state, err = %d\n", ret);
+			goto clk_off;
+		}
+		usleep_range(DSP_LINK_ENABLE_DELAY_TIME_US_MIN,
+			     DSP_LINK_ENABLE_DELAY_TIME_US_MAX);
+	}
+
 	plat_priv->powered_on = true;
 	clear_bit(CNSS_POWER_OFF, &plat_priv->driver_state);
 	cnss_enable_dev_sol_irq(plat_priv);
@@ -1227,6 +1259,11 @@ void cnss_power_off_device(struct cnss_plat_data *plat_priv)
 	if (!plat_priv->powered_on) {
 		cnss_pr_dbg("Already powered down");
 		return;
+	}
+
+	if (plat_priv->bus_priv &&
+	   (plat_priv->bus_type == CNSS_BUS_PCI)) {
+		cnss_bus_dsp_link_control(plat_priv, false);
 	}
 
 	set_bit(CNSS_POWER_OFF, &plat_priv->driver_state);

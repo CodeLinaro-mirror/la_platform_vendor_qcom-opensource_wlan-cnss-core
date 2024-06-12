@@ -711,6 +711,23 @@ bool cnss_bus_is_smmu_s1_enabled(struct cnss_plat_data *plat_priv)
 	}
 }
 
+int cnss_bus_dsp_link_control(struct cnss_plat_data *plat_priv,
+			      bool link_enable)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_dsp_link_control(plat_priv->bus_priv,
+						 link_enable);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return -EINVAL;
+	}
+}
+
 int cnss_bus_update_time_sync_period(struct cnss_plat_data *plat_priv,
 				     unsigned int time_sync_period)
 {
