@@ -21,7 +21,7 @@ int cnss_qmi_init(struct cnss_plat_data *plat_priv);
 void cnss_qmi_deinit(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_server_arrive(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_server_exit(struct cnss_plat_data *plat_priv);
-int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv);
+int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv, int status);
 int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv, u32 bdf_type);
 int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv);

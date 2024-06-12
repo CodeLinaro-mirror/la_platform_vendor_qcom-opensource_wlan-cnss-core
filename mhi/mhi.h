@@ -115,7 +115,8 @@ struct bhi_ctxt_t {
 	struct bhie_vec_table rddm_table;
 	size_t rddm_size;
 #ifdef CONFIG_HST_IMX
-	struct fw_remote_mem fw_mem; /* fw remote heap etc */
+	struct fw_remote_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01]; /* fw remote heap etc */
+	u32 mem_seg_id;
 #endif
 };
 
