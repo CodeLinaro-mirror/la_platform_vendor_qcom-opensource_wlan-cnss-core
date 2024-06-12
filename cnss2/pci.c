@@ -7097,24 +7097,6 @@ static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
 }
 #endif
 
-static int cnss_pci_set_gen2_speed(struct cnss_plat_data *plat_priv, u32 rc_num)
-{
-	int ret;
-
-	/* Always set initial target PCIe link speed to Gen2 for QCA6490 device
-	 * since there may be link issues if it boots up with Gen3 link speed.
-	 * Device is able to change it later at any time. It will be rejected
-	 * if requested speed is higher than the one specified in PCIe DT.
-	 */
-	ret = cnss_pci_set_max_link_speed(plat_priv->bus_priv, rc_num,
-					  PCI_EXP_LNKSTA_CLS_5_0GB);
-	if (ret && ret != -EPROBE_DEFER)
-		cnss_pr_err("Failed to set max PCIe RC%x link speed to Gen2, err = %d\n",
-				rc_num, ret);
-
-	return ret;
-}
-
 #ifdef CONFIG_CNSS2_ENUM_WITH_LOW_SPEED
 static void
 cnss_pci_downgrade_rc_speed(struct cnss_plat_data *plat_priv, u32 rc_num)
@@ -7132,18 +7114,27 @@ static void
 cnss_pci_restore_rc_speed(struct cnss_pci_data *pci_priv)
 {
 	int ret;
+	u16 link_speed;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
-	/* if not Genoa, do not restore rc speed */
-	if (pci_priv->device_id == QCA6490_DEVICE_ID) {
-		cnss_pci_set_gen2_speed(plat_priv, plat_priv->rc_num);
-	} else if (pci_priv->device_id != QCN7605_DEVICE_ID) {
+	switch (pci_priv->device_id) {
+	case QCN7605_DEVICE_ID:
+		/* do nothing, keep Gen1*/
+		return;
+	case QCA6490_DEVICE_ID:
+		/* restore to Gen2 */
+		link_speed = PCI_EXP_LNKSTA_CLS_5_0GB;
+		break;
+	default:
 		/* The request 0 will reset maximum GEN speed to default */
-		ret = cnss_pci_set_max_link_speed(pci_priv, plat_priv->rc_num, 0);
-		if (ret)
-			cnss_pr_err("Failed to reset max PCIe RC%x link speed to default, err = %d\n",
-				     plat_priv->rc_num, ret);
+		link_speed = 0;
+		break;
 	}
+
+	ret = cnss_pci_set_max_link_speed(pci_priv, plat_priv->rc_num, link_speed);
+	if (ret)
+		cnss_pr_err("Failed to set max PCIe RC%x link speed to %d, err = %d\n",
+			    plat_priv->rc_num, link_speed, ret);
 }
 
 static void
@@ -7434,8 +7425,17 @@ static int cnss_pci_enumerate(struct cnss_plat_data *plat_priv, u32 rc_num)
 {
 	int ret, retry = 0;
 
+	/* Always set initial target PCIe link speed to Gen2 for QCA6490 device
+	 * since there may be link issues if it boots up with Gen3 link speed.
+	 * Device is able to change it later at any time. It will be rejected
+	 * if requested speed is higher than the one specified in PCIe DT.
+	 */
 	if (plat_priv->device_id == QCA6490_DEVICE_ID) {
-		cnss_pci_set_gen2_speed(plat_priv, rc_num);
+		ret = cnss_pci_set_max_link_speed(plat_priv->bus_priv, rc_num,
+						  PCI_EXP_LNKSTA_CLS_5_0GB);
+		if (ret && ret != -EPROBE_DEFER)
+			cnss_pr_err("Failed to set max PCIe RC%x link speed to Gen2, err = %d\n",
+				    rc_num, ret);
 	} else {
 		cnss_pci_downgrade_rc_speed(plat_priv, rc_num);
 	}
