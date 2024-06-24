@@ -181,6 +181,8 @@ struct cnss_pci_data {
 	unsigned long long smmu_fault_timestamp[SMMU_CB_MAX];
 #ifdef CONFIG_PCIE_SWITCH_SUPPORT
 	bool pcie_switch_ntn3;
+	struct pci_saved_state *dsp_saved_state;
+	struct pci_saved_state *dsp_default_state;
 #endif
 };
 
