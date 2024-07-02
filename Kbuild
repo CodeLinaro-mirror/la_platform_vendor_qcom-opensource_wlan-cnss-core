@@ -298,7 +298,7 @@ INCS := $(INIT_INC)                     \
 
 
 cflags-y += $(INCS)
-ccflags-y += -Os -I$(src)/inc -I$(src)/mhi
+ccflags-y += -Os -I$(src)/inc -I$(src)/mhi -I$(src)/cnss2
 
 obj-$(WLAN_CNSSCORE) +=$(MODNAME).o
 $(MODNAME)-y := $(OBJS)
