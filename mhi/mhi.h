@@ -33,6 +33,8 @@
 #include <linux/dma-mapping.h>
 #include <linux/pci.h>
 
+#include "wlan_firmware_service_v01.h"
+
 #define UNUSED(x)	(void)(x)
 
 struct mhi_device_ctxt;
