@@ -498,11 +498,11 @@ void mhi_set_fw_remote_mem(struct mhi_device *mhi_device,
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
 	u32 i;
 
-	i = bhi_ctxt->mem_set_id;
+	i = bhi_ctxt->mem_seg_id;
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE,
 		"fw remote mem seg index %d\n", i);
 	bhi_ctxt->fw_mem[i].vaddr = vaddr;
 	bhi_ctxt->fw_mem[i].size = size;
-	bhi_ctxt->mem_set_id++;
+	bhi_ctxt->mem_seg_id++;
 }
 EXPORT_SYMBOL(mhi_set_fw_remote_mem);
