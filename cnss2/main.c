@@ -800,7 +800,8 @@ int cnss_idle_shutdown(struct device *dev)
 	if (!test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
 	    !test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
 		goto skip_wait;
-
+	
+#ifdef CONFIG_MSM_SUBSYSTEM_RESTART
 	reinit_completion(&plat_priv->recovery_complete);
 	ret = wait_for_completion_timeout(&plat_priv->recovery_complete,
 					  RECOVERY_TIMEOUT);
@@ -808,6 +809,7 @@ int cnss_idle_shutdown(struct device *dev)
 		cnss_pr_err("Timeout waiting for recovery to complete\n");
 		CNSS_ASSERT(0);
 	}
+#endif
 
 skip_wait:
 	return cnss_driver_event_post(plat_priv,

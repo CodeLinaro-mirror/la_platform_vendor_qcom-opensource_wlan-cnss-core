@@ -774,13 +774,17 @@ int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("driver_ops is NULL\n");
 		return -EINVAL;
 	}
-
+#ifdef CONFIG_MSM_SUBSYSTEM_RESTART
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
 	    test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state)) {
 		cnss_pr_info("cnss_pci_call_driver shutdown");
 		pci_priv->driver_ops->shutdown(pci_priv->pci_dev);
 	} else if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) &&
 		   test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state)) {
+#else
+	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) &&
+			   test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state)) {
+#endif
 		cnss_pr_info("cnss_pci_call_driver remove");
 		pci_priv->driver_ops->remove(pci_priv->pci_dev);
 		clear_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
@@ -1633,6 +1637,7 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 	    !test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
 		goto skip_wait;
 
+#ifdef CONFIG_MSM_SUBSYSTEM_RESTART
 	reinit_completion(&plat_priv->recovery_complete);
 	ret = wait_for_completion_timeout(&plat_priv->recovery_complete,
 					  RECOVERY_TIMEOUT);
@@ -1640,6 +1645,7 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 		cnss_pr_err("Timeout waiting for recovery to complete\n");
 		CNSS_ASSERT(0);
 	}
+#endif
 
 skip_wait:
 	cnss_driver_event_post(plat_priv,
