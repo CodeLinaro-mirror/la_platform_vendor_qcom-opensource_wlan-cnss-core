@@ -2930,7 +2930,7 @@ int cnss_pci_get_one_msi_mhi_irq_array_size(struct cnss_pci_data *pci_priv)
 bool cnss_pci_is_force_one_msi(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
-	return 1;
+	return true;
 	//return test_bit(FORCE_ONE_MSI, &plat_priv->ctrl_params.quirks);
 }
 #else
@@ -3675,7 +3675,7 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 	int ret, num_vectors, i;
 	u32 user_base_data, base_vector;
 	int *irq;
-	unsigned int msi_data;
+	unsigned int msi_data = 0;
 	bool is_one_msi = false;
 
 	ret = cnss_get_user_msi_assignment(&pci_priv->pci_dev->dev,

@@ -196,7 +196,11 @@ static void create_dci_event_mask_tbl(unsigned char *tbl_buf)
 		memset(tbl_buf, 0, DCI_EVENT_MASK_SIZE);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+void dci_drain_data(struct timer_list *timer)
+#else
 void dci_drain_data(unsigned long data)
+#endif
 {
 #ifndef CONFIG_DIAG_OPTIMIZE
 	queue_work(driver->diag_dci_wq, &dci_data_drain_work);
@@ -249,6 +253,19 @@ static void dci_handshake_work_fn(struct work_struct *work)
 		  jiffies + msecs_to_jiffies(DCI_HANDSHAKE_WAIT_TIME));
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+static void dci_chk_handshake(struct timer_list *timer)
+{
+	struct dci_channel_status_t *dci_channel_status = 
+		container_of(timer, struct dci_channel_status_t, wait_time);
+
+	int index = dci_channel_status->id;
+
+	if (index < 0 || index >= NUM_DCI_PROC)
+		return;
+		
+}
+#else
 static void dci_chk_handshake(unsigned long data)
 {
 	int index = (int)data;
@@ -257,6 +274,7 @@ static void dci_chk_handshake(unsigned long data)
 		return;
 
 }
+#endif
 #endif
 
 static int diag_dci_init_buffer(struct diag_dci_buffer_t *buffer, int type)
@@ -1545,13 +1563,22 @@ void diag_dci_channel_open_work(struct work_struct *work)
 void diag_dci_notify_client(int peripheral_mask, int data, int proc)
 {
 	int stat = 0;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0))
+	struct kernel_siginfo info;
+#else
 	struct siginfo info;
+#endif
+
 	struct list_head *start, *temp;
 	struct diag_dci_client_tbl *entry = NULL;
 	struct pid *pid_struct = NULL;
 	struct task_struct *dci_task = NULL;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0))
+	memset(&info, 0, sizeof(struct kernel_siginfo));
+#else
 	memset(&info, 0, sizeof(struct siginfo));
+#endif
 	info.si_code = SI_QUEUE;
 	info.si_int = (peripheral_mask | data);
 	if (data == DIAG_STATUS_OPEN)
@@ -2826,7 +2853,11 @@ static void diag_dci_init_handshake_remote(void)
 		temp = &dci_channel_status[i];
 		temp->id = i;
 		INIT_WORK(&temp->handshake_work, dci_handshake_work_fn);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+		timer_setup(&temp->wait_time, dci_chk_handshake, 0);
+#else
 		setup_timer(&temp->wait_time, dci_chk_handshake, i);
+#endif
 	}
 }
 
@@ -2909,8 +2940,11 @@ int diag_dci_init(void)
 		goto err;
 
 	INIT_WORK(&dci_data_drain_work, dci_data_drain_work_fn);
-
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))
+	timer_setup(&dci_drain_timer, dci_drain_data, 0);
+#else
 	setup_timer(&dci_drain_timer, dci_drain_data, 0);
+#endif
 #endif
 	return DIAG_DCI_NO_ERROR;
 err:

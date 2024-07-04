@@ -450,8 +450,11 @@ static void socket_open_server(struct diag_socket_info *info)
 	struct msghdr msg = {0};
 	struct kvec iv = { &pkt, sizeof(pkt) };
 	int ret;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+#else
 	int sl = sizeof(sq);
 	unsigned int size = DIAG_SO_RCVBUF_SIZE;
+#endif
 
 	if (!info || info->port_type != PORT_TYPE_SERVER)
 		return;
@@ -462,7 +465,11 @@ static void socket_open_server(struct diag_socket_info *info)
 		       info->name);
 		return;
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+	ret = kernel_getsockname(info->hdl, (struct sockaddr *)&sq);
+#else
 	ret = kernel_getsockname(info->hdl, (struct sockaddr *)&sq, &sl);
+#endif
 	if (ret < 0) {
 		pr_err("diag: In %s, getsockname failed %d\n", __func__,
 		       ret);
@@ -470,8 +477,11 @@ static void socket_open_server(struct diag_socket_info *info)
 		return;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
+#else
 	kernel_setsockopt(info->hdl, SOL_SOCKET, SO_RCVBUF,
 			  (char *)&size, sizeof(size));
+#endif
 
 	write_lock_bh(&info->hdl->sk->sk_callback_lock);
 	info->hdl->sk->sk_user_data = (void *)(info);
@@ -684,8 +694,11 @@ static void diag_socket_drop_data(struct diag_socket_info *info)
 		iov.iov_len = PERIPHERAL_BUF_SZ;
 		read_msg.msg_name = &src_addr;
 		read_msg.msg_namelen = sizeof(src_addr);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
+#else
 		err = kernel_sock_ioctl(info->hdl, TIOCINQ,
 					(unsigned long)&pkt_len);
+#endif
 		if (err || pkt_len < 0)
 			break;
 		spin_lock_irqsave(&info->lock, flags);
@@ -776,8 +789,11 @@ static int diag_socket_read(void *ctxt, unsigned char *buf, int buf_len)
 			mutex_unlock(&info->socket_info_mutex);
 			goto fail;
 		}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
+#else
 		err = kernel_sock_ioctl(info->hdl, TIOCINQ,
 					(unsigned long)&pkt_len);
+#endif
 		if (err || pkt_len < 0) {
 			mutex_unlock(&info->socket_info_mutex);
 			break;

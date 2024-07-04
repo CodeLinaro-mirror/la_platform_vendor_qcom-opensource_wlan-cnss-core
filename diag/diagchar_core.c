@@ -23,6 +23,7 @@
 #include <linux/ratelimit.h>
 #include <linux/timer.h>
 #include <linux/version.h>
+#include <linux/kmemleak.h>
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
 #include <linux/sched/task.h>
@@ -211,7 +212,11 @@ do {								\
 	ret += length;						\
 } while (0)
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+static void drain_timer_func(struct timer_list *data)
+#else
 static void drain_timer_func(unsigned long data)
+#endif
 {
 #ifndef CONFIG_DIAG_OPTIMIZE
 	queue_work(driver->diag_wq, &(driver->diag_drain_work));
@@ -663,15 +668,17 @@ void diag_record_stats(int type, int flag)
 
 void diag_get_timestamp(char *time_str)
 {
-	struct timeval t;
+	struct timespec64 t;
 	struct tm broken_tm;
 
-	do_gettimeofday(&t);
-	if (!time_str)
+	ktime_get_real_ts64(&t);
+	if (!time_str) {
 		return;
-	time_to_tm(t.tv_sec, 0, &broken_tm);
+	}
+	time64_to_tm(t.tv_sec, 0, &broken_tm);
 	scnprintf(time_str, DIAG_TS_SIZE, "%d:%d:%d:%ld", broken_tm.tm_hour,
-				broken_tm.tm_min, broken_tm.tm_sec, t.tv_usec);
+			broken_tm.tm_min, broken_tm.tm_sec, t.tv_nsec / NSEC_PER_USEC);
+
 }
 
 int diag_get_remote(int remote_info)
@@ -1412,9 +1419,14 @@ int diag_md_session_create(int mode, int peripheral_mask, int proc)
 		driver->md_session_map[proc][i] = new_session;
 		driver->md_session_mask[proc] |= MD_PERIPHERAL_MASK(i);
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+	timer_setup(&new_session->hdlc_reset_timer,
+		diag_md_hdlc_reset_timer_func, 0);
+#else
 	setup_timer(&new_session->hdlc_reset_timer,
 		diag_md_hdlc_reset_timer_func,
 		new_session->pid);
+#endif
 
 	driver->md_session_mode[proc] = DIAG_MD_PERIPHERAL;
 	mutex_unlock(&driver->md_session_lock);
@@ -3527,7 +3539,9 @@ static int diag_user_process_apps_data(const char __user *buf, int len,
 				       int pkt_type)
 {
 	int ret = 0;
+#if 0
 	int stm_size = 0;
+#endif
 	const int mempool = POOL_TYPE_COPY;
 	unsigned char *user_space_data = NULL;
 	uint8_t hdlc_disabled;
@@ -3569,12 +3583,14 @@ static int diag_user_process_apps_data(const char __user *buf, int len,
 
 	if (driver->stm_state[APPS_DATA] &&
 	    (pkt_type >= DATA_TYPE_EVENT) && (pkt_type <= DATA_TYPE_LOG)) {
+#if 0
 		stm_size = stm_log_inv_ts(OST_ENTITY_DIAG, 0, user_space_data,
 					  len);
 		if (stm_size == 0) {
 			pr_debug("diag: In %s, stm_log_inv_ts returned size of 0\n",
 				 __func__);
 		}
+#endif
 		diagmem_free(driver, user_space_data, mempool);
 		user_space_data = NULL;
 
@@ -4328,7 +4344,7 @@ static int diagchar_setup_cdev(dev_t devno)
 	if (!driver->diag_dev)
 		return -EIO;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-	driver->diag_dev->power.wakeup = wakeup_source_register(NULL, "DIAG_WS");
+	driver->diag_dev->power.wakeup = wakeup_source_register(driver->diag_dev, "DIAG_WS");
 #else
 	driver->diag_dev->power.wakeup = wakeup_source_register("DIAG_WS");
 #endif
@@ -4393,6 +4409,8 @@ static void diag_init_transport(void)
 }
 #endif
 
+static dev_t diagchar_device;
+static int diagchar_num = 0;
 #ifdef CONFIG_WLAN_CNSS_CORE
 int diagchar_init(void)
 #else
@@ -4416,7 +4434,11 @@ static int __init diagchar_init(void)
 	driver->delayed_rsp_id = 0;
 	driver->hdlc_disabled = 0;
 	driver->dci_state = DIAG_DCI_NO_ERROR;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))
+	timer_setup(&drain_timer, drain_timer_func, 0);
+#else
 	setup_timer(&drain_timer, drain_timer_func, 1234);
+#endif
 #ifdef CONFIG_WLAN_CNSS_CORE
 	driver->supports_sockets = 0;
 #else
@@ -4515,17 +4537,18 @@ static int __init diagchar_init(void)
 	driver->name = ((void *)driver) + sizeof(struct diagchar_dev);
 	strlcpy(driver->name, "diag", 5);
 	/* Get major number from kernel and initialize */
-	ret = alloc_chrdev_region(&dev, driver->minor_start,
+	ret = alloc_chrdev_region(&diagchar_device, driver->minor_start,
 				    driver->num, driver->name);
 	if (!ret) {
-		driver->major = MAJOR(dev);
-		driver->minor_start = MINOR(dev);
+		driver->major = MAJOR(diagchar_device);
+		driver->minor_start = MINOR(diagchar_device);
 	} else {
 		pr_err("diag: Major number not allocated\n");
 		goto fail;
 	}
+	diagchar_num = driver->num;
 	driver->cdev = cdev_alloc();
-	ret = diagchar_setup_cdev(dev);
+	ret = diagchar_setup_cdev(diagchar_device);
 	if (ret)
 		goto fail;
 	mutex_init(&driver->diag_id_mutex);
@@ -4549,6 +4572,10 @@ fail:
 	return ret;
 
 }
+static void diagchardev_exit(void)
+{
+	unregister_chrdev_region(diagchar_device, diagchar_num);
+}
 #ifdef CONFIG_WLAN_CNSS_CORE
 void diagchar_exit(void)
 #else
@@ -4556,6 +4583,7 @@ static void diagchar_exit(void)
 #endif
 {
 	pr_info("diagchar exiting...\n");
+	diagchardev_exit();
 	diag_mempool_exit();
 	diag_mux_exit();
 	diagfwd_peripheral_exit();

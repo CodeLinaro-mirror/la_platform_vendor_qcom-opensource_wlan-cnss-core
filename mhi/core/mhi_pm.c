@@ -622,7 +622,7 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 		write_lock_irq(&mhi_cntrl->pm_lock);
 		mhi_set_mhi_state(mhi_cntrl, MHI_STATE_RESET);
 		write_unlock_irq(&mhi_cntrl->pm_lock);
-#ifdef CONFIG_WLAN_EN
+#ifdef SUPPORT_WLAN_EN
 		/* wait for reset to be cleared */
 		ret = wait_event_timeout(mhi_cntrl->state_event,
 				!mhi_cntrl->initiate_mhi_reset, timeout);

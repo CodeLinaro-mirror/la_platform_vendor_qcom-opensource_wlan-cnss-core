@@ -632,7 +632,7 @@ static int cnss_show_quirks_state(struct seq_file *s,
 			seq_puts(s, "FORCE_ONE_MSI");
 			continue;
 		default:
-			continue;
+			break;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);

@@ -1599,7 +1599,21 @@ static void diag_md_timer_work_fn(struct work_struct *work)
 	mutex_unlock(&driver->hdlc_disable_mutex);
 }
 #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+static void hdlc_reset_timer_func(struct timer_list *data)
+{
+	pr_debug("diag: In %s, re-enabling HDLC encoding\n",
+		       __func__);
 
+	if (hdlc_reset) {
+#ifndef CONFIG_DIAG_OPTIMIZE
+		queue_work(driver->diag_wq, &(driver->diag_hdlc_reset_work));
+		queue_work(driver->diag_wq, &(driver->update_user_clients));
+#endif
+	}
+	hdlc_timer_in_progress = 0;
+}
+#else
 static void hdlc_reset_timer_func(unsigned long data)
 {
 	pr_debug("diag: In %s, re-enabling HDLC encoding\n",
@@ -1613,7 +1627,34 @@ static void hdlc_reset_timer_func(unsigned long data)
 	}
 	hdlc_timer_in_progress = 0;
 }
+#endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+void diag_md_hdlc_reset_timer_func(struct timer_list *timer)
+{
+	struct diag_md_hdlc_reset_work *hdlc_reset_work = NULL;
+	struct diag_md_session_t *new_session
+		= container_of(timer, struct diag_md_session_t, hdlc_reset_timer);
 
+	pr_debug("diag: In %s, re-enabling HDLC encoding\n",
+		       __func__);
+	hdlc_reset_work = kmalloc(sizeof(*hdlc_reset_work), GFP_ATOMIC);
+	if (!hdlc_reset_work) {
+		DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
+			"diag: Could not allocate hdlc_reset_work\n");
+		hdlc_timer_in_progress = 0;
+		return;
+	}
+	if (hdlc_reset) {
+		hdlc_reset_work->pid = new_session->pid;
+#ifndef CONFIG_DIAG_OPTIMIZE	
+		INIT_WORK(&hdlc_reset_work->work, diag_md_timer_work_fn);
+		queue_work(driver->diag_wq, &(hdlc_reset_work->work));
+		queue_work(driver->diag_wq, &(driver->update_md_clients));
+#endif
+	}
+	hdlc_timer_in_progress = 0;
+}
+#else
 void diag_md_hdlc_reset_timer_func(unsigned long pid)
 {
 	struct diag_md_hdlc_reset_work *hdlc_reset_work = NULL;
@@ -1637,6 +1678,7 @@ void diag_md_hdlc_reset_timer_func(unsigned long pid)
 	}
 	hdlc_timer_in_progress = 0;
 }
+#endif
 
 static void diag_hdlc_start_recovery(unsigned char *buf, int len,
 				     int pid)
@@ -1968,7 +2010,11 @@ int diagfwd_init(void)
 			      GFP_KERNEL);
 	if (!hdlc_decode)
 		goto err;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+	timer_setup(&driver->hdlc_reset_timer, hdlc_reset_timer_func, 0);
+#else
 	setup_timer(&driver->hdlc_reset_timer, hdlc_reset_timer_func, 0);
+#endif
 	kmemleak_not_leak(hdlc_decode);
 	driver->encoded_rsp_len = 0;
 	driver->rsp_buf_busy = 0;

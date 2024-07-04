@@ -25,7 +25,7 @@ static int unified_pdrv_init(void)
 #ifdef CONFIG_MHI_BUS
 	ret = mhi_init();
 	if (ret){
-		printk("%s: updrv: failed to register mhi bus\n",__func__);
+		pr_err("%s: updrv: failed to register mhi bus\n",__func__);
 		goto fail1;
 	}
 #endif
@@ -34,7 +34,7 @@ static int unified_pdrv_init(void)
 	/* ipc_router Registration */
 	ret = qrtr_proto_init();  
 	if (ret){
-		printk("%s: updrv: failed to register qrtr\n",__func__);
+		pr_err("%s: updrv: failed to register qrtr\n",__func__);
 		goto fail2;
 	}
 #endif
@@ -43,7 +43,7 @@ static int unified_pdrv_init(void)
 	/* ipc_router Registration */
 	ret = subsys_restart_init();  
 	if (ret){
-		printk("%s: updrv: failed to register subsys\n",__func__);
+		pr_err("%s: updrv: failed to register subsys\n",__func__);
 		goto fail3;
 	}
 #endif
@@ -52,7 +52,7 @@ static int unified_pdrv_init(void)
 	/* ipc_router Registration */
 	ret = mhi_driver_init();  
 	if (ret){
-		printk("%s: updrv: failed to register mhi driver\n",__func__);
+		pr_err("%s: updrv: failed to register mhi driver\n",__func__);
 		goto fail4;
 	}
 #endif
@@ -62,13 +62,13 @@ static int unified_pdrv_init(void)
 	/* diag Registration */
 	ret = diagchar_init();
 	if (ret){
-		printk("%s: updrv: failed to register diag char\n",__func__);
+		pr_err("%s: updrv: failed to register diag char\n",__func__);
 		goto fail5;
 	}
 
 	ret = diag_rpmsg_driver_init();
 	if (ret){
-		printk("%s: updrv: failed to register diag rpmsg\n",__func__);
+		pr_err("%s: updrv: failed to register diag rpmsg\n", __func__);
 		goto fail6;
 	}
 #endif
@@ -77,7 +77,7 @@ static int unified_pdrv_init(void)
 	/* cnss Registration */
 	ret = cnss_initialize();
 	if (ret){
-		printk("%s: updrv: failed to register cnss\n",__func__);
+		pr_err("%s: updrv: failed to register cnss\n",__func__);
 		goto fail7;
 	}
 #endif
@@ -87,7 +87,7 @@ static int unified_pdrv_init(void)
 	/* cnss nl Registration */
 	ret = cld80211_init();
 	if (ret){
-		printk("%s: updrv: failed to register cnss nl\n",__func__);
+		pr_err("%s: updrv: failed to register cnss nl\n",__func__);
 		goto fail8;
 	}
 #endif
@@ -95,11 +95,11 @@ static int unified_pdrv_init(void)
 	/* cnss prealloc initialise */
 	ret = wcnss_pre_alloc_init();
 	if (ret){
-		printk("%s: updrv: failed to pre alloc memory\n",__func__);
+		pr_err("%s: updrv: failed to pre alloc memory\n",__func__);
 		goto fail9;
 	}
 #endif
-	printk("unified_pdrv_init success\n");
+	pr_info("unified_pdrv_init success\n");
 
 	return 0;
 
@@ -136,12 +136,13 @@ fail2:
 fail1:
 	mhi_exit();
 #endif
-	printk("unified_pdrv_init failure %d\n", ret);
+	pr_err("unified_pdrv_init failure %d\n", ret);
 	return ret;
 }
 
 static void unified_pdrv_deinit(void)
 {
+	pr_info("unified_pdrv_deinit start\n");
 #ifdef CONFIG_CNSS_GENL
 	cld80211_exit();
 #endif
@@ -167,6 +168,7 @@ static void unified_pdrv_deinit(void)
 #ifdef CONFIG_MHI_BUS
 	mhi_exit();
 #endif
+	pr_info("unified_pdrv_deinit success\n");
 }
 
 module_init(unified_pdrv_init);

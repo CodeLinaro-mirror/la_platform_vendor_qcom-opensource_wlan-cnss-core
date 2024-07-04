@@ -791,8 +791,9 @@ static void qrtr_backup_init(void)
 static void qrtr_backup_deinit(void)
 {
 	cancel_work_sync(&qrtr_backup_work);
-	skb_queue_purge(&qrtr_backup_lo);
 	skb_queue_purge(&qrtr_backup_hi);
+	skb_queue_purge(&qrtr_backup_lo);
+
 }
 
 /**
@@ -2064,7 +2065,7 @@ static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		break;
 	case SIOCGSTAMP:
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)
-		rc = 0;
+		rc = -EOPNOTSUPP;
 #else
 		rc = sock_get_timestamp(sk, argp);
 #endif
@@ -2257,11 +2258,12 @@ void qrtr_proto_fini(void)
 static void __exit qrtr_proto_fini(void)
 #endif
 {
+	qrtr_backup_deinit();
 	rtnl_unregister(PF_QIPCRTR, RTM_NEWADDR);
 	sock_unregister(qrtr_family.family);
 	proto_unregister(&qrtr_proto);
 
-	qrtr_backup_deinit();
+
 }
 #ifndef CONFIG_WLAN_CNSS_CORE
 module_exit(qrtr_proto_fini);

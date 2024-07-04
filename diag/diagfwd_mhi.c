@@ -22,6 +22,7 @@
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-direction.h>
+#include <linux/kmemleak.h>
 #include <linux/mhi.h>
 #include <linux/delay.h>
 #include <linux/vmalloc.h>

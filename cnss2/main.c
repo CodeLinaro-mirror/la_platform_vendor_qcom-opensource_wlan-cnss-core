@@ -2459,9 +2459,10 @@ void cnss_exit(void)
 static void __exit cnss_exit(void)
 #endif
 {
+	cnss_genl_exit();
 	platform_driver_unregister(&cnss_platform_driver);
 	cnss_debug_deinit();
-	cnss_genl_exit();
+
 }
 #ifndef CONFIG_WLAN_CNSS_CORE
 module_init(cnss_initialize);

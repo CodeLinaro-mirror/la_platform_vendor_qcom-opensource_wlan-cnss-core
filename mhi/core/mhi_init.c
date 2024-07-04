@@ -2078,12 +2078,9 @@ void mhi_exit(void)
 static void __exit mhi_exit(void)
 #endif
 {
-	debugfs_remove_recursive(mhi_debugfs_root);
-	
 	mhi_dtr_exit();
-	
 	bus_unregister(&mhi_bus_type);
-	
+	debugfs_remove_recursive(mhi_debugfs_root);
 	mutex_destroy(&mhi_bus.lock);
 }
 

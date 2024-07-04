@@ -862,7 +862,12 @@ struct subsys_device *find_subsys_device(const char *str)
 	if (!str)
 		return NULL;
 
-	dev = bus_find_device(&subsys_bus_type, NULL, (void *)str,
+	dev = bus_find_device(&subsys_bus_type, NULL, 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+			(const void *)str,
+#else
+			(void *)str,
+#endif
 			__find_subsys_device);
 	return dev ? to_subsys(dev) : NULL;
 }
@@ -1852,7 +1857,7 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 
 	snprintf(subsys->wlname, sizeof(subsys->wlname), "ssr(%s)", desc->name);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-    subsys->ssr_wlock = *wakeup_source_register(NULL, subsys->wlname);
+    subsys->ssr_wlock = *wakeup_source_register(&subsys->dev, subsys->wlname);
 #else
 	wakeup_source_init(&subsys->ssr_wlock, subsys->wlname);
 #endif
@@ -2045,6 +2050,7 @@ void subsys_restart_exit(void)
 static void __init subsys_restart_exit(void)
 #endif
 {
+	atomic_notifier_chain_unregister(&panic_notifier_list, &panic_nb);
 	class_destroy(char_class);
 
 	bus_unregister(&subsys_bus_type);

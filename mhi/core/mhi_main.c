@@ -2535,7 +2535,11 @@ static int __mhi_bdf_to_controller(struct device *dev, const void *tmp)
 static int __mhi_bdf_to_controller(struct device *dev, void *tmp)
 {
 	struct mhi_device *mhi_dev = to_mhi_device(dev);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+	const struct mhi_device *match = tmp;
+#else
 	struct mhi_device *match = tmp;
+#endif
 
 	/* return any none-zero value if match */
 	if (mhi_dev->dev_type == MHI_CONTROLLER_TYPE &&

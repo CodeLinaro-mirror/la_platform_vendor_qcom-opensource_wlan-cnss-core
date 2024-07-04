@@ -13,6 +13,7 @@
 #ifndef _CNSS_BUS_H
 #define _CNSS_BUS_H
 
+#include <linux/version.h>
 #include "main.h"
 
 #define QCA6174_VENDOR_ID		0x168C
