@@ -2131,6 +2131,32 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
         return 0;
 }
 
+static void cnss_pci_dump_internal_register(struct cnss_pci_data *pci_priv)
+{
+	u32 r1,r2,r3,r4;
+
+	cnss_pci_reg_read(pci_priv, PCIE_BHI_ERRCODE_REG, &r1);
+	cnss_pci_reg_read(pci_priv, PCIE_BHI_ERRDBG1_REG, &r2);
+	cnss_pci_reg_read(pci_priv, PCIE_BHI_ERRDBG2_REG, &r3);
+	cnss_pci_reg_read(pci_priv, PCIE_BHI_ERRDBG3_REG, &r4);
+	pr_info("BHI_ERRCODE 0x%08x BHI_ERRDBG1 0x%08x BHI_ERRDBG2 0x%08x BHI_ERRDBG3 0x%08x\n",
+					r1, r2, r3, r4);
+	barrier();
+	cnss_pci_reg_read(pci_priv, PCIE_BHI_EXECENV_REG, &r1);
+	cnss_pci_reg_read(pci_priv, PCIE_BHI_STATUS_REG, &r2);
+	cnss_pci_reg_read(pci_priv, PCIE_MHICTRL_REG, &r3);
+	cnss_pci_reg_read(pci_priv, PCIE_MHISTATUS_REG, &r4);
+	pr_info("BHI_EXECENV 0x%08x BHI_STATUS 0x%08x MHICTRL 0x%08x MHISTATUS 0x%08x\n",
+					r1, r2, r3, r4);
+	barrier();
+	cnss_pci_reg_read(pci_priv, PCIE_BHIE_RXVEC_DB_REG, &r1);
+	cnss_pci_reg_read(pci_priv, PCIE_BHIE_RXVEC_STATUS_REG, &r2);
+	cnss_pci_reg_read(pci_priv, PCIE_BHIE_TXVEC_DB_REG, &r3);
+	cnss_pci_reg_read(pci_priv, PCIE_BHIE_TXVEC_STATUS_REG, &r4);
+	pr_info("BHIE_RXVEC_DB 0x%08x BHIE_RXVEC_STATUS 0x%08x BHIE_TXVEC_DB 0x%08x BHIE_TXVEC_STATUS 0x%08x\n",
+					r1, r2, r3, r4);
+}
+
 /**
  * cnss_pci_dump_bl_sram_mem - Dump WLAN device bootloader debug log
  * @pci_priv: driver PCI bus context pointer
@@ -2152,6 +2178,7 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
         u32 sbl_log_def_end = SRAM_END;
         int i;
 
+        cnss_pci_dump_internal_register(pci_priv);
         switch (pci_priv->device_id) {
         case QCA6390_DEVICE_ID:
                 pbl_log_sram_start = QCA6390_DEBUG_PBL_LOG_SRAM_START;
@@ -2219,7 +2246,7 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
                 return;
         }
 
-        cnss_pr_dbg("Dumping SBL log data\n");
+        cnss_pr_info("Dumping SBL log data\n");
         for (i = 0; i < sbl_log_size; i += sizeof(val)) {
                 mem_addr = sbl_log_start + i;
                 if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
@@ -2242,11 +2269,6 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 	//mhi_dump_irq(mhi_dev_ctxt);
 	mhi_dump_event_ring(mhi_dev_ctxt);
 	
-#ifdef DUMP_TO_FS	
-	cnss_dump_fw_sram_to_file(plat_priv);
-	cnss_pci_dump_fw_remote_mem_to_file(plat_priv->bus_priv);
-	cnss_pci_dump_fw_paging_to_file(plat_priv->bus_priv);
-#endif
 	cnss_pci_dump_bl_sram_mem(pci_priv);
 	cnss_pr_err("Timeout waiting for FW ready indication\n");
 
