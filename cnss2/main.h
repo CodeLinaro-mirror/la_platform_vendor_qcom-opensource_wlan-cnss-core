@@ -598,6 +598,7 @@ struct cnss_plat_data {
 	struct mhi_fw_crash_data fw_crash_data;
 
 	enum cnss_driver_mode driver_mode;
+	bool ipa_shared_cb_enable;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
