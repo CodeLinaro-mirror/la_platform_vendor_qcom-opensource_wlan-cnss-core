@@ -334,6 +334,7 @@ extern int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
 			       dma_addr_t iova, size_t size);
 extern void cnss_audio_smmu_unmap(struct device *dev, dma_addr_t iova,
 				 size_t size);
+extern bool cnss_ipa_wlan_shared_smmu_supported(struct device *dev);
 extern int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg);
 extern int cnss_auto_suspend(struct device *dev);
 extern int cnss_auto_resume(struct device *dev);

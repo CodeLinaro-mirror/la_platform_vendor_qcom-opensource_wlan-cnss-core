@@ -582,6 +582,11 @@ int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
 }
 EXPORT_SYMBOL(cnss_set_wfc_mode);
 
+bool cnss_ipa_wlan_shared_smmu_supported(struct device *dev)
+{
+	return false;
+}
+EXPORT_SYMBOL(cnss_ipa_wlan_shared_smmu_supported);
 
 int cnss_pci_recovery_update_status(struct cnss_pci_data *pci_priv)
 {
