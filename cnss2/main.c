@@ -1603,16 +1603,15 @@ static void cnss_recovery_work_handler(struct work_struct *work)
 	cnss_bus_dev_ramdump(plat_priv);
 #endif
 
-	if (!test_bit(ENABLE_SSR, &plat_priv->ctrl_params.quirks)) {
-		panic("subsys-restart: Resetting the SoC wlan crashed\n");
-		cnss_pr_err("Skip recovery, return\n");
-		return;
-	}
-
 	cnss_bus_dev_shutdown(plat_priv);
 #ifndef CONFIG_CNSS2_X86
 	cnss_bus_dev_ramdump(plat_priv);
 #endif
+	if (!test_bit(ENABLE_SSR, &plat_priv->ctrl_params.quirks)) {
+		//panic("subsys-restart: Resetting the SoC wlan crashed\n");
+		cnss_pr_err("SSR not enable, Skip recovery, return\n");
+		return;
+	}
 
 	msleep(POWER_RESET_MIN_DELAY_MS);
 
