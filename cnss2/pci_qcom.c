@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include "pci_platform.h"
 #include "debug.h"
@@ -457,6 +457,11 @@ void cnss_pci_allow_l1(struct device *dev)
 	_cnss_pci_allow_l1(pci_priv);
 }
 EXPORT_SYMBOL(cnss_pci_allow_l1);
+
+bool cnss_pci_is_sync_probe(void)
+{
+	return true;
+}
 
 int cnss_pci_get_msi_assignment(struct cnss_pci_data *pci_priv)
 {

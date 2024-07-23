@@ -6,7 +6,7 @@
 
 #include "pci.h"
 
-#if IS_ENABLED(CONFIG_PCI_MSM)
+#if IS_ENABLED(CONFIG_PCI_MSM) || IS_ENABLED(CONFIG_PCIE_QCOM_ECAM)
 /**
  * _cnss_pci_enumerate() - Enumerate PCIe endpoints
  * @plat_priv: driver platform context pointer
@@ -210,6 +210,8 @@ static inline bool cnss_pci_get_drv_supported(struct cnss_pci_data *pci_priv)
 {
 	return pci_priv->drv_supported;
 }
+
+bool cnss_pci_is_sync_probe(void);
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
 int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv);
