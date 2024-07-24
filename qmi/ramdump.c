@@ -413,10 +413,6 @@ void destroy_ramdump_device(void *dev)
 
 	device_unregister(rd_dev->dev);
 	ida_simple_remove(&rd_minor_id, minor);
-	unregister_chrdev_region(ramdump_dev, RAMDUMP_NUM_DEVICES);
-	if (ramdump_class != NULL) {
-		class_destroy(ramdump_class);
-	}
 	mutex_destroy(&rd_dev->consumer_lock);
 	kfree(rd_dev);
 }
