@@ -78,8 +78,19 @@ ifeq ($(CONFIG_SLATE_MODULE_ENABLED), y)
 KBUILD_CPPFLAGS += -DSLATE_MODULE_ENABLED
 endif
 
+found = $(shell if grep -qF "int msm_pcie_dsp_link_control" $(srctree)/include/linux/msm_pcie.h; then echo "yes" ;else echo "no" ;fi;)
+ifeq ($(findstring yes, $(found)), yes)
+KBUILD_CPPFLAGS += -DCONFIG_PCIE_SWITCH_SUPPORT
+endif
+
+found = $(shell if grep -qF "int msm_pcie_retrain_port_link" $(srctree)/include/linux/msm_pcie.h; then echo "yes" ;else echo "no" ;fi;)
+ifeq ($(findstring yes, $(found)), yes)
+KBUILD_CPPFLAGS += -DCONFIG_PCIE_SWITCH_RETRAIN_LINK_SUPPORT
+endif
+
+# To be compatible with previous version, also add pcie switch support flag for CONFIG_PCIE_SWITCH_NTN3.
 ifeq ($(CONFIG_PCIE_SWITCH_NTN3), y)
-KBUILD_CPPFLAGS += -DCONFIG_PCIE_SWITCH_NTN3
+KBUILD_CPPFLAGS += -DCONFIG_PCIE_SWITCH_SUPPORT
 endif
 
 obj-$(CONFIG_CNSS2) += cnss2/
