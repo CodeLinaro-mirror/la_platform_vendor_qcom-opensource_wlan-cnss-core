@@ -445,7 +445,7 @@ static const struct mhi_controller_config cnss_mhi_config_no_satellite = {
 	.m2_no_db = true,
 };
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 #define CNSS_MHI_BUS_MISC_EVT_COUNT 1
 static const struct mhi_controller_config cnss_mhi_config_pcie_switch_ntn3 = {
 	.max_channels = 32,
@@ -865,7 +865,7 @@ void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
 	return mhi_controller_set_base(pci_priv->mhi_ctrl, base);
 }
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 int cnss_pci_dsp_link_control(struct cnss_pci_data *pci_priv,
 			      bool link_enable)
 {
@@ -5160,7 +5160,7 @@ int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info)
 	       sizeof(info->dev_mem_info));
 	memcpy(&info->fw_build_id, &plat_priv->fw_build_id,
 	       sizeof(info->fw_build_id));
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 	info->pcie_switch_attached = pci_priv->pcie_switch_ntn3;
 #else
 	info->pcie_switch_attached = 0;
@@ -5421,6 +5421,14 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 			goto out;
 		}
 		pci_priv->pci_link_state = PCI_LINK_UP;
+
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
+		ret = cnss_bus_dsp_link_enable(pci_priv->plat_priv);
+		if (ret) {
+			cnss_pr_err("Failed to enable bus dsp link, err = %d\n", ret);
+			goto out;
+		}
+#endif
 
 		if (pci_priv->pci_dev->device != QCA6174_DEVICE_ID) {
 			ret = pci_set_power_state(pci_priv->pci_dev, PCI_D0);
@@ -6460,8 +6468,9 @@ static int cnss_mhi_bw_scale(struct mhi_controller *mhi_ctrl,
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int ret = 0;
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 	if (pci_priv->pcie_switch_ntn3) {
+#ifdef CONFIG_PCIE_SWITCH_RETRAIN_LINK_SUPPORT
 		/* If device is attached to PCIe switch, it should
 		 * set and retrain DSP <-> EP link instead of RC link.
 		 * Currently link width setting is not supported yet.
@@ -6476,6 +6485,10 @@ static int cnss_mhi_bw_scale(struct mhi_controller *mhi_ctrl,
 			return ret;
 		}
 		pci_priv->def_link_speed = link_info->target_link_speed;
+#else
+		cnss_pr_err("swtichType 0x%x: NO msm_pcie_retrain_port_link support",
+			    plat_priv->pcie_switch_type);
+#endif
 
 		return 0;
 	}
@@ -6663,7 +6676,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 			cnss_mhi_config = &cnss_mhi_config_no_satellite;
 	}
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 	if (pci_priv->pcie_switch_ntn3)
 		cnss_mhi_config = &cnss_mhi_config_pcie_switch_ntn3;
 #endif
@@ -6905,32 +6918,31 @@ static int cnss_try_suspend(struct cnss_plat_data *plat_priv)
 }
 #endif
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
-#if IS_ENABLED(CONFIG_ARCH_QCOM)
-static void cnss_pci_of_switch_ntn3_init(struct cnss_pci_data *pci_priv)
+void cnss_pci_of_switch_type_init(struct cnss_plat_data *plat_priv)
 {
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct device *dev = &plat_priv->plat_dev->dev;
+	int ret;
+	bool pcie_switch_ntn3;
 
 	if (dev && dev->of_node) {
-		pci_priv->pcie_switch_ntn3 =
-		    of_property_read_bool(dev->of_node,
+		ret = of_property_read_u32(dev->of_node,
+					   "qcom,pcie-switch-type",
+					   &plat_priv->pcie_switch_type);
+		if (ret) {
+			plat_priv->pcie_switch_type = 0;
+		}
+		// compatible with qcom,pcie-switch-ntn3
+		pcie_switch_ntn3 = of_property_read_bool(dev->of_node,
 					"qcom,pcie-switch-ntn3");
-		cnss_pr_dbg("pcie_switch_ntn3 is %s",
-			    pci_priv->pcie_switch_ntn3 ? "enabled" : "disabled");
-	}
-	else {
+		if ((plat_priv->pcie_switch_type == PCIE_DIRECT_ATTACH)
+		    && pcie_switch_ntn3) {
+			plat_priv->pcie_switch_type = PCIE_SWITCH_NTN3;
+		}
+	} else {
 		cnss_pr_err("device or node is not available.");
-		pci_priv->pcie_switch_ntn3 = 0;
 	}
+	cnss_pr_dbg("pcie_switch_type is %d", plat_priv->pcie_switch_type);
 }
-#else /* IS_ENABLED(CONFIG_ARCH_QCOM) */
-static void cnss_pci_of_switch_ntn3_init(struct cnss_pci_data *pci_priv)
-{
-	pci_priv->pcie_switch_ntn3 = 0;
-}
-#endif /* IS_ENABLED(CONFIG_ARCH_QCOM) */
-#endif /* CONFIG_PCIE_SWITCH_NTN3 */
 
 /* Setting to use this cnss_pm_domain ops will let PM framework override the
  * ops from dev->bus->pm which is pci_dev_pm_ops from pci-driver.c. This ops
@@ -7136,8 +7148,11 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (ret < 0)
 		goto reset_ctx;
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
-	cnss_pci_of_switch_ntn3_init(pci_priv);
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
+	if (plat_priv->pcie_switch_type == PCIE_SWITCH_NTN3)
+		pci_priv->pcie_switch_ntn3 = 1;
+	else
+		pci_priv->pcie_switch_ntn3 = 0;
 #endif
 
 	cnss_pci_of_reserved_mem_device_init(pci_priv);

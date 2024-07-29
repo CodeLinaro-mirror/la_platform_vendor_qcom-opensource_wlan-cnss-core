@@ -71,8 +71,9 @@ int cnss_bus_get_msi_assignment(struct cnss_plat_data *plat_priv,
 				int *num_vectors,
 				u32 *user_base_data,
 				u32 *base_vector);
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 int cnss_bus_dsp_link_control(struct cnss_plat_data *plat_priv,
 			      bool link_enable);
+int cnss_bus_dsp_link_enable(struct cnss_plat_data *plat_priv);
 #endif
 #endif /* _CNSS_BUS_H */
