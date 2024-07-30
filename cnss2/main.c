@@ -123,11 +123,6 @@ bool cnss_check_driver_loading_allowed(void)
 }
 
 #ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
-static void cnss_init_plat_env_count(void)
-{
-	atomic_set(&plat_env_count, 0);
-}
-
 static void cnss_inc_plat_env_count(void)
 {
 	atomic_inc(&plat_env_count);
@@ -2895,6 +2890,10 @@ int cnss_do_ramdump(struct cnss_plat_data *plat_priv)
 	struct qcom_dump_segment segment;
 	struct list_head head;
 
+	if (!dump_enabled()) {
+		cnss_pr_info("Dump collection is not enabled\n");
+		return 0;
+	}
 	INIT_LIST_HEAD(&head);
 	memset(&segment, 0, sizeof(segment));
 	segment.va = ramdump_info->ramdump_va;
