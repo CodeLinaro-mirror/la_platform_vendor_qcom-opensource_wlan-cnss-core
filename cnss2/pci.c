@@ -3037,8 +3037,9 @@ int cnss_pci_dump_fw_remote_mem_to_file(struct cnss_pci_data *pci_priv)
 {
 	struct mhi_device_ctxt *mhi_dev_ctxt = pci_priv->mhi_dev.mhi_dev_ctxt;
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+	u32 count = bhi_ctxt->mem_seg_id;
 
-	return fw_remote_mem_dump(mhi_dev_ctxt, &bhi_ctxt->fw_mem, "/var/crash/remote.bin");
+	return fw_remote_mem_dump(mhi_dev_ctxt, &bhi_ctxt->fw_mem[0], count, "/var/crash/remote.bin");
 }
 
 int cnss_pci_dump_fw_paging_to_file(struct cnss_pci_data *pci_priv)
