@@ -179,7 +179,7 @@ struct cnss_pci_data {
 	bool drv_supported;
 	bool is_smmu_fault;
 	unsigned long long smmu_fault_timestamp[SMMU_CB_MAX];
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 	bool pcie_switch_ntn3;
 #endif
 };
@@ -329,7 +329,7 @@ int cnss_pci_get_user_msi_assignment(struct cnss_pci_data *pci_priv,
 				     u32 *user_base_data,
 				     u32 *base_vector);
 void cnss_register_iommu_fault_handler_irq(struct cnss_pci_data *pci_priv);
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 int cnss_pci_dsp_link_control(struct cnss_pci_data *pci_priv,
 			      bool link_enable);
 #endif

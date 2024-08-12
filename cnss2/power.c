@@ -128,7 +128,7 @@ enum cnss_aop_tcs_seq_param {
 	CNSS_TCS_SEQ_MAX
 };
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 #define DSP_LINK_ENABLE_DELAY_TIME_US_MIN (25000)
 #define DSP_LINK_ENABLE_DELAY_TIME_US_MAX (25100)
 #define DSP_LINK_ENABLE_RETRY_COUNT_MAX   (3)
@@ -1126,7 +1126,7 @@ int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num)
 	return gpio_get_value(gpio_num);
 }
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 int cnss_bus_dsp_link_enable(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -1163,7 +1163,7 @@ int cnss_bus_dsp_link_enable(struct cnss_plat_data *plat_priv)
 int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset)
 {
 	int ret = 0;
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 	bool dsp_link_disabled = false;
 #endif
 
@@ -1178,7 +1178,7 @@ int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset)
 		return -EINVAL;
 	}
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 	if (plat_priv->bus_priv &&
 	    (plat_priv->bus_type == CNSS_BUS_PCI)) {
 		cnss_bus_dsp_link_control(plat_priv, false);
@@ -1224,7 +1224,7 @@ int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset)
 		goto clk_off;
 	}
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 	if (dsp_link_disabled == true) {
 		ret = cnss_bus_dsp_link_enable(plat_priv);
 		if (ret) {
@@ -1255,7 +1255,7 @@ void cnss_power_off_device(struct cnss_plat_data *plat_priv)
 		return;
 	}
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 	if (plat_priv->bus_priv &&
 	    (plat_priv->bus_type == CNSS_BUS_PCI)) {
 		cnss_bus_dsp_link_control(plat_priv, false);
