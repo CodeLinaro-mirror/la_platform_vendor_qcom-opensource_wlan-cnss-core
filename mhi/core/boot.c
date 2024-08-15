@@ -319,6 +319,9 @@ int mhi_alloc_bhie_table(struct mhi_controller *mhi_cntrl,
 	int i;
 	struct image_info *img_info;
 	struct mhi_buf *mhi_buf;
+	struct device *dev = &mhi_cntrl->mhi_dev->dev;
+	dev_info(dev, "Allocating bytes:%zu seg_size:%zu total_seg:%u\n",
+			alloc_size, seg_size, segments);
 
 	img_info = kzalloc(sizeof(*img_info), GFP_KERNEL);
 	if (!img_info)
@@ -345,11 +348,14 @@ int mhi_alloc_bhie_table(struct mhi_controller *mhi_cntrl,
 						  GFP_KERNEL);
 		if (!mhi_buf->buf)
 			goto error_alloc_segment;
+		dev_info(dev, "Entry:%d Address:0x%llx size:%lu\n", i,
+			mhi_buf->dma_addr, mhi_buf->len);
 	}
 
 	img_info->bhi_vec = img_info->mhi_buf[segments - 1].buf;
 	img_info->entries = segments;
 	*image_info = img_info;
+	dev_info(dev, "Successfully allocated bhi vec table\n");
 
 	return 0;
 

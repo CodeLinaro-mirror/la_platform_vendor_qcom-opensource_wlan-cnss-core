@@ -4770,7 +4770,7 @@ int cnss_smmu_map(struct device *dev,
 
 	cnss_pr_dbg("IOMMU map: iova %lx, len %zu\n", iova, len);
 
-	ret = iommu_map(pci_priv->iommu_domain, iova,
+	ret = cnss_iommu_map(pci_priv->iommu_domain, iova,
 			rounddown(paddr, PAGE_SIZE), len, flag);
 	if (ret) {
 		cnss_pr_err("PA to IOVA mapping failed, ret %d\n", ret);
@@ -5199,7 +5199,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 
 	ret = pci_assign_resource(pci_dev, PCI_BAR_NUM);
 	if (ret) {
-		pr_err("Failed to assign PCI resource, err = %d\n", ret);
+		cnss_pr_err("Failed to assign PCI resource, err = %d\n", ret);
 		goto out;
 	}
 
@@ -5218,18 +5218,22 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	switch (device_id) {
 	case QCA6174_DEVICE_ID:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
 		break;
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
 #ifdef CONFIG_CNSS2_X86
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
 #else
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_36_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
 #endif
 		break;
 	default:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
 		break;
 	}
 
@@ -5240,8 +5244,10 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("Failed to set PCI DMA mask, err = %d\n", ret);
 		goto release_region;
 	}
+	
+	cnss_pr_dbg("Set PCI COHERENT DMA MASK (0x%llx)\n", pci_priv->dma_coherent_bit_mask);
 
-	ret = cnss_pci_set_coherent_dma_mask(pci_dev, pci_priv->dma_bit_mask);
+	ret = cnss_pci_set_coherent_dma_mask(pci_dev, pci_priv->dma_coherent_bit_mask);
 	if (ret) {
 		cnss_pr_err("Failed to set PCI coherent DMA mask, err = %d\n",
 			    ret);
@@ -5623,8 +5629,6 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	cnss_mhi_debug_reg_dump(pci_priv);
 	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_misc_reg(pci_priv);
-	cnss_pci_dump_shadow_reg(pci_priv);
-	cnss_pci_dump_qdss_reg(pci_priv);
 
 	ret = mhi_download_rddm_image(pci_priv->mhi_ctrl, in_panic);
 	if (ret) {
@@ -5637,7 +5641,9 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	fw_image = pci_priv->mhi_ctrl->fbc_image;
 	rddm_image = pci_priv->mhi_ctrl->rddm_image;
 	dump_data->nentries = 0;
-
+	
+	if (plat_priv->qdss_mem_seg_len)
+		cnss_pci_dump_qdss_reg(pci_priv);
 	cnss_mhi_dump_sfr(pci_priv);
 
 	if (!dump_seg) {

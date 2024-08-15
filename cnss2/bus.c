@@ -48,6 +48,7 @@ enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
 		bus_type = CNSS_BUS_PCI;
+		break;
 	default:
 		cnss_pr_err("Unknown device_id: 0x%lx\n", plat_priv->device_id);
 		bus_type = CNSS_BUS_NONE;

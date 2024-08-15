@@ -989,6 +989,7 @@ int ipc_log_context_destroy(void *ctxt)
 }
 EXPORT_SYMBOL(ipc_log_context_destroy);
 
+#ifndef CONFIG_WLAN_CNSS_CORE
 static int __init ipc_logging_init(void)
 {
 	check_and_create_debugfs();
@@ -999,7 +1000,6 @@ static int __init ipc_logging_init(void)
 	return 0;
 }
 
-#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(ipc_logging_init);
 
 MODULE_DESCRIPTION("ipc logging");

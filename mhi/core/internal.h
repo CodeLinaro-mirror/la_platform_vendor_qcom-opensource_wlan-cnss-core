@@ -9,6 +9,7 @@
 #define _MHI_INT_H
 
 #include <linux/mhi.h>
+#include <linux/version.h>
 
 extern struct bus_type mhi_bus_type;
 
@@ -469,7 +470,11 @@ enum mhi_pm_state {
 #define PRIMARY_CMD_RING		0
 #define MHI_DEV_WAKE_DB			127
 #define MHI_MAX_MTU			0xffff
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
+#define MHI_RANDOM_U32_NONZERO(bmsk)	(get_random_u32_inclusive(1, bmsk))
+#else
 #define MHI_RANDOM_U32_NONZERO(bmsk)	(prandom_u32_max(bmsk) + 1)
+#endif
 
 enum mhi_er_type {
 	MHI_ER_TYPE_INVALID = 0x0,

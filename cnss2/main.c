@@ -25,7 +25,7 @@
 #include <soc/qcom/minidump.h>
 #endif
 
-#ifdef CONFIG_DUMP_FW_TO_FILE
+#ifdef CONFIG_DUMP_FW_TO_FILE_AT_KERNEL
 #include <linux/export.h>
 #include <linux/rtc.h>
 #include <linux/fs.h>
@@ -240,6 +240,51 @@ static int cnss_get_audio_iommu_domain(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
+bool cnss_get_audio_shared_iommu_group_cap(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct device_node *audio_ion_node;
+	struct device_node *cnss_iommu_group_node;
+	struct device_node *audio_iommu_group_node;
+
+	if (!plat_priv)
+		return false;
+
+	audio_ion_node = of_find_compatible_node(NULL, NULL,
+						 "qcom,msm-audio-ion");
+	if (!audio_ion_node) {
+		cnss_pr_err("Unable to get Audio ion node");
+		return false;
+	}
+
+	audio_iommu_group_node = of_parse_phandle(audio_ion_node,
+						  "qcom,iommu-group", 0);
+	of_node_put(audio_ion_node);
+	if (!audio_iommu_group_node) {
+		cnss_pr_err("Unable to get audio iommu group phandle");
+		return false;
+	}
+	of_node_put(audio_iommu_group_node);
+
+	cnss_iommu_group_node = of_parse_phandle(dev->of_node,
+						 "qcom,iommu-group", 0);
+	if (!cnss_iommu_group_node) {
+		cnss_pr_err("Unable to get cnss iommu group phandle");
+		return false;
+	}
+	of_node_put(cnss_iommu_group_node);
+
+	if (cnss_iommu_group_node == audio_iommu_group_node) {
+		plat_priv->is_audio_shared_iommu_group = true;
+		cnss_pr_info("CNSS and Audio share IOMMU group");
+	} else {
+		cnss_pr_info("CNSS and Audio do not share IOMMU group");
+	}
+
+	return plat_priv->is_audio_shared_iommu_group;
+}
+EXPORT_SYMBOL(cnss_get_audio_shared_iommu_group_cap);
+
 int cnss_set_feature_list(struct cnss_plat_data *plat_priv,
 			  enum cnss_feature_v01 feature)
 {
@@ -388,6 +433,28 @@ bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap)
 }
 EXPORT_SYMBOL(cnss_get_fw_cap);
 
+/**
+ * cnss_audio_is_direct_link_supported - Check whether Audio can be used for direct link support
+ * @dev: Device
+ *
+ * Return: TRUE if supported, FALSE on failure or if not supported
+ */
+bool cnss_audio_is_direct_link_supported(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	bool is_supported = false;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv not available to check audio direct link cap\n");
+		return is_supported;
+	}
+
+	if (cnss_get_audio_iommu_domain(plat_priv) == 0)
+		is_supported = true;
+
+	return is_supported;
+}
+EXPORT_SYMBOL(cnss_audio_is_direct_link_supported);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0))
 void cnss_request_pm_qos(struct device *dev, u32 qos_val)
 {
@@ -489,6 +556,19 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0))
+int cnss_iommu_map(struct iommu_domain *domain,
+		   unsigned long iova, phys_addr_t paddr, size_t size, int prot)
+{
+	return iommu_map(domain, iova, paddr, size, prot, GFP_KERNEL);
+}
+#else
+int cnss_iommu_map(struct iommu_domain *domain,
+		   unsigned long iova, phys_addr_t paddr, size_t size, int prot)
+{
+	return iommu_map(domain, iova, paddr, size, prot);
+}
+#endif
 int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
 			dma_addr_t iova, size_t size)
 {
@@ -501,6 +581,9 @@ int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
 	if (!plat_priv->audio_iommu_domain)
 		return -EINVAL;
 
+	if (plat_priv->is_audio_shared_iommu_group)
+		return 0;
+		
 	page_offset = iova & (PAGE_SIZE - 1);
 	if (page_offset + size > PAGE_SIZE)
 		size += PAGE_SIZE;
@@ -508,8 +591,9 @@ int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
 	iova -= page_offset;
 	paddr -= page_offset;
 
-	return iommu_map(plat_priv->audio_iommu_domain, iova, paddr,
-			 roundup(size, PAGE_SIZE), IOMMU_READ | IOMMU_WRITE);
+	return cnss_iommu_map(plat_priv->audio_iommu_domain, iova, paddr,
+			      roundup(size, PAGE_SIZE), IOMMU_READ |
+			      IOMMU_WRITE | IOMMU_CACHE);
 }
 EXPORT_SYMBOL(cnss_audio_smmu_map);
 
@@ -1519,16 +1603,15 @@ static void cnss_recovery_work_handler(struct work_struct *work)
 	cnss_bus_dev_ramdump(plat_priv);
 #endif
 
-	if (!test_bit(ENABLE_SSR, &plat_priv->ctrl_params.quirks)) {
-		panic("subsys-restart: Resetting the SoC wlan crashed\n");
-		cnss_pr_err("Skip recovery, return\n");
-		return;
-	}
-
 	cnss_bus_dev_shutdown(plat_priv);
 #ifndef CONFIG_CNSS2_X86
 	cnss_bus_dev_ramdump(plat_priv);
 #endif
+	if (!test_bit(ENABLE_SSR, &plat_priv->ctrl_params.quirks)) {
+		//panic("subsys-restart: Resetting the SoC wlan crashed\n");
+		cnss_pr_err("SSR not enable, Skip recovery, return\n");
+		return;
+	}
 
 	msleep(POWER_RESET_MIN_DELAY_MS);
 
@@ -2223,14 +2306,14 @@ static void cnss_driver_event_work(struct work_struct *work)
 		case CNSS_DRIVER_EVENT_IDLE_RESTART:
 			set_bit(CNSS_DRIVER_IDLE_RESTART,
 				&plat_priv->driver_state);
-			/* fall through */
+		/* fall-thru */
 		case CNSS_DRIVER_EVENT_POWER_UP:
 			ret = cnss_power_up_hdlr(plat_priv);
 			break;
 		case CNSS_DRIVER_EVENT_IDLE_SHUTDOWN:
 			set_bit(CNSS_DRIVER_IDLE_SHUTDOWN,
 				&plat_priv->driver_state);
-			/* fall through */
+		/* fall-thru */
 		case CNSS_DRIVER_EVENT_POWER_DOWN:
 			ret = cnss_power_down_hdlr(plat_priv);
 			break;
@@ -3801,6 +3884,33 @@ out:
 	return ret;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
+union cnss_device_group_devres {
+	const struct attribute_group *group;
+};
+
+static void devm_cnss_group_remove(struct device *dev, void *res)
+{
+	union cnss_device_group_devres *devres = res;
+	const struct attribute_group *group = devres->group;
+
+	cnss_pr_dbg("%s: removing group %p\n", __func__, group);
+	sysfs_remove_group(&dev->kobj, group);
+}
+
+static int devm_cnss_group_match(struct device *dev, void *res, void *data)
+{
+	return ((union cnss_device_group_devres *)res) == data;
+}
+
+static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
+{
+	cnss_remove_sysfs_link(plat_priv);
+	WARN_ON(devres_release(&plat_priv->plat_dev->dev,
+			       devm_cnss_group_remove, devm_cnss_group_match,
+			       (void *)&cnss_attr_group));
+}
+#else
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
 	if (!plat_priv->plat_dev)
@@ -3809,6 +3919,7 @@ static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 	cnss_remove_sysfs_link(plat_priv);
 	devm_device_remove_group(&plat_priv->plat_dev->dev, &cnss_attr_group);
 }
+#endif
 
 static int cnss_event_work_init(struct cnss_plat_data *plat_priv)
 {
@@ -4250,7 +4361,7 @@ int cnss_get_curr_therm_cdev_state(struct device *dev,
 }
 EXPORT_SYMBOL(cnss_get_curr_therm_cdev_state);
 
-#ifdef CONFIG_DUMP_FW_TO_FILE
+#ifdef CONFIG_DUMP_FW_TO_FILE_AT_KERNEL
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 #define vfs_write kernel_write
 #endif

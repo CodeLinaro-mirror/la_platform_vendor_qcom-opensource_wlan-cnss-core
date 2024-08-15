@@ -582,6 +582,7 @@ struct cnss_plat_data {
 	u64 fw_caps;
 	u8 pcie_gen_speed;
 	struct iommu_domain *audio_iommu_domain;
+	bool is_audio_shared_iommu_group;
 	struct cnss_dms_data dms;
 	int power_up_error;
 	u32 hw_trc_override;
@@ -674,7 +675,8 @@ int cnss_set_feature_list(struct cnss_plat_data *plat_priv,
 int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 			  u64 *feature_list);
 int cnss_save_buf_to_file(char *buf, u32 buf_len, char *file_name);
-
+int cnss_iommu_map(struct iommu_domain *domain, unsigned long iova,
+		   phys_addr_t paddr, size_t size, int prot);
 #define QCA_DUMP_BIN_PATH "/usr/sbin/ram-dump"
 #define HOST_RDDM_DUMP "host_rddm"
 #define FW_RDDM_DUMP "fw_rddm"

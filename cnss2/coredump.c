@@ -189,7 +189,9 @@ static int cnss_coredump_submit(struct cnss_pci_data *pci_priv)
 	if (!dump)
 		return -ENODATA;
 
+#ifdef CONFIG_DUMP_FW_TO_FILE_AT_KERNEL
 	cnss_save_buf_to_file((char *)dump, dump->len, "/var/crash/Hamilton%s.bin");
+#endif
 	cnss_qcom_devcd_dump(pci_priv->mhi_ctrl->cntrl_dev, dump, le32_to_cpu(dump->len), GFP_KERNEL, FW_RDDM_DUMP);
 
 	return 0;

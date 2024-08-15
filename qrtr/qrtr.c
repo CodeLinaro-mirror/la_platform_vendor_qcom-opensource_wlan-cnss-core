@@ -490,7 +490,6 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 		size = le32_to_cpu(v2->size);
 		break;
 	default:
-		pr_err("qrtr: Invalid version %d\n", ver);
 		goto err;
 	}
 
@@ -1264,7 +1263,9 @@ static const struct proto_ops qrtr_proto_ops = {
 	.shutdown	= sock_no_shutdown,
 	.release	= qrtr_release,
 	.mmap		= sock_no_mmap,
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(6, 4, 16))	
 	.sendpage	= sock_no_sendpage,
+#endif
 };
 
 static struct proto qrtr_proto = {
