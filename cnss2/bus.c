@@ -717,9 +717,6 @@ int cnss_bus_dsp_link_control(struct cnss_plat_data *plat_priv,
 	if (!plat_priv)
 		return -ENODEV;
 
-	if(PCIE_SWITCH_NTN3 != plat_priv->pcie_switch_type)
-		return 0;
-
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
 		return cnss_pci_dsp_link_control(plat_priv->bus_priv,
