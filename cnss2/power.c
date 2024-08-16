@@ -19,7 +19,6 @@
 #include "debug.h"
 #include "bus.h"
 #include <linux/soc/qcom/qcom_aoss.h>
-#include "pci.h"
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
 static struct cnss_vreg_cfg cnss_vreg_list[] = {
@@ -1159,41 +1158,11 @@ int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num)
 	return gpio_get_value(gpio_num);
 }
 
-int cnss_bus_dsp_link_enable(struct cnss_plat_data *plat_priv)
-{
-	int ret = 0;
-	int retry_count = 0;
-
-	if (!plat_priv->bus_priv || (CNSS_BUS_PCI != plat_priv->bus_type) ||
-	    (PCIE_SWITCH_NTN3 != plat_priv->pcie_switch_type))
-		return ret;
-
-	while (retry_count++ < DSP_LINK_ENABLE_RETRY_COUNT_MAX) {
-	       ret = cnss_bus_dsp_link_control(plat_priv, true);
-		if (!ret)
-			break;
-
-		cnss_bus_dsp_link_control(plat_priv, false);
-		cnss_pr_err("DSP<->WLAN link train failed, retry...\n");
-		cnss_select_pinctrl_state(plat_priv, false);
-		usleep_range(DSP_LINK_ENABLE_DELAY_TIME_US_MIN,
-			     DSP_LINK_ENABLE_DELAY_TIME_US_MAX);
-		ret = cnss_select_pinctrl_enable(plat_priv);
-		if (ret) {
-			cnss_pr_err("Failed to select pinctrl state, err = %d\n", ret);
-			return ret;
-		}
-		usleep_range(DSP_LINK_ENABLE_DELAY_TIME_US_MIN,
-			     DSP_LINK_ENABLE_DELAY_TIME_US_MAX);
-	}
-
-	return ret;
-}
-
 int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset)
 {
 	int ret = 0;
 	bool dsp_link_disabled = false;
+	int retry_count = 0;
 
 	if (plat_priv->powered_on) {
 		cnss_pr_dbg("Already powered up");
@@ -1250,12 +1219,24 @@ int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset)
 		goto clk_off;
 	}
 
-	if (dsp_link_disabled) {
-		ret = cnss_bus_dsp_link_enable(plat_priv);
+	while (dsp_link_disabled &&
+	       (retry_count++ < DSP_LINK_ENABLE_RETRY_COUNT_MAX)) {
+		ret = cnss_bus_dsp_link_control(plat_priv, true);
+		if (!ret)
+			break;
+
+		cnss_bus_dsp_link_control(plat_priv, false);
+		cnss_pr_err("DSP<->WLAN link train failed, retry...\n");
+		cnss_select_pinctrl_state(plat_priv, false);
+		usleep_range(DSP_LINK_ENABLE_DELAY_TIME_US_MIN,
+			     DSP_LINK_ENABLE_DELAY_TIME_US_MAX);
+		ret = cnss_select_pinctrl_enable(plat_priv);
 		if (ret) {
-			cnss_pr_err("Failed to enable bus dsp link, err = %d\n", ret);
+			cnss_pr_err("Failed to select pinctrl state, err = %d\n", ret);
 			goto clk_off;
 		}
+		usleep_range(DSP_LINK_ENABLE_DELAY_TIME_US_MIN,
+			     DSP_LINK_ENABLE_DELAY_TIME_US_MAX);
 	}
 
 	plat_priv->powered_on = true;
