@@ -22,6 +22,7 @@
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
 static struct cnss_vreg_cfg cnss_vreg_list[] = {
+	{"vdd-wlan-m2", 3300000, 3300000, 0, 0, 0},
 	{"vdd-wlan-core", 1300000, 1300000, 0, 0, 0},
 	{"vdd-wlan-io", 1800000, 1800000, 0, 0, 0},
 	{"vdd-wlan-io12", 1200000, 1200000, 0, 0, 0},
@@ -1425,6 +1426,8 @@ cnss_mbox_send_msg(struct cnss_plat_data *plat_priv, char *mbox_msg)
 	ret = mbox_send_message(plat_priv->mbox_chan, &pkt);
 	if (ret < 0)
 		cnss_pr_err("Failed to send AOP mbox msg: %s\n", mbox_msg);
+	else
+		ret = 0;
 
 	return ret;
 }
