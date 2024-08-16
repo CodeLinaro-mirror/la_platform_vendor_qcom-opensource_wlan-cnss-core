@@ -5174,32 +5174,6 @@ static int cnss_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 	return -EINVAL;
 }
 
-/**
- * cnss_reset_dev_of_node() - reset the device of_node
- * @plat_priv: cnss_plat_data structure
- *
- * Revert the of_node of device to its original value, if it's changed to
- * its child node.
- */
-static void cnss_reset_dev_of_node(struct cnss_plat_data *plat_priv)
-{
-	struct device *dev = &plat_priv->plat_dev->dev;
-	struct device_node *parent;
-
-	if (plat_priv->dt_type != CNSS_DTT_CONVERGED)
-		return;
-
-	if(!(strcmp(dev->of_node->name, "chip_cfg"))){
-		parent = of_get_parent(dev->of_node);
-		if(parent)
-			dev->of_node = parent;
-		else
-			cnss_pr_err("Failed to reset dev of_node\n");
-	}
-
-	return;
-}
-
 static inline u32
 cnss_dt_type(struct cnss_plat_data *plat_priv)
 {
@@ -5679,7 +5653,6 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_aop_interface_deinit(plat_priv);
 	cnss_deinitialize_mem_pool();
 	platform_set_drvdata(plat_dev, NULL);
-	cnss_reset_dev_of_node(plat_priv);
 	cnss_clear_plat_priv(plat_priv);
 
 	return 0;
