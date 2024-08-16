@@ -585,22 +585,6 @@ static const struct mhi_controller_config cnss_mhi_config_no_satellite = {
 	.m2_no_db = true,
 };
 
-#define CNSS_MHI_BUS_MISC_EVT_COUNT 1
-static const struct mhi_controller_config cnss_mhi_config_pcie_switch_ntn3 = {
-	.max_channels = 32,
-	.timeout_ms = 10000,
-	.use_bounce_buf = false,
-	.buf_len = 0x8000,
-	.num_channels = ARRAY_SIZE(cnss_mhi_channels) -
-			CNSS_MHI_SATELLITE_CH_CFG_COUNT,
-	.ch_cfg = cnss_mhi_channels,
-	.num_events = ARRAY_SIZE(cnss_mhi_events) -
-			CNSS_MHI_SATELLITE_EVT_COUNT -
-			CNSS_MHI_BUS_MISC_EVT_COUNT,
-	.event_cfg = cnss_mhi_events,
-	.m2_no_db = true,
-};
-
 static struct cnss_pci_reg ce_src[] = {
 	{ "SRC_RING_BASE_LSB", CE_SRC_RING_BASE_LSB_OFFSET },
 	{ "SRC_RING_BASE_MSB", CE_SRC_RING_BASE_MSB_OFFSET },
@@ -7170,9 +7154,6 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	if (plat_priv->device_id >= PEACH_DEVICE_ID) {
 		cnss_mhi_config = &cnss_mhi_config_no_diag;
 	}
-
-	if (PCIE_SWITCH_NTN3 == plat_priv->pcie_switch_type)
-		cnss_mhi_config = &cnss_mhi_config_pcie_switch_ntn3;
 
 	mhi_ctrl->tme_supported_image = cnss_is_tme_supported(pci_priv);
 
