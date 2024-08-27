@@ -838,6 +838,7 @@ int fw_paging_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 		   char *file_full_path);
 int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 		       struct fw_remote_mem *fw_mem,
+		       u32 mem_count,
 		       char *file_full_path);
 #endif
 void mhi_dump_event_ring(struct mhi_device_ctxt *mhi_dev_ctxt);
