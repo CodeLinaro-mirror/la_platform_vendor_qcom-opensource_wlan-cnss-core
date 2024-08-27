@@ -1262,6 +1262,9 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			goto self_recovery;
 	case CNSS_REASON_DEFAULT:
 	case CNSS_REASON_TIMEOUT:
+		cnss_dump_fw_sram_to_file(plat_priv);
+		cnss_pci_dump_fw_remote_mem_to_file(plat_priv->bus_priv);
+		cnss_pci_dump_fw_paging_to_file(plat_priv->bus_priv);
 		break;
 	default:
 		cnss_pr_err("Unsupported recovery reason: %s(%d)\n",
