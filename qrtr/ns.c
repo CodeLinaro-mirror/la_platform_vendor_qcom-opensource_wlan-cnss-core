@@ -14,6 +14,10 @@
 
 #include "qrtr.h"
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#define EXPORT_SYMBOL_GPL(x)
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/qrtr.h>
 

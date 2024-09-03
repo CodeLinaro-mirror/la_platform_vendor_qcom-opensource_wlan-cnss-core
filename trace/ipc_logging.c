@@ -26,6 +26,10 @@
 #include <soc/qcom/minidump.h>
 #endif
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#define EXPORT_SYMBOL(x)
+#endif
+
 #include "ipc_logging_private.h"
 
 #define LOG_PAGE_DATA_SIZE	sizeof(((struct ipc_log_page *)0)->data)

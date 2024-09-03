@@ -21,6 +21,10 @@
 #define CONST
 #endif
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#define EXPORT_SYMBOL(x)
+#endif
+
 static struct socket *qmi_sock_create(struct qmi_handle *qmi,
 				      struct sockaddr_qrtr *sq);
 

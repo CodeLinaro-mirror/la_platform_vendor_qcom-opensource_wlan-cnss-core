@@ -20,6 +20,10 @@
 #include <linux/version.h>
 #include "internal.h"
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#define EXPORT_SYMBOL_GPL(x)
+#endif
+
 static DEFINE_IDA(mhi_controller_ida);
 
 const char * const mhi_ee_str[MHI_EE_MAX] = {

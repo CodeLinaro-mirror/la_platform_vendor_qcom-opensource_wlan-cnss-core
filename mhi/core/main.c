@@ -17,6 +17,10 @@
 #include <linux/slab.h>
 #include "internal.h"
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#define EXPORT_SYMBOL_GPL(x)
+#endif
+
 int __must_check mhi_read_reg(struct mhi_controller *mhi_cntrl,
 			      void __iomem *base, u32 offset, u32 *out)
 {

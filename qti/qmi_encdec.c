@@ -19,6 +19,10 @@
 #define CONST
 #endif
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#define EXPORT_SYMBOL(x)
+#endif
+
 #define QMI_ENCDEC_ENCODE_TLV(type, length, p_dst) do { \
 	*p_dst++ = type; \
 	*p_dst++ = ((u8)((length) & 0xFF)); \

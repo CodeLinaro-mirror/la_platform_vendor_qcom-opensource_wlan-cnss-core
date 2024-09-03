@@ -19,6 +19,10 @@
 #include <linux/wait.h>
 #include "internal.h"
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#define EXPORT_SYMBOL_GPL(x)
+#endif
+
 /* Setup RDDM vector table for RDDM transfer and program RXVEC */
 void mhi_rddm_prepare(struct mhi_controller *mhi_cntrl,
 		      struct image_info *img_info)

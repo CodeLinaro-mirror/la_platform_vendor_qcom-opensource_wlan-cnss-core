@@ -15,6 +15,11 @@
 
 #include "qrtr.h"
 #include <linux/version.h>
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+#define EXPORT_SYMBOL_GPL(x)
+#endif
+
 #define QRTR_PROTO_VER_1 1
 #define QRTR_PROTO_VER_2 3
 
