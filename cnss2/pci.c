@@ -53,6 +53,7 @@
 #define DEFAULT_FW_FILE_NAME		"amss.bin"
 #define FW_V2_FILE_NAME			"amss20.bin"
 #define FW_V2_FTM_FILE_NAME		"amss20_ftm.bin"
+#define DEFAULT_GENOA_FW_FTM_NAME	"genoaftm.bin"
 #define DEVICE_MAJOR_VERSION_MASK	0xF
 
 #define WAKE_MSI_NAME			"WAKE"
@@ -6368,6 +6369,23 @@ static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 				 MAX_FIRMWARE_NAME_LEN,
 				 DEFAULT_FW_FILE_NAME);
 			break;
+		}
+		break;
+	case QCN7605_DEVICE_ID:
+		if (plat_priv->driver_mode == CNSS_FTM) {
+			cnss_pci_add_fw_prefix_name(pci_priv,
+						    plat_priv->firmware_name,
+						    DEFAULT_GENOA_FW_FTM_NAME);
+			snprintf(plat_priv->fw_fallback_name,
+				 MAX_FIRMWARE_NAME_LEN,
+				 DEFAULT_GENOA_FW_FTM_NAME);
+		} else {
+			cnss_pci_add_fw_prefix_name(pci_priv,
+						    plat_priv->firmware_name,
+						    DEFAULT_FW_FILE_NAME);
+			snprintf(plat_priv->fw_fallback_name,
+				 MAX_FIRMWARE_NAME_LEN,
+				 DEFAULT_FW_FILE_NAME);
 		}
 		break;
 	default:
