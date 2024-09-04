@@ -2406,7 +2406,7 @@ static int cnss_pci_config_msi_data(struct cnss_pci_data *pci_priv)
 static struct cnss_plat_data *
 cnss_get_plat_priv_by_driver_ops(struct cnss_wlan_driver *driver_ops)
 {
-	int plat_env_count = cnss_get_plat_env_count();
+	int plat_env_count = cnss_get_max_plat_env_count();
 	struct cnss_plat_data *plat_env;
 	struct cnss_pci_data *pci_priv;
 	int i = 0;
@@ -3094,6 +3094,8 @@ int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv)
 
 	plat_priv->get_info_cb_ctx = NULL;
 	plat_priv->get_info_cb = NULL;
+	plat_priv->get_driver_async_data_ctx = NULL;
+	plat_priv->get_driver_async_data_cb = NULL;
 
 	return 0;
 }
@@ -4055,7 +4057,8 @@ int cnss_pci_resume_bus(struct cnss_pci_data *pci_priv)
 	pci_set_master(pci_dev);
 
 skip_enable_pci:
-	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RESUME);
+	if (cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RESUME))
+		ret = -EAGAIN;
 out:
 	return ret;
 }
@@ -7452,16 +7455,27 @@ static void
 cnss_pci_restore_rc_speed(struct cnss_pci_data *pci_priv)
 {
 	int ret;
+	u16 link_speed;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
-	/* if not Genoa, do not restore rc speed */
-	if (pci_priv->device_id != QCN7605_DEVICE_ID) {
+	switch (pci_priv->device_id) {
+	case QCN7605_DEVICE_ID:
+		/* do nothing, keep Gen1*/
+		return;
+	case QCA6490_DEVICE_ID:
+		/* restore to Gen2 */
+		link_speed = PCI_EXP_LNKSTA_CLS_5_0GB;
+		break;
+	default:
 		/* The request 0 will reset maximum GEN speed to default */
-		ret = cnss_pci_set_max_link_speed(pci_priv, plat_priv->rc_num, 0);
-		if (ret)
-			cnss_pr_err("Failed to reset max PCIe RC%x link speed to default, err = %d\n",
-				     plat_priv->rc_num, ret);
+		link_speed = 0;
+		break;
 	}
+
+	ret = cnss_pci_set_max_link_speed(pci_priv, plat_priv->rc_num, link_speed);
+	if (ret)
+		cnss_pr_err("Failed to set max PCIe RC%x link speed to %d, err = %d\n",
+			    plat_priv->rc_num, link_speed, ret);
 }
 
 static void
