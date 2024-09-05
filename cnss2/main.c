@@ -2284,7 +2284,6 @@ static int cnss_create_sysfs_wl_pwr(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("PCI device not probed yet\n");
 		goto out;
 	}
-
 	ret = device_create_file(&pci_priv->pci_dev->dev, 
 				 &dev_attr_wl_pwr_on);
 #else
@@ -2326,8 +2325,19 @@ static int cnss_create_sysfs_cssr(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
 
+#ifdef CONFIG_NAPIER_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	if (!pci_priv || !pci_priv->pci_dev) {
+		cnss_pr_err("PCI device not probed yet\n");
+		goto out;
+	}
+	ret = device_create_file(&pci_priv->pci_dev->dev, 
+				 &dev_attr_cssr_detected);
+#else
 	ret = device_create_file(&plat_priv->plat_dev->dev,
-                                 &dev_attr_cssr_detected);
+				 &dev_attr_cssr_detected);
+#endif
+
 	if (ret) {
 		cnss_pr_err("Failed to create device file, err = %d\n", ret);
 		goto out;
