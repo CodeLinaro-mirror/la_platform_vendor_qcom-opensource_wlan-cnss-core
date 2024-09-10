@@ -17,6 +17,7 @@
 #include <linux/version.h>
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+#undef EXPORT_SYMBOL_GPL
 #define EXPORT_SYMBOL_GPL(x)
 #endif
 

@@ -23,6 +23,7 @@
 #include "ipc_logging_private.h"
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+#undef EXPORT_SYMBOL
 #define EXPORT_SYMBOL(x)
 #endif
 

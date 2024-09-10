@@ -18,6 +18,8 @@
 #include "internal.h"
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+#undef EXPORT_SYMBOL_GPL
+#undef EXPORT_SYMBOL
 #define EXPORT_SYMBOL_GPL(x)
 #define EXPORT_SYMBOL(x)
 #endif
