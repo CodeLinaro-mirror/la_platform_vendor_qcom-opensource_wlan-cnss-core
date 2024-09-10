@@ -89,8 +89,8 @@ static int qmi_decode(CONST struct qmi_elem_info *ei_array, void *out_c_struct,
  *
  * Return: struct info of the next element that can be encoded.
  */
-static CONST struct qmi_elem_info *skip_to_next_elem(CONST struct qmi_elem_info *ei_array,
-					       int level)
+static CONST struct qmi_elem_info *
+skip_to_next_elem(CONST struct qmi_elem_info *ei_array,int level)
 {
 	CONST struct qmi_elem_info *temp_ei = ei_array;
 	u8 tlv_type;

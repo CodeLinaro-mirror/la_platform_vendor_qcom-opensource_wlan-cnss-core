@@ -79,11 +79,6 @@ static int qcom_mhi_qrtr_probe(struct mhi_device *mhi_dev,
 	struct qrtr_mhi_dev *qdev;
 	int rc;
 
-	/* start channels */
-	rc = mhi_prepare_for_transfer(mhi_dev);
-	if (rc)
-		return rc;
-
 	qdev = devm_kzalloc(&mhi_dev->dev, sizeof(*qdev), GFP_KERNEL);
 	if (!qdev)
 		return -ENOMEM;
@@ -97,7 +92,14 @@ static int qcom_mhi_qrtr_probe(struct mhi_device *mhi_dev,
 	if (rc)
 		return rc;
 
-	dev_dbg(qdev->dev, "Qualcomm Technologies Inc MHI QRTR driver probed\n");
+	/* start channels */
+	rc = mhi_prepare_for_transfer_autoqueue(mhi_dev);
+	if (rc) {
+		qrtr_endpoint_unregister(&qdev->ep);
+		return rc;
+	}
+
+	dev_dbg(qdev->dev, "Qualcomm MHI QRTR driver probed\n");
 
 	return 0;
 }
@@ -145,6 +147,6 @@ module_mhi_driver(qcom_mhi_qrtr_driver);
 
 MODULE_AUTHOR("Chris Lew <clew@codeaurora.org>");
 MODULE_AUTHOR("Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org>");
-MODULE_DESCRIPTION("Qualcomm Technologies Inc IPC-Router MHI interface driver");
+MODULE_DESCRIPTION("Qualcomm IPC-Router MHI interface driver");
 MODULE_LICENSE("GPL v2");
 #endif
