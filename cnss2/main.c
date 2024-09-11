@@ -3962,9 +3962,9 @@ static int devm_cnss_group_match(struct device *dev, void *res, void *data)
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
 	cnss_remove_sysfs_link(plat_priv);
-	WARN_ON(devres_release(&plat_priv->plat_dev->dev,
+	devres_release(&plat_priv->plat_dev->dev,
 			       devm_cnss_group_remove, devm_cnss_group_match,
-			       (void *)&cnss_attr_group));
+			       (void *)&cnss_attr_group);
 }
 #else
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)

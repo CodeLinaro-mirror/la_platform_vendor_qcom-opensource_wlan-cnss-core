@@ -6176,9 +6176,10 @@ static int __init wlfw_init(void)
 #ifdef CONFIG_WLAN_CNSS_CORE
 void wlfw_deinit(void)
 #else
-static void __exit wlfw_exit(void)
+static void __exit wlfw_deinit(void)
 #endif
 {
+	return;
 }
 #ifndef CONFIG_WLAN_CNSS_CORE
 module_init(wlfw_init);
