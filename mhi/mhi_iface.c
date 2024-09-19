@@ -686,7 +686,11 @@ static int __init mhi_init(void)
 	mutex_lock(&mhi_dev_drv->lock);
 	INIT_LIST_HEAD(&mhi_dev_drv->head);
 	mutex_unlock(&mhi_dev_drv->lock);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0)
 	mhi_dev_drv->mhi_bhi_class = class_create(THIS_MODULE, "bhi");
+#else
+	mhi_dev_drv->mhi_bhi_class = class_create("bhi");
+#endif
 	if (IS_ERR(mhi_dev_drv->mhi_bhi_class)) {
 		pr_err("Error creating mhi_bhi_class\n");
 		goto class_error;

@@ -11,6 +11,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/version.h>
 #include <linux/workqueue.h>
 #include <linux/io.h>
 #include <linux/jiffies.h>
@@ -295,7 +296,11 @@ static int ramdump_devnode_init(void)
 {
 	int ret;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0)
 	ramdump_class = class_create(THIS_MODULE, RAMDUMP_NAME);
+#else
+	ramdump_class = class_create(RAMDUMP_NAME);
+#endif
 	ret = alloc_chrdev_region(&ramdump_dev, 0, RAMDUMP_NUM_DEVICES,
 				  RAMDUMP_NAME);
 	if (ret < 0) {

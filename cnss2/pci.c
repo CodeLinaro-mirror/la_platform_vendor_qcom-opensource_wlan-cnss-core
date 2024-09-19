@@ -578,6 +578,11 @@ int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
 }
 EXPORT_SYMBOL(cnss_set_wfc_mode);
 
+bool cnss_ipa_wlan_shared_smmu_supported(struct device *dev)
+{
+	return false;
+}
+EXPORT_SYMBOL(cnss_ipa_wlan_shared_smmu_supported);
 
 int cnss_pci_recovery_update_status(struct cnss_pci_data *pci_priv)
 {
@@ -1832,6 +1837,37 @@ int cnss_pci_force_wake_request_sync(struct device *dev, int timeout_us)
 	return 0;
 }
 EXPORT_SYMBOL(cnss_pci_force_wake_request_sync);
+
+int cnss_update_time_sync_period(struct device *dev, uint32_t time_sync_period)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_update_time_sync_period);
+
+int cnss_reset_time_sync_period(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_reset_time_sync_period);
+
+bool cnss_audio_is_direct_link_supported(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_audio_is_direct_link_supported);
+
+bool cnss_get_audio_shared_iommu_group_cap(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_get_audio_shared_iommu_group_cap);
+
+int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
+					size_t *size)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_get_fw_lpass_shared_mem);
 #else
 int cnss_pci_force_wake_request(struct device *dev)
 {

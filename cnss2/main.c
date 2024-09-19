@@ -503,7 +503,9 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 	if (qmi_bypass)
 		return 0;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0)
 	cnss_msi_interrupt_check(plat_priv);
+#endif
 	return cnss_wlfw_wlan_mode_send_sync(plat_priv, QMI_WLFW_OFF_V01);
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
