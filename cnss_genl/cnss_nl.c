@@ -9,6 +9,7 @@
 #endif
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/version.h>
 
 #define CLD80211_GENL_NAME "cld80211"
 
@@ -66,8 +67,13 @@ static const struct nla_policy cld80211_policy[CLD80211_ATTR_MAX + 1] = {
 	[CLD80211_ATTR_CMD_TAG_DATA] = { .type = NLA_NESTED },
 };
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
+static int cld80211_pre_doit(const struct genl_split_ops *ops, struct sk_buff *skb,
+			     struct genl_info *info)
+#else
 static int cld80211_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			     struct genl_info *info)
+#endif
 {
 	u8 cmd_id = ops->cmd;
 	struct cld80211_nl_data *nl = get_local_ctx();
@@ -217,7 +223,12 @@ static bool cld80211_is_valid_dt_node_found(void)
 }
 #endif
 
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+int cld80211_init(void)
+#else
 static int __init cld80211_init(void)
+#endif
 {
 #ifndef CONFIG_CNSS2_X86
 	if (!cld80211_is_valid_dt_node_found())
@@ -227,13 +238,19 @@ static int __init cld80211_init(void)
 	return __cld80211_init();
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+void cld80211_exit(void)
+#else
 static void __exit cld80211_exit(void)
+#endif
 {
 	__cld80211_exit();
 }
 
+#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(cld80211_init);
 module_exit(cld80211_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("CNSS generic netlink module");
+#endif

@@ -41,31 +41,31 @@ KBUILD_CPPFLAGS += -DCONFIG_IPC_LOGGING
 endif
 
 
-ifneq ($(CONFIG_PCIE_EMULATION),)
+ifeq ($(CONFIG_PCIE_EMULATION), y)
     KBUILD_CPPFLAGS += -DCONFIG_PCIE_EMULATION
 endif
 
-ifneq ($(CONFIG_MHI_BUS),)
-	KBUILD_CPPFLAGS += -DCONFIG_MHI_BUS
+ifeq ($(CONFIG_MHI_BUS), y)
+	KBUILD_CPPFLAGS += -DCONFIG_MHI_BUS_M
 endif
 
-ifneq ($(CONFIG_MHI_BUS_PCI_GENERIC),)
+ifeq ($(CONFIG_MHI_BUS_PCI_GENERIC), y)
 	KBUILD_CPPFLAGS += -DCONFIG_MHI_BUS_PCI_GENERIC
 endif
 
-ifneq ($(CONFIG_QRTR),)
-	KBUILD_CPPFLAGS += -DCONFIG_QRTR
+ifeq ($(CONFIG_QRTR), y)
+	KBUILD_CPPFLAGS += -DCONFIG_QRTR_M
 endif
 
-ifneq ($(CONFIG_QRTR_MHI),)
-	KBUILD_CPPFLAGS += -DCONFIG_QRTR_MHI
+ifeq ($(CONFIG_QRTR_MHI), y)
+	KBUILD_CPPFLAGS += -DCONFIG_QRTR_MHI_M
 endif
 
-ifneq ($(CONFIG_MHI_BUS_DEBUG),)
+ifeq ($(CONFIG_MHI_BUS_DEBUG), y)
 	KBUILD_CPPFLAGS += -DCONFIG_MHI_BUS_DEBUG
 endif
 
-ifneq ($(CONFIG_WLAN_CNSS_CORE),)
+ifeq ($(CONFIG_WLAN_CNSS_CORE), y)
     KBUILD_CPPFLAGS += -DCONFIG_WLAN_CNSS_CORE
 endif
 
@@ -77,9 +77,6 @@ ifeq ($(CONFIG_WLAN_INTERNAL_SLEEP_CLOCK),y)
 KBUILD_CPPFLAGS += -DCONFIG_WLAN_INTERNAL_SLEEP_CLOCK
 endif
 
-ifeq ($(CONFIG_IPC_LOGGING),y)
-KBUILD_CPPFLAGS += -DCONFIG_IPC_LOGGING
-endif
 
 ifneq ($(CONFIG_WLAN_CNSS_CORE), y)
 ifeq ($(CONFIG_FULL_CORE_TECH),y)
@@ -106,7 +103,7 @@ CNSS_PREALLOC_DIR := $(CNSS_CORE_BASE)/cnss_prealloc
 INIT_OBJS := $(CNSS_CORE_BASE)/unified_wlan_cnsscore.o
 INIT_INC := -I$(ROOTDIR)
 
-ifneq ($(CONFIG_QRTR),)
+ifeq ($(CONFIG_QRTR), y)
 	QRTR_OBJS := $(QRTR_DIR)/qrtr.o                                         \
 				 $(QRTR_DIR)/ns.o
 ifeq ($(CONFIG_QRTR_SMD),y)
@@ -121,7 +118,7 @@ endif
 	QRTR_INC := -I$(ROOTDIR)/$(QRTR_DIR)
 endif
 
-ifneq ($(CONFIG_MHI_BUS),)
+ifeq ($(CONFIG_MHI_BUS), y)
 	MHI_OBJS := $(MHI_DIR)/init.o                                            \
 				$(MHI_DIR)/main.o                                       \
 				$(MHI_DIR)/pm.o                                         \
@@ -132,13 +129,13 @@ endif
 	MHI_INC := -I$(ROOTDIR)/$(MHI_DIR)
 endif
 
-ifneq ($(CONFIG_QCOM_QMI_HELPERS), )
+ifeq ($(CONFIG_QCOM_QMI_HELPERS), y)
 	QMI_HELPERS_OBJS := $(QTI_DIR)/qmi_encdec.o                            \
 	                    $(QTI_DIR)/qmi_interface.o
 	QMI_HELPERS_INC := -I$(QTI_DIR)
 endif
 
-ifneq ($(CONFIG_CNSS2),)
+ifeq ($(CONFIG_CNSS2), y)
 	CNSS_OBJS := $(CNSS_DIR)/main.o                                         \
 		         $(CNSS_DIR)/bus.o                                      \
 		         $(CNSS_DIR)/debug.o                                    \
@@ -156,7 +153,7 @@ endif
 	CNSS_INC := -I$(CNSS_DIR)
 endif
 
-ifneq ($(CONFIG_CNSS_UTILS), )
+ifeq ($(CONFIG_CNSS_UTILS), y)
 	CNSS_UTILS_OBJS := $(CNSS_UTILS_DIR)/cnss_utils.o
 ifeq ($(CONFIG_CNSS_QMI_SVC),y)
 	CNSS_UTILS_OBJS += $(CNSS_UTILS_DIR)/wlan_firmware_service_v01.o     \
@@ -169,7 +166,7 @@ endif
 	CNSS_UTILS_INC := -I$(CNSS_UTILS_DIR)
 endif
 
-ifneq ($(CONFIG_IPC_LOGGING),)
+ifeq ($(CONFIG_IPC_LOGGING_MODULE), y)
 	IPCLOG_OBJS := $(IPCLOG_DIR)/ipc_logging.o           \
 				$(IPCLOG_DIR)/ipc_logging_debug.o      
 	IPCLOG_INC := -I$(ROOTDIR)/(IPCLOG_DIR)

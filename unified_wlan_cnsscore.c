@@ -14,7 +14,7 @@ static int unified_pdrv_init(void)
 {
 	int ret;
 
-#ifdef CONFIG_MHI_BUS
+#ifdef CONFIG_MHI_BUS_M
 	/* mhi Registration */
 	ret = mhi_init();
 	if (ret) {
@@ -23,7 +23,7 @@ static int unified_pdrv_init(void)
 	}
 #endif
 
-#ifdef CONFIG_QRTR
+#ifdef CONFIG_QRTR_M
 	/* qrtr Registration */
 	ret = qrtr_proto_init();
 	if (ret) {
@@ -32,7 +32,7 @@ static int unified_pdrv_init(void)
 	}
 #endif
 
-#ifdef CONFIG_QRTR_MHI
+#ifdef CONFIG_QRTR_MHI_M
 	ret = qrtr_mhi_init();
 	if (ret) {
 		printk("%s: updrv: failed to register qrtr-mhi\n", __func__);
@@ -86,15 +86,15 @@ fail4:
 	wlfw_deinit();
 fail3:
 #endif
-#ifdef CONFIG_QRTR_MHI
+#ifdef CONFIG_QRTR_MHI_M
 	qrtr_mhi_deinit();
 fail2:
 #endif
-#ifdef CONFIG_QRTR
+#ifdef CONFIG_QRTR_M
 	qrtr_proto_fini();
 fail1:
 #endif
-#ifdef CONFIG_MHI_BUS
+#ifdef CONFIG_MHI_BUS_M
 	mhi_exit();
 fail:
 #endif
@@ -113,13 +113,13 @@ static void unified_pdrv_deinit(void)
 #ifdef CONFIG_CNSS_QMI_SVC
 	wlfw_deinit();
 #endif
-#ifdef CONFIG_QRTR_MHI
+#ifdef CONFIG_QRTR_MHI_M
 	qrtr_mhi_deinit();
 #endif
-#ifdef CONFIG_QRTR
+#ifdef CONFIG_QRTR_M
 	qrtr_proto_fini();
 #endif
-#ifdef CONFIG_MHI_BUS
+#ifdef CONFIG_MHI_BUS_M
 	mhi_exit();
 #endif
 }

@@ -21,6 +21,11 @@
 #define CONST
 #endif
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#undef EXPORT_SYMBOL
+#define EXPORT_SYMBOL(x)
+#endif
+
 static struct socket *qmi_sock_create(struct qmi_handle *qmi,
 				      struct sockaddr_qrtr *sq);
 
@@ -103,7 +108,7 @@ static void qmi_recv_del_server(struct qmi_handle *qmi,
  * @node:	id of the dying node
  *
  * Signals the client that all previously registered services on this node are
- * now gone and then calls the bye callback to allow the client client further
+ * now gone and then calls the bye callback to allow the client further
  * cleaning up resources associated with this remote.
  */
 static void qmi_recv_bye(struct qmi_handle *qmi,
@@ -654,7 +659,7 @@ int qmi_handle_init(struct qmi_handle *qmi, size_t recv_buf_size,
 	if (!qmi->recv_buf)
 		return -ENOMEM;
 
-	qmi->wq = alloc_workqueue("qmi_msg_handler", WQ_UNBOUND, 1);
+	qmi->wq = alloc_ordered_workqueue("qmi_msg_handler", 0);
 	if (!qmi->wq) {
 		ret = -ENOMEM;
 		goto err_free_recv_buf;
@@ -743,7 +748,8 @@ EXPORT_SYMBOL(qmi_handle_release);
 static ssize_t qmi_send_message(struct qmi_handle *qmi,
 				struct sockaddr_qrtr *sq, struct qmi_txn *txn,
 				int type, int msg_id, size_t len,
-				CONST struct qmi_elem_info *ei, const void *c_struct)
+				CONST struct qmi_elem_info *ei,
+				const void *c_struct)
 {
 	struct msghdr msghdr = {};
 	struct kvec iv;
@@ -834,7 +840,8 @@ EXPORT_SYMBOL(qmi_send_response);
  * Return: 0 on success, negative errno on failure.
  */
 ssize_t qmi_send_indication(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
-			    int msg_id, size_t len, CONST struct qmi_elem_info *ei,
+			    int msg_id, size_t len,
+			    CONST struct qmi_elem_info *ei,
 			    const void *c_struct)
 {
 	struct qmi_txn txn;

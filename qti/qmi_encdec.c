@@ -19,6 +19,11 @@
 #define CONST
 #endif
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#undef EXPORT_SYMBOL
+#define EXPORT_SYMBOL(x)
+#endif
+
 #define QMI_ENCDEC_ENCODE_TLV(type, length, p_dst) do { \
 	*p_dst++ = type; \
 	*p_dst++ = ((u8)((length) & 0xFF)); \
@@ -84,8 +89,8 @@ static int qmi_decode(CONST struct qmi_elem_info *ei_array, void *out_c_struct,
  *
  * Return: struct info of the next element that can be encoded.
  */
-static CONST struct qmi_elem_info *skip_to_next_elem(CONST struct qmi_elem_info *ei_array,
-					       int level)
+static CONST struct qmi_elem_info *
+skip_to_next_elem(CONST struct qmi_elem_info *ei_array,int level)
 {
 	CONST struct qmi_elem_info *temp_ei = ei_array;
 	u8 tlv_type;
