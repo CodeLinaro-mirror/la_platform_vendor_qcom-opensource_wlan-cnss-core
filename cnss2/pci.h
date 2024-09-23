@@ -136,8 +136,20 @@ void cnss_pci_dump_qdss_reg(struct cnss_pci_data *pci_priv);
 void cnss_pci_enable_l1(struct cnss_pci_data *pci_priv);
 
 #ifdef CONFIG_CNSS2_PCIE
+#ifdef PCI_SUPPORT_SUSPEND_RESUME
 int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv);
 int cnss_resume_pci_link(struct cnss_pci_data *pci_priv);
+#else
+static inline int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
+{
+	return 0;
+}
+
+static inline int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
+{
+	return 0;
+}
+#endif
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv);
 int cnss_pci_fw_sram_dump_to_file(struct cnss_pci_data *pci_priv,
 		uint32_t fw_sram_start,
