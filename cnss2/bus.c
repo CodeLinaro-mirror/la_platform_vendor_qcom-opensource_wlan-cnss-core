@@ -634,7 +634,7 @@ bool cnss_bus_is_smmu_s1_enabled(struct cnss_plat_data *plat_priv)
 	}
 }
 
-#ifdef CONFIG_PCIE_SWITCH_NTN3
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
 int cnss_bus_dsp_link_control(struct cnss_plat_data *plat_priv,
 			      bool link_enable)
 {
