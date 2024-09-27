@@ -695,7 +695,7 @@ out:
 
 int wlfw_cap_send_sync_msg(struct icnss_priv *priv)
 {
-	int ret;
+	int ret = 0, i = 0;
 	struct wlfw_cap_req_msg_v01 *req;
 	struct wlfw_cap_resp_msg_v01 *resp;
 	struct qmi_txn txn;
@@ -774,6 +774,18 @@ int wlfw_cap_send_sync_msg(struct icnss_priv *priv)
 				WLFW_MAX_TIMESTAMP_LEN + 1);
 	}
 
+	if (resp->dev_mem_info_valid) {
+		for (i = 0; i < QMI_WLFW_MAX_DEV_MEM_NUM_V01; i++) {
+			priv->dev_mem_info[i].start =
+				resp->dev_mem_info[i].start;
+			priv->dev_mem_info[i].size =
+				resp->dev_mem_info[i].size;
+			icnss_pr_info("Device memory info[%d]: start = 0x%llx, size = 0x%llx\n",
+				      i, priv->dev_mem_info[i].start,
+				      priv->dev_mem_info[i].size);
+		}
+	}
+
 	if (resp->voltage_mv_valid) {
 		priv->cpr_info.voltage = resp->voltage_mv;
 		icnss_pr_dbg("Voltage for CPR: %dmV\n",
@@ -802,6 +814,13 @@ int wlfw_cap_send_sync_msg(struct icnss_priv *priv)
 
 	if (resp->phy_qam_cap_valid)
 		priv->phy_qam_cap = (enum icnss_phy_qam_cap)resp->phy_qam_cap;
+
+	if (resp->serial_id_valid) {
+		priv->serial_id = resp->serial_id;
+		icnss_pr_info("serial id  0x%x 0x%x\n",
+			     resp->serial_id.serial_id_msb,
+			     resp->serial_id.serial_id_lsb);
+	}
 
 	icnss_pr_dbg("Capability, chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x",
 		     priv->chip_info.chip_id, priv->chip_info.chip_family,
@@ -1637,8 +1656,8 @@ int wlfw_qdss_trace_stop(struct icnss_priv *priv, unsigned long long option)
 					     option);
 }
 
-int wlfw_wlan_cfg_send_sync_msg(struct icnss_priv *priv,
-				struct wlfw_wlan_cfg_req_msg_v01 *data)
+static int wlfw_wlan_cfg_send_sync_msg(struct icnss_priv *priv,
+				       struct wlfw_wlan_cfg_req_msg_v01 *data)
 {
 	int ret;
 	struct wlfw_wlan_cfg_req_msg_v01 *req;
@@ -2137,7 +2156,7 @@ out:
 	return ret;
 }
 
-void icnss_handle_rejuvenate(struct icnss_priv *priv)
+static void icnss_handle_rejuvenate(struct icnss_priv *priv)
 {
 	struct icnss_event_pd_service_down_data *event_data;
 	struct icnss_uevent_fw_down_data fw_down_data = {0};
@@ -2787,7 +2806,8 @@ static int icnss_wlfw_wfc_call_status_send_sync
 	struct qmi_txn txn;
 	int ret = 0;
 
-	if (!test_bit(ICNSS_FW_READY, &priv->state)) {
+	if (!test_bit(ICNSS_FW_READY, &priv->state) ||
+	    !test_bit(ICNSS_MODE_ON, &priv->state)) {
 		icnss_pr_err("Drop IMS WFC indication as FW not initialized\n");
 		return -EINVAL;
 	}
@@ -3782,7 +3802,7 @@ out:
 }
 
 /* IMS Service */
-int ims_subscribe_for_indication_send_async(struct icnss_priv *priv)
+static int ims_subscribe_for_indication_send_async(struct icnss_priv *priv)
 {
 	int ret;
 	struct ims_private_service_subscribe_for_indications_req_msg_v01 *req;
