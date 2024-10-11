@@ -188,9 +188,9 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv);
 int cnss_pci_call_driver_uevent(struct cnss_pci_data *pci_priv,
 				enum cnss_driver_status status, void *data);
 int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv);
-int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv);
+int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv, int type);
 int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv);
-int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv);
+int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv, int type);
 int cnss_pci_dev_crash_shutdown(struct cnss_pci_data *pci_priv);
 int cnss_pci_dev_ramdump(struct cnss_pci_data *pci_priv);
 int cnss_pci_register_driver_hdlr(struct cnss_pci_data *pci_priv, void *data);
@@ -199,5 +199,6 @@ int cnss_pci_call_driver_modem_status(struct cnss_pci_data *pci_priv,
 				      int modem_current_status);
 int cnss_pci_recovery_update_status(struct cnss_pci_data *pci_priv);
 void cnss_pci_shutdown(struct pci_dev *pci_dev);
+int cnss_pci_get_bus_pm_state(struct cnss_pci_data *pci_priv);
 int cnss_get_pci_msi_vectors(struct cnss_pci_data *pci_priv);
 #endif /* _CNSS_PCI_H */

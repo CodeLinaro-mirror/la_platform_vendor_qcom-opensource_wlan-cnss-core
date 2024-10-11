@@ -585,6 +585,11 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 		}
 	}
 
+	if (resp.serial_id_valid) {
+		plat_priv->serial_id = resp.serial_id;
+		cnss_pr_info("serial id  0x%x 0x%x\n", resp.serial_id.serial_id_msb, resp.serial_id.serial_id_lsb);
+	}
+
 	cnss_pr_info("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, fw_version: 0x%x, fw_build_timestamp: %s",
 		    plat_priv->chip_info.chip_id,
 		    plat_priv->chip_info.chip_family,
@@ -816,7 +821,7 @@ static void cnss_wlfw_bdf_get_file_name(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_BDF_ELF:
 		bdf_type = cnss_wlfw_bdf_elf_bin_override(plat_priv);
-		/* fall-thru */
+		/*fall-through*/
 	case CNSS_BDF_BIN:
 		if (plat_priv->board_info.board_id == 0xFF) {
 			if (bdf_type == CNSS_BDF_BIN)

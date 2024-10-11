@@ -1335,6 +1335,35 @@ static struct elem_info wlfw_dev_mem_info_s_v01_ei[] = {
 	},
 };
 
+static struct elem_info wlchip_serial_id_v01_ei[] = {
+        {
+                .data_type      = QMI_UNSIGNED_4_BYTE,
+                .elem_len       = 1,
+                .elem_size      = sizeof(u32),
+                .is_array       = NO_ARRAY,
+                .tlv_type       = 0,
+                .offset         = offsetof(struct
+                                           wlchip_serial_id_v01,
+                                           serial_id_msb),
+        },
+        {
+                .data_type      = QMI_UNSIGNED_4_BYTE,
+                .elem_len       = 1,
+                .elem_size      = sizeof(u32),
+                .is_array       = NO_ARRAY,
+                .tlv_type       = 0,
+                .offset         = offsetof(struct
+                                           wlchip_serial_id_v01,
+                                           serial_id_lsb),
+        },
+        {
+                .data_type      = QMI_EOTI,
+                .is_array       = NO_ARRAY,
+                .tlv_type       = QMI_COMMON_TLV_TYPE,
+        },
+};
+
+
 struct elem_info wlfw_cap_resp_msg_v01_ei[] = {
 	{
 		.data_type      = QMI_STRUCT,
@@ -1477,6 +1506,30 @@ struct elem_info wlfw_cap_resp_msg_v01_ei[] = {
 					   dev_mem_info),
 		.ei_array      = wlfw_dev_mem_info_s_v01_ei,
         },
+
+
+	{
+		.data_type      = QMI_OPT_FLAG,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u8),
+		.is_array       = NO_ARRAY,
+		.tlv_type       = 0x28,
+		.offset         = offsetof(struct
+					   wlfw_cap_resp_msg_v01,
+					   serial_id_valid),
+	},
+	{
+		.data_type      = QMI_STRUCT,
+		.elem_len       = 1,
+		.elem_size      = sizeof(struct wlchip_serial_id_v01),
+		.is_array       = NO_ARRAY,
+		.tlv_type       = 0x28,
+		.offset         = offsetof(struct
+					   wlfw_cap_resp_msg_v01,
+					   serial_id),
+		.ei_array      = wlchip_serial_id_v01_ei,
+	},
+
 	{
 		.data_type      = QMI_EOTI,
 		.is_array       = NO_ARRAY,

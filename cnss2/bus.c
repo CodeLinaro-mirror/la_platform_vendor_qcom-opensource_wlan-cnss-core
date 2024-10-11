@@ -34,6 +34,16 @@ enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev)
 		return CNSS_BUS_NONE;
 }
 
+enum bus_pm_state cnss_get_bus_pm_state(struct cnss_plat_data *plat_priv)
+{
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_get_bus_pm_state(plat_priv->bus_priv);
+	default:
+		return BUS_RESUME;
+	}
+}
+
 enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 {
 	int ret;
@@ -372,7 +382,7 @@ int cnss_bus_call_driver_remove(struct cnss_plat_data *plat_priv)
 
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
-		return cnss_pci_call_driver_remove(plat_priv->bus_priv);
+		return cnss_pci_call_driver_remove(plat_priv->bus_priv, FULL_RECOVERY);
 	case CNSS_BUS_USB:
 		return cnss_usb_call_driver_remove(plat_priv->bus_priv);
 	case CNSS_BUS_SDIO:
@@ -403,14 +413,14 @@ int cnss_bus_dev_powerup(struct cnss_plat_data *plat_priv)
 	}
 }
 
-int cnss_bus_dev_shutdown(struct cnss_plat_data *plat_priv)
+int cnss_bus_dev_shutdown(struct cnss_plat_data *plat_priv, int type)
 {
 	if (!plat_priv)
 		return -ENODEV;
 
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
-		return cnss_pci_dev_shutdown(plat_priv->bus_priv);
+		return cnss_pci_dev_shutdown(plat_priv->bus_priv, type);
 	case CNSS_BUS_USB:
 		return 0;
 	case CNSS_BUS_SDIO:

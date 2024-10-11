@@ -40,11 +40,7 @@
 
 #define PCI_BAR_NUM			0
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-#define PCI_DMA_MASK			36
-#else
 #define PCI_DMA_MASK			32
-#endif
 
 #define PCI_DMA_COHERENT_MASK			32
 
@@ -582,11 +578,6 @@ int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
 }
 EXPORT_SYMBOL(cnss_set_wfc_mode);
 
-bool cnss_ipa_wlan_shared_smmu_supported(struct device *dev)
-{
-	return false;
-}
-EXPORT_SYMBOL(cnss_ipa_wlan_shared_smmu_supported);
 
 int cnss_pci_recovery_update_status(struct cnss_pci_data *pci_priv)
 {
@@ -652,7 +643,7 @@ out:
 	return ret;
 }
 
-int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv)
+int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv, int type)
 {
 	struct cnss_plat_data *plat_priv;
 
@@ -675,7 +666,7 @@ int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv)
 
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
 	    test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state)) {
-		pci_priv->driver_ops->shutdown(pci_priv->pci_dev);
+		pci_priv->driver_ops->shutdown(pci_priv->pci_dev, type);
 	} else if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state)) {
 		pci_priv->driver_ops->remove(pci_priv->pci_dev);
 		clear_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
@@ -738,7 +729,7 @@ static int cnss_qca6174_shutdown(struct cnss_pci_data *pci_priv)
 
 	cnss_pm_request_resume(pci_priv);
 
-	cnss_pci_call_driver_remove(pci_priv);
+	cnss_pci_call_driver_remove(pci_priv, FULL_RECOVERY);
 
 	cnss_request_bus_bandwidth(&plat_priv->plat_dev->dev,
 				   CNSS_BUS_WIDTH_NONE);
@@ -845,14 +836,14 @@ out:
 	return ret;
 }
 
-static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
+static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv, int type)
 {
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
 	cnss_pm_request_resume(pci_priv);
 
-	cnss_pci_call_driver_remove(pci_priv);
+	cnss_pci_call_driver_remove(pci_priv, type);
 
 #ifdef CONFIG_NAPIER_X86
 		cnss_request_bus_bandwidth(&pci_priv->pci_dev->dev,
@@ -863,7 +854,7 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 #endif
 
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
-	cnss_pci_set_auto_suspended(pci_priv, 0);
+	cnss_pci_set_auto_suspended(pci_priv, FULL_RECOVERY);
 
 	cnss_pci_stop_mhi(pci_priv);
 
@@ -980,7 +971,7 @@ int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv)
 	return ret;
 }
 
-int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv)
+int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv, int type)
 {
 	int ret = 0;
 
@@ -998,7 +989,7 @@ int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
-		ret = cnss_qca6290_shutdown(pci_priv);
+		ret = cnss_qca6290_shutdown(pci_priv, type);
 		break;
 	default:
 		cnss_pr_err("Unknown device_id found: 0x%x\n",
@@ -1155,7 +1146,7 @@ int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 
 	plat_priv = pci_priv->plat_priv;
 	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
-	cnss_pci_dev_shutdown(pci_priv);
+	cnss_pci_dev_shutdown(pci_priv, FULL_RECOVERY);
 	pci_priv->driver_ops = NULL;
 	clear_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 
@@ -1838,48 +1829,9 @@ EXPORT_SYMBOL(cnss_pci_force_wake_release);
 
 int cnss_pci_force_wake_request_sync(struct device *dev, int timeout_us)
 {
-	if (timeout_us) {
-		/* Busy wait for timeout_us */
-		return -EOPNOTSUPP;
-	} else {
-		/* Sleep wait for mhi_ctrl->timeout_ms */
-		return cnss_pci_force_wake_request(dev);
-	}
-
 	return 0;
 }
 EXPORT_SYMBOL(cnss_pci_force_wake_request_sync);
-
-int cnss_update_time_sync_period(struct device *dev, uint32_t time_sync_period)
-{
-	return 0;
-}
-EXPORT_SYMBOL(cnss_update_time_sync_period);
-
-int cnss_reset_time_sync_period(struct device *dev)
-{
-	return 0;
-}
-EXPORT_SYMBOL(cnss_reset_time_sync_period);
-
-bool cnss_audio_is_direct_link_supported(struct device *dev)
-{
-	return 0;
-}
-EXPORT_SYMBOL(cnss_audio_is_direct_link_supported);
-
-bool cnss_get_audio_shared_iommu_group_cap(struct device *dev)
-{
-	return 0;
-}
-EXPORT_SYMBOL(cnss_get_audio_shared_iommu_group_cap);
-
-int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
-					size_t *size)
-{
-	return 0;
-}
-EXPORT_SYMBOL(cnss_get_fw_lpass_shared_mem);
 #else
 int cnss_pci_force_wake_request(struct device *dev)
 {
@@ -3557,7 +3509,6 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		/* Disable L1SS for QCA6390 */
 		pci_read_config_byte(pci_dev, 0x1F4, &aspm_state);
 		cnss_pr_err("Current L1SS status: 0x%x", aspm_state);
-		/* fall-thru */
 		if (aspm_state & 0xF) {
 			pci_write_config_byte(pci_dev, 0x1F4, aspm_state & ~0xF);
 			pci_read_config_byte(pci_dev, 0x1F4, &aspm_state);
@@ -3672,7 +3623,7 @@ void cnss_pci_shutdown(struct pci_dev *pci_dev)
 		 * global reset will be called in
 		 * mhi_pm_slave_mode_power_off
 		 */
-		cnss_bus_dev_shutdown(plat_priv);
+		cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 	}
 }
 #else
@@ -3780,4 +3731,18 @@ out:
 void cnss_pci_deinit(struct cnss_plat_data *plat_priv)
 {
 	pci_unregister_driver(&cnss_pci_driver);
+}
+
+int cnss_pci_get_bus_pm_state(struct cnss_pci_data *pci_priv)
+{
+	int ret = BUS_RESUME;
+	struct cnss_wlan_driver *driver_ops;
+	driver_ops = pci_priv->driver_ops;
+
+	if (driver_ops && driver_ops->get_bus_pm_state) {
+		ret = driver_ops->get_bus_pm_state(pci_priv->pci_dev,
+						   pci_priv->pci_device_id);
+	}
+
+	return ret;
 }

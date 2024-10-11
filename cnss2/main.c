@@ -88,13 +88,22 @@ module_param(wow_wake_gpionum, uint, 0600);
 MODULE_PARM_DESC(wow_wake_gpionum, "configure gpio number for wow wake");
 #endif
 
-static bool rddm_panic = 1;
+static bool rddm_panic = 0; 
 module_param(rddm_panic, bool, 0600);
 MODULE_PARM_DESC(rddm_panic, "Trigger kernel panic when RDDM happens");
 
 static int cssr_threshold = 3;
 module_param(cssr_threshold, int, 0600);
 MODULE_PARM_DESC(cssr_threshold, "CSSR Triger Threshold");
+
+/*
+ *  Number of crash detected during wow resume
+ *  threshold 0 mean feature disabled
+ *  positive value means allowed ssr time before stop ssr
+ */
+static int wow_ssr_threshold = 0;
+module_param(wow_ssr_threshold, int, 0600);
+MODULE_PARM_DESC(wow_ssr_threshold, "WoW SSR threshold");
 
 static int cssr_enable = 0;
 module_param(cssr_enable, int, 0600);
@@ -707,7 +716,7 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 	return 0;
 
 shutdown:
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 	clear_bit(CNSS_FW_READY, &plat_priv->driver_state);
 	clear_bit(CNSS_FW_MEM_READY, &plat_priv->driver_state);
@@ -1110,7 +1119,7 @@ static int cnss_subsys_shutdown(const struct subsys_desc *subsys_desc,
 		return 0;
 	}
 
-	return cnss_bus_dev_shutdown(plat_priv);
+	return cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 }
 
 static int cnss_subsys_ramdump(int enable,
@@ -1227,13 +1236,54 @@ static const char *cnss_recovery_reason_to_str(enum cnss_recovery_reason reason)
 	return "UNKNOWN";
 };
 
+static int cnss_determine_recovery_policy(struct cnss_plat_data *plat_priv)
+{
+	enum cnss_recovery_policy policy = FULL_RECOVERY;
+	int ssr_count;
+
+	if (cssr_enable) {
+		ssr_count = plat_priv->cssr_count;
+		if (ssr_count > cssr_threshold) {
+			plat_priv->cssr_detected = 1;
+			policy = ONLY_SHUTDOWN;
+			cnss_pr_info("ssr suppressed!, cssr_count is (%d),"
+                             "cssr_detected is (%d)\n",
+                             plat_priv->cssr_count, plat_priv->cssr_detected);
+		}
+	}
+
+	if (wow_ssr_threshold) {
+		ssr_count = plat_priv->wow_ssr_count;
+		if (ssr_count > wow_ssr_threshold) {
+			plat_priv->wow_ssr_suppressed = 1;
+			policy = ONLY_SHUTDOWN;
+			cnss_pr_info("ssr suppressed! wow_ssr_count %d\n", ssr_count);
+		}
+	}
+
+	return policy;
+}
+
 static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			    enum cnss_recovery_reason reason)
 {
 	struct cnss_subsys_info *subsys_info =
 		&plat_priv->subsys_info;
+	bool bus_suspend = false;
+	enum bus_pm_state pm_state;
+	enum cnss_recovery_policy policy;
 
+	pm_state = cnss_get_bus_pm_state(plat_priv);
+	bus_suspend = (pm_state == BUS_SUSPEND) ? true : false;
+
+	cnss_pr_info("wow ssr count %d suspend %d\n", plat_priv->wow_ssr_count,
+								  bus_suspend);
 	plat_priv->recovery_count++;
+	if (bus_suspend) {
+		plat_priv->wow_ssr_count++;
+		cnss_pr_info("crash during wow count %d\n",
+						     plat_priv->wow_ssr_count);
+	}
 
 	if (plat_priv->device_id == QCA6174_DEVICE_ID)
 		goto self_recovery;
@@ -1291,18 +1341,12 @@ self_recovery:
 	if (cssr_enable)
 		plat_priv->cssr_count += 1;
 
-	if (plat_priv->cssr_count <= cssr_threshold) {
-		cnss_pr_info("ssr is trigered, cssr_count is (%d),"
-                             "cssr_detected is (%d)\n",
-                             plat_priv->cssr_count, plat_priv->cssr_detected);
-		cnss_bus_dev_shutdown(plat_priv);
-		cnss_bus_dev_powerup(plat_priv);
-	} else {
-		plat_priv->cssr_detected = 1;
-		cnss_pr_err("cssr reach threshold (%d) and do suppression,"
-                            "cssr_detected is (%d)\n",
-                            cssr_threshold, plat_priv->cssr_detected);
-		cnss_bus_dev_shutdown(plat_priv);
+	policy = cnss_determine_recovery_policy(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, policy);
+	switch (policy) {
+		case FULL_RECOVERY:
+			cnss_bus_dev_powerup(plat_priv);
+			break;
 	}
 
 	return 0;
@@ -1601,7 +1645,7 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv)
 	if (plat_priv->device_id == QCN7605_DEVICE_ID ||
 	    plat_priv->bus_type == CNSS_BUS_USB)
 		goto skip_shutdown;
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 skip_shutdown:
 	clear_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state);
@@ -1615,7 +1659,7 @@ static int cnss_power_up_hdlr(struct cnss_plat_data *plat_priv)
 
 static int cnss_power_down_hdlr(struct cnss_plat_data *plat_priv)
 {
-	cnss_bus_dev_shutdown(plat_priv);
+	cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 
 	return 0;
 }
@@ -2265,6 +2309,38 @@ out:
 	return ret;
 }
 
+static ssize_t cnss_wow_ssr_suppressed_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
+	int ret = scnprintf(buf, PAGE_SIZE,
+			    "\nwow_ssr_suppressed: %d, wow_ssr_count: %d\n",
+			    plat_priv->wow_ssr_suppressed, plat_priv->wow_ssr_count);
+
+	return ret;
+}
+
+static DEVICE_ATTR(wow_ssr_suppressed, 0444, cnss_wow_ssr_suppressed_show, NULL);
+
+static ssize_t cnss_serial_id_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
+	u32 msb = plat_priv->serial_id.serial_id_msb;
+	u32 lsb = plat_priv->serial_id.serial_id_lsb;
+	u64 serial_id;
+
+	msb &= 0xFFFF;
+	serial_id = ((u64)msb << 32) | lsb;
+	int ret = scnprintf(buf, PAGE_SIZE, "\n%lx\n", serial_id);
+
+	return ret;
+}
+
+static DEVICE_ATTR(serial_id, 0444, cnss_serial_id_show, NULL);
+
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
 #ifdef CONFIG_NAPIER_X86
@@ -2354,9 +2430,53 @@ static void cnss_remove_sysfs_cssr(struct cnss_plat_data *plat_priv)
 	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_cssr_detected);
 }
 
+static int cnss_create_sysfs_wow_ssr_suppressed(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	ret = device_create_file(&plat_priv->plat_dev->dev,
+                                 &dev_attr_wow_ssr_suppressed);
+	if (ret) {
+		cnss_pr_err("Failed to create device file, err = %d\n", ret);
+		goto out;
+	}
+
+	cnss_pr_dbg("created sysfs for wow_ssr_suppressed\n");
+	return 0;
+out:
+	return ret;
+}
+
+static void cnss_remove_sysfs_wow_ssr_suppressed(struct cnss_plat_data *plat_priv)
+{
+	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_wow_ssr_suppressed);
+}
+
 static void cnss_event_work_deinit(struct cnss_plat_data *plat_priv)
 {
 	destroy_workqueue(plat_priv->event_wq);
+}
+
+static int cnss_create_sysfs_serial_id(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	ret = device_create_file(&plat_priv->plat_dev->dev,
+                                 &dev_attr_serial_id);
+	if (ret) {
+		cnss_pr_err("Failed to create device file, err = %d\n", ret);
+		goto out;
+	}
+
+	cnss_pr_dbg("created sysfs for serial_id\n");
+	return 0;
+out:
+	return ret;
+}
+
+static void cnss_remove_sysfs_serial_id(struct cnss_plat_data *plat_priv)
+{
+	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_serial_id);
 }
 
 static int cnss_alloc_caldb_mem(struct cnss_plat_data *plat_priv)
@@ -2530,9 +2650,17 @@ retry:
 	if (ret)
 		goto remove_sysfs_pwr;
 
-	ret = cnss_event_work_init(plat_priv);
+	ret = cnss_create_sysfs_wow_ssr_suppressed(plat_priv);
 	if (ret)
 		goto cnss_remove_sysfs_cssr;
+
+	ret = cnss_create_sysfs_serial_id(plat_priv);
+	if (ret)
+		goto remove_sysfs_wow_ssr_suppressed;
+
+	ret = cnss_event_work_init(plat_priv);
+	if (ret)
+		goto remove_sysfs_serial_id;
 
 	ret = cnss_qmi_init(plat_priv);
 	if (ret)
@@ -2582,6 +2710,10 @@ deinit_qmi:
 	cnss_qmi_deinit(plat_priv);
 deinit_event_work:
 	cnss_event_work_deinit(plat_priv);
+remove_sysfs_serial_id:
+	cnss_remove_sysfs_serial_id(plat_priv);
+remove_sysfs_wow_ssr_suppressed:
+	cnss_remove_sysfs_wow_ssr_suppressed(plat_priv);
 cnss_remove_sysfs_cssr:
 	cnss_remove_sysfs_cssr(plat_priv);
 remove_sysfs:
@@ -2633,6 +2765,8 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_debugfs_destroy(plat_priv);
 	cnss_qmi_deinit(plat_priv);
 	cnss_event_work_deinit(plat_priv);
+	cnss_remove_sysfs_serial_id(plat_priv);
+	cnss_remove_sysfs_wow_ssr_suppressed(plat_priv);
 	cnss_remove_sysfs_cssr(plat_priv);
 	cnss_remove_sysfs(plat_priv);
 	cnss_unregister_bus_scale(plat_priv);
