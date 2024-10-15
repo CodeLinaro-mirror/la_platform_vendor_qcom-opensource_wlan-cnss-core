@@ -24,6 +24,7 @@
 #include "debug.h"
 #include "pci.h"
 #include "reg.h"
+#include "../mhi/core/internal.h"
 
 #include "coredump.h"
 
@@ -1904,8 +1905,7 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		return;
 	}
 
-	ee = mhi_get_exec_env(pci_priv->mhi_ctrl);
-	if (CNSS_MHI_IN_MISSION_MODE(ee)) {
+	if (mhi_get_exec_env(pci_priv->mhi_ctrl) == MHI_EE_AMSS) {
 		cnss_pr_err("Avoid Dumping SBL log data in Mission mode\n");
 		return;
 	}
@@ -4675,9 +4675,29 @@ static void cnss_pci_free_m3_mem(struct cnss_pci_data *pci_priv)
 	m3_mem->size = 0;
 }
 
+static void mhi_dump_irq(struct cnss_pci_data *pci_priv)
+{
+	int i, irq, irq_sum = pci_priv->mhi_ctrl->nr_irqs;
+	int *irq_list = pci_priv->mhi_ctrl->irq;
+	bool is_one_msi = cnss_pci_is_one_msi(pci_priv);
+
+	struct irq_desc *desc;
+
+
+	for (i=0; i<irq_sum; i++) {
+		irq = irq_list[i];
+		desc = irq_to_desc(irq);
+		cnss_pr_err("MSI%d irq=%d, depth=%d\n", i, irq, desc->depth);
+		if (true == is_one_msi)
+			break;
+	}
+
+}
+
 void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv;
+	struct mhi_controller *mhi_ctrl;
 
 	if (!pci_priv)
 		return;
@@ -4693,8 +4713,18 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 		return;
 	}
 
+	mhi_ctrl = pci_priv->mhi_ctrl;
+
+	mhi_dump_irq(pci_priv);
+	mhi_dump_event_ring(mhi_ctrl, mhi_ctrl->mhi_event, U32_MAX);
+
+	cnss_bus_dump_fw_sram(plat_priv);
+	cnss_coredump_fw_paging_dump(pci_priv);
+	cnss_coredump_remote_dump(plat_priv);
+
+
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev,
-			       CNSS_REASON_TIMEOUT);
+				   CNSS_REASON_TIMEOUT);
 }
 
 #ifndef CONFIG_CNSS2_X86
