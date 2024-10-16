@@ -1663,7 +1663,7 @@ static void cnss_recovery_work_handler(struct work_struct *work)
 #ifndef CONFIG_CNSS2_X86
 	cnss_bus_dev_ramdump(plat_priv);
 #endif
-	if (!test_bit(ENABLE_SSR, &plat_priv->ctrl_params.quirks)) {
+	if (test_bit(DISABLE_SSR, &plat_priv->ctrl_params.quirks)) {
 		//panic("subsys-restart: Resetting the SoC wlan crashed\n");
 		cnss_pr_err("SSR not enable, Skip recovery, return\n");
 		return;
@@ -1822,7 +1822,7 @@ static int cnss_driver_recovery_hdlr(struct cnss_plat_data *plat_priv,
 
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
 		cnss_pr_err("Recovery is already in progress\n");
-		CNSS_ASSERT(0);
+		//CNSS_ASSERT(0);
 		ret = -EINVAL;
 		goto out;
 	}
