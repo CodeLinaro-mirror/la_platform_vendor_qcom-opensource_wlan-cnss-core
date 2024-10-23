@@ -156,7 +156,7 @@ struct cnss_wlan_driver {
 			    const struct pci_device_id *id);
 	int  (*idle_shutdown)(struct pci_dev *pdev);
 	int  (*reinit)(struct pci_dev *pdev, const struct pci_device_id *id);
-	void (*shutdown)(struct pci_dev *pdev, int type);
+	void (*shutdown)(struct pci_dev *pdev);
 	void (*crash_shutdown)(struct pci_dev *pdev);
 	int  (*suspend)(struct pci_dev *pdev, pm_message_t state);
 	int  (*resume)(struct pci_dev *pdev);
