@@ -237,3 +237,13 @@ int __init mhi_dtr_init(void)
 {
 	return mhi_driver_register(&mhi_dtr_driver);
 }
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+void  mhi_dtr_exit(void)
+#else
+void __init mhi_dtr_exit(void)
+#endif
+{
+	return mhi_driver_unregister(&mhi_dtr_driver);
+}
+

@@ -217,7 +217,9 @@ static int qrtr_local_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 			      int type, struct sockaddr_qrtr *from,
 			      struct sockaddr_qrtr *to, unsigned int flags);
+#ifdef QRTR_TYPE_DEL_PROC
 static void qrtr_handle_del_proc(struct qrtr_node *node, struct sk_buff *skb);
+#endif
 static void qrtr_cleanup_flow_control(struct qrtr_node *node,
 				      struct sk_buff *skb);
 
@@ -268,10 +270,12 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 				pr_err("qrtr: Modem QMI Readiness TX cmd:0x%x node[0x%x]\n",
 				       type, hdr->src_node_id);
 			}
+#ifdef QRTR_TYPE_DEL_PROC
 		else if (type == QRTR_TYPE_DEL_PROC)
 			QRTR_INFO(node->ilc,
 				  "TX CTRL: cmd:0x%x node[0x%x]\n",
 				  type, pkt.proc.node);
+#endif
 	}
 }
 
@@ -318,10 +322,12 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 				pr_err("qrtr: Modem QMI Readiness RX cmd:0x%x node[0x%x]\n",
 				       cb->type, cb->src_node);
 			}
+#ifdef QRTR_TYPE_DEL_PROC
 		else if (cb->type == QRTR_TYPE_DEL_PROC)
 			QRTR_INFO(node->ilc,
 				  "RX CTRL: cmd:0x%x node[0x%x]\n",
 				  cb->type, le32_to_cpu(pkt.proc.node));
+#endif
 	}
 }
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0))
@@ -687,7 +693,11 @@ static void qrtr_node_assign(struct qrtr_node *node, unsigned int nid)
 	 * cause APPS suspend problems and power drain issue.
 	 */
 	if (!node->ws && nid == 0)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+		node->ws = wakeup_source_register(NULL, name);
+#else
 		node->ws = wakeup_source_register(name);
+#endif
 }
 
 /**
@@ -781,8 +791,9 @@ static void qrtr_backup_init(void)
 static void qrtr_backup_deinit(void)
 {
 	cancel_work_sync(&qrtr_backup_work);
-	skb_queue_purge(&qrtr_backup_lo);
 	skb_queue_purge(&qrtr_backup_hi);
+	skb_queue_purge(&qrtr_backup_lo);
+
 }
 
 /**
@@ -1127,8 +1138,10 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 		} else if (cb->dst_node != qrtr_local_nid &&
 			   cb->type == QRTR_TYPE_DATA) {
 			qrtr_fwd_pkt(skb, cb);
+#ifdef QRTR_TYPE_DEL_PROC
 		} else if (cb->type == QRTR_TYPE_DEL_PROC) {
 			qrtr_handle_del_proc(node, skb);
+#endif
 		} else {
 			ipc = qrtr_port_lookup(cb->dst_port);
 			if (!ipc) {
@@ -1185,7 +1198,8 @@ static void qrtr_cleanup_flow_control(struct qrtr_node *node,
 	radix_tree_delete(&node->qrtr_tx_flow, key);
 	mutex_unlock(&node->qrtr_tx_lock);
 }
-
+					  
+#ifdef QRTR_TYPE_DEL_PROC
 static void qrtr_handle_del_proc(struct qrtr_node *node, struct sk_buff *skb)
 {
 	struct sockaddr_qrtr src = {AF_QIPCRTR, 0, QRTR_PORT_CTRL};
@@ -1223,6 +1237,7 @@ static void qrtr_handle_del_proc(struct qrtr_node *node, struct sk_buff *skb)
 	skb_store_bits(skb, 0, &pkt, sizeof(pkt));
 	qrtr_local_enqueue(NULL, skb, QRTR_TYPE_BYE, &src, &dst, 0);
 }
+#endif
 
 static void qrtr_hello_work(struct kthread_work *work)
 {
@@ -1309,6 +1324,7 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
 }
 EXPORT_SYMBOL_GPL(qrtr_endpoint_register);
 
+#ifdef QRTR_TYPE_DEL_PROC
 static u32 qrtr_calc_checksum(struct qrtr_ctrl_pkt *pkt)
 {
 	u32 checksum = 0;
@@ -1362,7 +1378,7 @@ static void qrtr_fwd_del_proc(struct qrtr_node *src, unsigned int nid)
 		qrtr_node_enqueue(dst, skb, QRTR_TYPE_DEL_PROC, &from, &to, 0);
 	}
 }
-
+#endif
 /**
  * qrtr_endpoint_unregister - unregister endpoint
  * @ep: endpoint to unregister
@@ -1394,8 +1410,9 @@ void qrtr_endpoint_unregister(struct qrtr_endpoint *ep)
 		src.sq_node = iter.index;
 		pkt->cmd = cpu_to_le32(QRTR_TYPE_BYE);
 		qrtr_local_enqueue(NULL, skb, QRTR_TYPE_BYE, &src, &dst, 0);
-
+#ifdef QRTR_TYPE_DEL_PROC
 		qrtr_fwd_del_proc(node, iter.index);
+#endif
 	}
 	up_read(&qrtr_node_lock);
 
@@ -1947,7 +1964,37 @@ static int qrtr_connect(struct socket *sock, struct sockaddr *saddr,
 
 	return 0;
 }
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+static int qrtr_getname(struct socket *sock, struct sockaddr *saddr,
+			int peer)
+{
+	struct qrtr_sock *ipc = qrtr_sk(sock->sk);
+	struct sockaddr_qrtr qaddr;
+	struct sock *sk = sock->sk;
+	int len;
 
+	lock_sock(sk);
+	if (peer) {
+		if (sk->sk_state != TCP_ESTABLISHED) {
+			release_sock(sk);
+			return -ENOTCONN;
+		}
+
+		qaddr = ipc->peer;
+	} else {
+		qaddr = ipc->us;
+	}
+	release_sock(sk);
+
+	len = sizeof(qaddr);
+	qaddr.sq_family = AF_QIPCRTR;
+
+	memcpy(saddr, &qaddr, sizeof(qaddr));
+
+	return len;
+}
+
+#else
 static int qrtr_getname(struct socket *sock, struct sockaddr *saddr,
 			int *len, int peer)
 {
@@ -1975,6 +2022,7 @@ static int qrtr_getname(struct socket *sock, struct sockaddr *saddr,
 
 	return 0;
 }
+#endif
 
 static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
@@ -2016,7 +2064,11 @@ static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		}
 		break;
 	case SIOCGSTAMP:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)
+		rc = -EOPNOTSUPP;
+#else
 		rc = sock_get_timestamp(sk, argp);
+#endif
 		break;
 	case SIOCADDRT:
 	case SIOCDELRT:
@@ -2080,10 +2132,18 @@ static const struct proto_ops qrtr_proto_ops = {
 	.recvmsg	= qrtr_recvmsg,
 	.getname	= qrtr_getname,
 	.ioctl		= qrtr_ioctl,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)
+	.gettstamp	= sock_gettstamp,
+#endif
 	.poll		= datagram_poll,
 	.shutdown	= sock_no_shutdown,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+	.setsockopt	= sock_common_setsockopt,
+	.getsockopt	= sock_common_getsockopt,
+#else
 	.setsockopt	= sock_no_setsockopt,
 	.getsockopt	= sock_no_getsockopt,
+#endif
 	.release	= qrtr_release,
 	.mmap		= sock_no_mmap,
 	.sendpage	= sock_no_sendpage,
@@ -2198,11 +2258,12 @@ void qrtr_proto_fini(void)
 static void __exit qrtr_proto_fini(void)
 #endif
 {
+	qrtr_backup_deinit();
 	rtnl_unregister(PF_QIPCRTR, RTM_NEWADDR);
 	sock_unregister(qrtr_family.family);
 	proto_unregister(&qrtr_proto);
 
-	qrtr_backup_deinit();
+
 }
 #ifndef CONFIG_WLAN_CNSS_CORE
 module_exit(qrtr_proto_fini);

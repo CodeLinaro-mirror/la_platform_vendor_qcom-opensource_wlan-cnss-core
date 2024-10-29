@@ -83,6 +83,7 @@ static const char * const mhi_pm_state_str[] = {
 };
 
 struct mhi_bus mhi_bus;
+static struct dentry *mhi_debugfs_root;
 
 struct mhi_controller *find_mhi_controller_by_name(const char *name)
 {
@@ -394,15 +395,19 @@ void mhi_deinit_free_irq(struct mhi_controller *mhi_cntrl)
 {
 	int i;
 	struct mhi_event *mhi_event = mhi_cntrl->mhi_event;
+	MHI_LOG("mhi_deinit_free_irq mhi_irq_setup %d\n", mhi_cntrl->mhi_irq_setup);
+	if (mhi_cntrl->mhi_irq_setup)
+	{
+		for (i = 0; i < mhi_cntrl->total_ev_rings; i++, mhi_event++) {
+			if (!mhi_event->request_irq)
+				continue;
 
-	for (i = 0; i < mhi_cntrl->total_ev_rings; i++, mhi_event++) {
-		if (!mhi_event->request_irq)
-			continue;
+			free_irq(mhi_cntrl->irq[mhi_event->msi], mhi_event);
+		}
 
-		free_irq(mhi_cntrl->irq[mhi_event->msi], mhi_event);
+		free_irq(mhi_cntrl->irq[0], mhi_cntrl);
+		mhi_cntrl->mhi_irq_setup = false;
 	}
-
-	free_irq(mhi_cntrl->irq[0], mhi_cntrl);
 }
 
 int mhi_init_irq_setup(struct mhi_controller *mhi_cntrl)
@@ -411,6 +416,7 @@ int mhi_init_irq_setup(struct mhi_controller *mhi_cntrl)
 	int ret;
 	struct mhi_event *mhi_event = mhi_cntrl->mhi_event;
 	unsigned long irq_flags = IRQF_SHARED | IRQF_NO_SUSPEND;
+	MHI_LOG("mhi_init_irq_setup\n");
 
 	/* if controller driver has set irq_flags, use it */
 	if (mhi_cntrl->irq_flags)
@@ -437,7 +443,7 @@ int mhi_init_irq_setup(struct mhi_controller *mhi_cntrl)
 			goto error_request;
 		}
 	}
-
+	mhi_cntrl->mhi_irq_setup = true;
 	return 0;
 
 error_request:
@@ -1138,13 +1144,15 @@ int mhi_device_configure(struct mhi_device *mhi_dev,
 }
 
 static int of_parse_ev_cfg(struct mhi_controller *mhi_cntrl,
-			   struct device_node *of_node)
+			   struct device_node *in_of_node)
 {
 	int i, ret, num = 0;
 	struct mhi_event *mhi_event;
 	struct device_node *child;
+	struct device_node *of_node;
+	of_node_get(in_of_node);
 
-	of_node = of_find_node_by_name(of_node, "mhi_events");
+	of_node = of_find_node_by_name(in_of_node, "mhi_events");
 	if (!of_node)
 		return -EINVAL;
 
@@ -1262,6 +1270,8 @@ static int of_parse_ev_cfg(struct mhi_controller *mhi_cntrl,
 	/* we need msi for each event ring + additional one for BHI */
 	mhi_cntrl->msi_required = mhi_cntrl->total_ev_rings + 1;
 
+	of_node_put(of_node);
+
 	return 0;
 
 error_ev_cfg:
@@ -1270,18 +1280,19 @@ error_ev_cfg:
 	return -EINVAL;
 }
 static int of_parse_ch_cfg(struct mhi_controller *mhi_cntrl,
-			   struct device_node *of_node)
+			   struct device_node *in_of_node)
 {
 	int ret;
 	struct device_node *child;
 	u32 chan;
+	struct device_node *of_node;
 
-	ret = of_property_read_u32(of_node, "mhi,max-channels",
+	ret = of_property_read_u32(in_of_node, "mhi,max-channels",
 				   &mhi_cntrl->max_chan);
 	if (ret)
 		return ret;
 
-	of_node = of_find_node_by_name(of_node, "mhi_channels");
+	of_node = of_find_node_by_name(in_of_node, "mhi_channels");
 	if (!of_node)
 		return -EINVAL;
 
@@ -1429,7 +1440,7 @@ static int of_parse_ch_cfg(struct mhi_controller *mhi_cntrl,
 		if (mhi_chan->lpm_notify)
 			list_add_tail(&mhi_chan->node, &mhi_cntrl->lpm_chans);
 	}
-
+	of_node_put(of_node);
 	return 0;
 
 error_chan_cfg:
@@ -1687,6 +1698,7 @@ void mhi_unregister_mhi_controller(struct mhi_controller *mhi_cntrl)
 	struct mhi_device *mhi_dev = mhi_cntrl->mhi_dev;
 	struct mhi_sfr_info *sfr_info = mhi_cntrl->mhi_sfr;
 
+	destroy_workqueue(mhi_cntrl->wq);
 	kfree(mhi_cntrl->mhi_cmd);
 	kfree(mhi_cntrl->mhi_event);
 	vfree(mhi_cntrl->mhi_chan);
@@ -1798,6 +1810,7 @@ void mhi_unprepare_after_power_down(struct mhi_controller *mhi_cntrl)
 		mhi_free_bhie_table(mhi_cntrl, mhi_cntrl->rddm_image);
 		mhi_cntrl->rddm_image = NULL;
 	}
+	mhi_deinit_free_irq(mhi_cntrl);
 
 	mhi_deinit_dev_ctxt(mhi_cntrl);
 	mhi_cntrl->pre_init = false;
@@ -1904,8 +1917,11 @@ static int mhi_driver_probe(struct device *dev)
 	if (ret)
 		goto exit_probe;
 
-	if (dl_chan && dl_chan->auto_start)
-		mhi_prepare_channel(mhi_cntrl, dl_chan);
+	if (dl_chan && dl_chan->auto_start){		
+		ret = mhi_prepare_channel(mhi_cntrl, dl_chan);
+		if (ret)
+			goto exit_probe;
+		}
 
 	mhi_device_put(mhi_dev, MHI_VOTE_DEVICE);
 
@@ -1915,7 +1931,7 @@ exit_probe:
 	mhi_unprepare_from_transfer(mhi_dev);
 
 	mhi_device_put(mhi_dev, MHI_VOTE_DEVICE);
-
+	MHI_LOG("mhi_driver_probe return %d\n", ret);
 	return ret;
 }
 
@@ -2053,13 +2069,25 @@ static int __init mhi_init(void)
 	INIT_LIST_HEAD(&mhi_bus.controller_list);
 
 	/* parent directory */
-	debugfs_create_dir(mhi_bus_type.name, NULL);
+	mhi_debugfs_root = debugfs_create_dir(mhi_bus_type.name, NULL);
 
 	ret = bus_register(&mhi_bus_type);
 
 	if (!ret)
 		mhi_dtr_init();
 	return ret;
+}
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+void mhi_exit(void)
+#else
+static void __exit mhi_exit(void)
+#endif
+{
+	mhi_dtr_exit();
+	bus_unregister(&mhi_bus_type);
+	debugfs_remove_recursive(mhi_debugfs_root);
+	mutex_destroy(&mhi_bus.lock);
 }
 
 #ifndef CONFIG_WLAN_CNSS_CORE

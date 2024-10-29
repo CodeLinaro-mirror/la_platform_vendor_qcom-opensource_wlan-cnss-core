@@ -162,7 +162,9 @@ int cnss_wlfw_qdss_trace_mem_info_send_sync(struct cnss_plat_data *plat_priv)
 }
 
 static inline
-int cnss_wlfw_send_pcie_gen_speed_sync(struct cnss_plat_data *plat_priv) {}
+int cnss_wlfw_send_pcie_gen_speed_sync(struct cnss_plat_data *plat_priv) {
+	return 0;
+}
 
 #endif /* CONFIG_CNSS2_QMI */
 

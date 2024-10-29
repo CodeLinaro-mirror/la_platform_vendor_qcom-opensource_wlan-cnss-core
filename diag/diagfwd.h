@@ -13,6 +13,7 @@
 #ifndef DIAGFWD_H
 #define DIAGFWD_H
 
+#include <linux/version.h>
 /*
  * The context applies to Diag SMD data buffers. It is used to identify the
  * buffer once these buffers are writtent to USB.
@@ -47,7 +48,11 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid);
 void diag_send_error_rsp(unsigned char *buf, int len, int pid);
 void diag_update_pkt_buffer(unsigned char *buf, uint32_t len, int type);
 int diag_process_stm_cmd(unsigned char *buf, int len, unsigned char *dest_buf);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+void diag_md_hdlc_reset_timer_func(struct timer_list *timer);
+#else
 void diag_md_hdlc_reset_timer_func(unsigned long pid);
+#endif
 void diag_update_md_clients(unsigned int type);
 void diag_update_md_clients_proc(unsigned int proc, unsigned int type);
 #endif

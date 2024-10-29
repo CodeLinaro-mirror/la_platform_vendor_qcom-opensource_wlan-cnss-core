@@ -40,6 +40,7 @@
 #include <linux/of.h>
 #include <asm/current.h>
 #include <linux/timer.h>
+#include <linux/version.h>
 
 //#include "peripheral-loader.h"
 
@@ -159,7 +160,7 @@ struct subsys_soc_restart_order {
 };
 
 struct restart_log {
-	struct timeval time;
+	struct timespec64 time;
 	struct subsys_device *dev;
 	struct list_head list;
 };
@@ -458,7 +459,7 @@ module_param(max_history_time, long, 0644);
 static void do_epoch_check(struct subsys_device *dev)
 {
 	int n = 0;
-	struct timeval *time_first = NULL, *curr_time;
+        struct timespec64 *time_first = NULL, *curr_time;
 	struct restart_log *r_log, *temp;
 	static int max_restarts_check;
 	static long max_history_time_check;
@@ -476,7 +477,7 @@ static void do_epoch_check(struct subsys_device *dev)
 	if (!r_log)
 		goto out;
 	r_log->dev = dev;
-	do_gettimeofday(&r_log->time);
+	ktime_get_real_ts64(&r_log->time);
 	curr_time = &r_log->time;
 	INIT_LIST_HEAD(&r_log->list);
 
@@ -838,13 +839,21 @@ static int subsystem_powerup(struct subsys_device *dev, void *data)
 
 	return 0;
 }
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+static int __find_subsys_device(struct device *dev, const void *data)
+{
+	struct subsys_device *subsys = to_subsys(dev);
 
+	return !strcmp(subsys->desc->name, data);
+}
+#else
 static int __find_subsys_device(struct device *dev, void *data)
 {
 	struct subsys_device *subsys = to_subsys(dev);
 
 	return !strcmp(subsys->desc->name, data);
 }
+#endif
 
 struct subsys_device *find_subsys_device(const char *str)
 {
@@ -853,7 +862,12 @@ struct subsys_device *find_subsys_device(const char *str)
 	if (!str)
 		return NULL;
 
-	dev = bus_find_device(&subsys_bus_type, NULL, (void *)str,
+	dev = bus_find_device(&subsys_bus_type, NULL, 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+			(const void *)str,
+#else
+			(void *)str,
+#endif
 			__find_subsys_device);
 	return dev ? to_subsys(dev) : NULL;
 }
@@ -1217,8 +1231,9 @@ static void __subsystem_restart_dev(struct subsys_device *dev)
 			panic("Subsystem %s crashed during SSR!", name);
 		}
 	} else
-		WARN(dev->track.state == SUBSYS_OFFLINE,
-			"SSR aborted: %s subsystem not online\n", name);
+		/*WARN(dev->track.state == SUBSYS_OFFLINE,
+			"SSR aborted: %s subsystem not online\n", name);*/
+		pr_info("SSR aborted track->p_state %d, dev->track.state %d\n", track->p_state, dev->track.state);
 	spin_unlock_irqrestore(&track->s_lock, flags);
 }
 
@@ -1423,7 +1438,11 @@ static void subsys_device_release(struct device *dev)
 {
 	struct subsys_device *subsys = to_subsys(dev);
 
-	wakeup_source_trash(&subsys->ssr_wlock);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0))
+		wakeup_source_unregister(&subsys->ssr_wlock);
+#else
+		wakeup_source_trash(&subsys->ssr_wlock);
+#endif
 	mutex_destroy(&subsys->track.lock);
 	ida_simple_remove(&subsys_ida, subsys->id);
 	kfree(subsys);
@@ -1666,8 +1685,7 @@ static int subsys_parse_devicetree(struct subsys_desc *desc)
 			desc->generic_irq = ret;
 	}
 
-	desc->ignore_ssr_failure = of_property_read_bool(pdev->dev.of_node,
-						"qcom,ignore-ssr-failure");
+	desc->ignore_ssr_failure = true;
 
 	order = ssr_parse_restart_orders(desc);
 	if (IS_ERR(order)) {
@@ -1838,7 +1856,11 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 	subsys->early_notify = subsys_get_early_notif_info(desc->name);
 
 	snprintf(subsys->wlname, sizeof(subsys->wlname), "ssr(%s)", desc->name);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+    subsys->ssr_wlock = *wakeup_source_register(&subsys->dev, subsys->wlname);
+#else
 	wakeup_source_init(&subsys->ssr_wlock, subsys->wlname);
+#endif
 	INIT_WORK(&subsys->work, subsystem_restart_wq_func);
 	INIT_WORK(&subsys->device_restart_work, device_restart_work_hdlr);
 	spin_lock_init(&subsys->track.s_lock);
@@ -1846,7 +1868,11 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 
 	subsys->id = ida_simple_get(&subsys_ida, 0, 0, GFP_KERNEL);
 	if (subsys->id < 0) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0))
+        wakeup_source_unregister(&subsys->ssr_wlock);
+#else
 		wakeup_source_trash(&subsys->ssr_wlock);
+#endif
 		ret = subsys->id;
 		kfree(subsys);
 		return ERR_PTR(ret);
@@ -2017,6 +2043,22 @@ err_bus:
 	destroy_workqueue(ssr_wq);
 	return ret;
 }
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+void subsys_restart_exit(void)
+#else
+static void __init subsys_restart_exit(void)
+#endif
+{
+	atomic_notifier_chain_unregister(&panic_notifier_list, &panic_nb);
+	class_destroy(char_class);
+
+	bus_unregister(&subsys_bus_type);
+
+	destroy_workqueue(ssr_wq);
+	
+}
+
 #ifndef CONFIG_WLAN_CNSS_CORE
 arch_initcall(subsys_restart_init);
 

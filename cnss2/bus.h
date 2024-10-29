@@ -13,6 +13,7 @@
 #ifndef _CNSS_BUS_H
 #define _CNSS_BUS_H
 
+#include <linux/version.h>
 #include "main.h"
 
 #define QCA6174_VENDOR_ID		0x168C
@@ -49,7 +50,11 @@ int cnss_bus_alloc_qdss_mem(struct cnss_plat_data *plat_priv);
 void cnss_bus_free_qdss_mem(struct cnss_plat_data *plat_priv);
 u32 cnss_bus_get_wake_irq(struct cnss_plat_data *plat_priv);
 int cnss_bus_force_fw_assert_hdlr(struct cnss_plat_data *plat_priv);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *t);
+#else
 void cnss_bus_fw_boot_timeout_hdlr(unsigned long data);
+#endif
 void cnss_bus_collect_dump_info(struct cnss_plat_data *plat_priv,
 				bool in_panic);
 int cnss_bus_call_driver_probe(struct cnss_plat_data *plat_priv);
@@ -64,6 +69,8 @@ int cnss_bus_call_driver_modem_status(struct cnss_plat_data *plat_priv,
 				      int modem_current_status);
 int cnss_bus_update_status(struct cnss_plat_data *plat_priv,
 			   enum cnss_driver_status status);
+int cnss_bus_update_uevent(struct cnss_plat_data *plat_priv,
+			  enum cnss_driver_status status, void *data);
 bool cnss_bus_req_mem_ind_valid(struct cnss_plat_data *plat_priv);
 int cnss_get_msi_assignment(struct cnss_plat_data *plat_priv,
 			    char *msi_name,

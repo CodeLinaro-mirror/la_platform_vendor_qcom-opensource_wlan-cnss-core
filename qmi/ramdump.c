@@ -207,7 +207,11 @@ static ssize_t ramdump_read(struct file *filep, char __user *buf, size_t count,
 	copy_size = min_t(unsigned long, (unsigned long)copy_size, data_left);
 
 	rd_dev->attrs = 0;
+#ifdef DMA_ATTR_SKIP_ZEROING
 	rd_dev->attrs |= DMA_ATTR_SKIP_ZEROING;
+#else
+	rd_dev->attrs |= DMA_ATTR_PRIVILEGED;
+#endif
 	device_mem = vaddr ?: dma_remap(rd_dev->dev->parent, NULL, addr,
 						copy_size, rd_dev->attrs);
 	origdevice_mem = device_mem;
@@ -406,8 +410,10 @@ void destroy_ramdump_device(void *dev)
 		return;
 
 	cdev_del(&rd_dev->cdev);
+
 	device_unregister(rd_dev->dev);
 	ida_simple_remove(&rd_minor_id, minor);
+	mutex_destroy(&rd_dev->consumer_lock);
 	kfree(rd_dev);
 }
 EXPORT_SYMBOL(destroy_ramdump_device);

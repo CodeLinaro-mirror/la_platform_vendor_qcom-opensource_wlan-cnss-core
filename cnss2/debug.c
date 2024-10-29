@@ -18,7 +18,7 @@
 #include "pci.h"
 
 void *cnss_ipc_log_context;
-extern int cnss_dump_fw_sram_to_file(struct device *dev);
+
 
 static int cnss_pin_connect_show(struct seq_file *s, void *data)
 {
@@ -110,6 +110,9 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_IN_SUSPEND_RESUME:
 			seq_puts(s, "IN_SUSPEND_RESUME");
 			continue;
+		case CNSS_FORCE_DRIVER_REMOVE:
+			seq_puts(s, "IN_DRIVER_FORCE_REMOVE");
+			continue;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);
@@ -194,7 +197,13 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 		ret = cnss_force_fw_assert(&pci_priv->pci_dev->dev);
 	} else if (sysfs_streq(cmd, "dump_fw_sram")) {
 		ret = cnss_dump_fw_sram_to_file(&pci_priv->pci_dev->dev);
-	} else {
+	} else if (sysfs_streq(cmd, "stop_sw_reset")) {
+		ret = cnss_stop_sw_reset(&pci_priv->pci_dev->dev);
+	}else if (sysfs_streq(cmd, "sw_reset")) {
+		ret = cnss_sw_reset(&pci_priv->pci_dev->dev);
+	}else if (sysfs_streq(cmd, "force_driver_remove")) {
+		ret = cnss_force_driver_remove(&pci_priv->pci_dev->dev);
+	}else {
 		cnss_pr_err("Device boot debugfs command is invalid\n");
 		ret = -EINVAL;
 	}
@@ -219,6 +228,9 @@ static int cnss_dev_boot_debug_show(struct seq_file *s, void *data)
 	seq_puts(s, "shutdown: full power off sequence to shutdown device\n");
 	seq_puts(s, "assert: trigger firmware assert\n");
 	seq_puts(s, "dump_fw_sram: dump firmware sram to a file\n");
+	seq_puts(s, "stop_sw_reset: stop continuously software reset\n");
+	seq_puts(s, "sw_reset: trigger a manually software reset\n");
+	seq_puts(s, "force_driver_remove: send a flag to driver, enable the driver to remove when FW not ready\n");
 
 	return 0;
 }
@@ -620,7 +632,7 @@ static int cnss_show_quirks_state(struct seq_file *s,
 			seq_puts(s, "FORCE_ONE_MSI");
 			continue;
 		default:
-			continue;
+			break;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);

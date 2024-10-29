@@ -112,7 +112,11 @@ static void diag_stm_update_work_fn(struct work_struct *work)
 void diag_notify_md_client(uint8_t peripheral, int data)
 {
 	int stat = 0, proc = DIAG_LOCAL_PROC;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0))
+	struct kernel_siginfo info;
+#else
 	struct siginfo info;
+#endif
 	struct pid *pid_struct;
 	struct task_struct *result;
 
@@ -123,7 +127,11 @@ void diag_notify_md_client(uint8_t peripheral, int data)
 		return;
 
 	mutex_lock(&driver->md_session_lock);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0))
+	memset(&info, 0, sizeof(struct kernel_siginfo));
+#else
 	memset(&info, 0, sizeof(struct siginfo));
+#endif
 	info.si_code = SI_QUEUE;
 	info.si_int = (PERIPHERAL_MASK(peripheral) | data);
 	info.si_signo = SIGCONT;

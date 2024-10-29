@@ -21,6 +21,7 @@
 #include <linux/skbuff.h>
 #include <linux/slab.h>
 #include <linux/mhi.h>
+#include <linux/version.h>
 #include "mhi_internal.h"
 
 static char *mhi_generic_sfr = "unknown reason";
@@ -811,12 +812,12 @@ static void mhi_assign_of_node(struct mhi_controller *mhi_cntrl,
 }
 
 /* bind mhi channels into mhi devices */
-void mhi_create_devices(struct mhi_controller *mhi_cntrl)
+int mhi_create_devices(struct mhi_controller *mhi_cntrl)
 {
 	int i;
 	struct mhi_chan *mhi_chan;
 	struct mhi_device *mhi_dev;
-	int ret;
+	int ret = 0;
 
 	mhi_chan = mhi_cntrl->mhi_chan;
 	for (i = 0; i < mhi_cntrl->max_chan; i++, mhi_chan++) {
@@ -825,7 +826,7 @@ void mhi_create_devices(struct mhi_controller *mhi_cntrl)
 			continue;
 		mhi_dev = mhi_alloc_device(mhi_cntrl);
 		if (!mhi_dev)
-			return;
+			return ENODEV;
 
 		mhi_dev->dev_type = MHI_XFER_TYPE;
 		switch (mhi_chan->dir) {
@@ -839,6 +840,7 @@ void mhi_create_devices(struct mhi_controller *mhi_cntrl)
 		case DMA_BIDIRECTIONAL:
 			mhi_dev->ul_chan_id = mhi_chan->chan;
 			mhi_dev->ul_event_id = mhi_chan->er_index;
+		/* fall through */
 		case DMA_FROM_DEVICE:
 			/* we use dl_chan for offload channels */
 			mhi_dev->dl_chan = mhi_chan;
@@ -897,6 +899,7 @@ void mhi_create_devices(struct mhi_controller *mhi_cntrl)
 			mhi_dealloc_device(mhi_cntrl, mhi_dev);
 		}
 	}
+	return ret;
 }
 
 static int parse_xfer_event(struct mhi_controller *mhi_cntrl,
@@ -2514,11 +2517,11 @@ int mhi_get_no_free_descriptors(struct mhi_device *mhi_dev,
 	return get_nr_avail_ring_elements(mhi_cntrl, tre_ring);
 }
 EXPORT_SYMBOL(mhi_get_no_free_descriptors);
-
-static int __mhi_bdf_to_controller(struct device *dev, void *tmp)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+static int __mhi_bdf_to_controller(struct device *dev, const void *tmp)
 {
 	struct mhi_device *mhi_dev = to_mhi_device(dev);
-	struct mhi_device *match = tmp;
+	struct mhi_device *match = (void *)tmp;
 
 	/* return any none-zero value if match */
 	if (mhi_dev->dev_type == MHI_CONTROLLER_TYPE &&
@@ -2528,6 +2531,26 @@ static int __mhi_bdf_to_controller(struct device *dev, void *tmp)
 
 	return 0;
 }
+#else
+static int __mhi_bdf_to_controller(struct device *dev, void *tmp)
+{
+	struct mhi_device *mhi_dev = to_mhi_device(dev);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+	const struct mhi_device *match = tmp;
+#else
+	struct mhi_device *match = tmp;
+#endif
+
+	/* return any none-zero value if match */
+	if (mhi_dev->dev_type == MHI_CONTROLLER_TYPE &&
+	    mhi_dev->domain == match->domain && mhi_dev->bus == match->bus &&
+	    mhi_dev->slot == match->slot && mhi_dev->dev_id == match->dev_id)
+		return 1;
+
+	return 0;
+}
+#endif
+
 
 struct mhi_controller *mhi_bdf_to_controller(u32 domain,
 					     u32 bus,

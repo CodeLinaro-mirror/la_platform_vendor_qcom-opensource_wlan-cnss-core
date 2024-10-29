@@ -421,6 +421,7 @@ struct mhi_controller {
 	atomic_t write_idx;
 	u32 read_idx;
 	unsigned long irq_flags;
+	bool mhi_irq_setup;
 };
 
 /**
@@ -882,6 +883,13 @@ void mhi_debug_reg_dump(struct mhi_controller *mhi_cntrl);
  * @name: controller name
  */
 char *mhi_get_restart_reason(const char *name);
+
+/**
+ * mhi_pcie_sw_reset - do pcie sw reset
+ * @mhi_cntrl: MHI controller
+ */
+void mhi_pcie_sw_reset(struct mhi_controller *mhi_cntrl);
+
 
 #ifndef CONFIG_ARCH_QCOM
 

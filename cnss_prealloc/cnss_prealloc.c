@@ -1,4 +1,4 @@
-/* Copyright (c) 2012,2014-2017,2019 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012,2014-2017,2019-2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,6 +20,7 @@
 #include <linux/skbuff.h>
 #endif
 #include <net/cnss_prealloc.h>
+#include <linux/version.h>
 
 static DEFINE_SPINLOCK(alloc_lock);
 
@@ -38,7 +39,11 @@ struct wcnss_prealloc {
 	void *ptr;
 #ifdef CONFIG_SLUB_DEBUG
 	unsigned long stack_trace[WCNSS_MAX_STACK_TRACE];
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+	unsigned int nr_entries;
+#else
 	struct stack_trace trace;
+#endif
 #endif
 };
 
@@ -170,6 +175,43 @@ static struct wcnss_prealloc wcnss_allocs[] = {
 };
 #endif
 
+#if defined(CONFIG_WCNSS_SKB_PRE_ALLOC)
+static struct wcnss_prealloc wcnss_skb_allocs[] = {
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 20 * 1024, NULL},
+	{0, 64 * 1024, NULL},
+	{0, 64 * 1024, NULL},
+	{0, 128 * 1024, NULL},
+	{0, 128 * 1024, NULL},
+};
+#endif
+
 int wcnss_prealloc_init(void)
 {
 	int i;
@@ -180,6 +222,16 @@ int wcnss_prealloc_init(void)
 		if (!wcnss_allocs[i].ptr)
 			return -ENOMEM;
 	}
+
+#if defined(CONFIG_WCNSS_SKB_PRE_ALLOC)
+	for (i = 0; i < ARRAY_SIZE(wcnss_skb_allocs); i++) {
+		wcnss_skb_allocs[i].occupied = 0;
+		wcnss_skb_allocs[i].ptr =
+				dev_alloc_skb(wcnss_skb_allocs[i].size);
+		if (wcnss_skb_allocs[i].ptr == NULL)
+			return -ENOMEM;
+	}
+#endif
 
 	return 0;
 }
@@ -192,9 +244,27 @@ void wcnss_prealloc_deinit(void)
 		kfree(wcnss_allocs[i].ptr);
 		wcnss_allocs[i].ptr = NULL;
 	}
+
+#if defined(CONFIG_WCNSS_SKB_PRE_ALLOC)
+	for (i = 0; i < ARRAY_SIZE(wcnss_skb_allocs); i++) {
+		wcnss_skb_allocs[i].occupied = 0;
+		if (wcnss_skb_allocs[i].ptr != NULL){
+			dev_kfree_skb(wcnss_skb_allocs[i].ptr);
+			wcnss_skb_allocs[i].ptr = NULL;
+		}
+	}
+#endif
 }
 
 #ifdef CONFIG_SLUB_DEBUG
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+static void wcnss_prealloc_save_stack_trace(struct wcnss_prealloc *entry)
+{
+	memset(&entry->stack_trace, 0, sizeof(entry->stack_trace));
+
+	entry->nr_entries = stack_trace_save(entry->stack_trace, WCNSS_MAX_STACK_TRACE, 2);
+}
+#else
 static void wcnss_prealloc_save_stack_trace(struct wcnss_prealloc *entry)
 {
 	struct stack_trace *trace = &entry->trace;
@@ -207,6 +277,7 @@ static void wcnss_prealloc_save_stack_trace(struct wcnss_prealloc *entry)
 
 	save_stack_trace(trace);
 }
+#endif
 #else
 static inline
 void wcnss_prealloc_save_stack_trace(struct wcnss_prealloc *entry) {}
@@ -271,7 +342,11 @@ void wcnss_prealloc_check_memory_leak(void)
 
 		pr_err("Size: %zu, addr: %pK, backtrace:\n",
 		       wcnss_allocs[i].size, wcnss_allocs[i].ptr);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+		stack_trace_print(wcnss_allocs[i].stack_trace, wcnss_allocs[i].nr_entries, 1);
+#else
 		print_stack_trace(&wcnss_allocs[i].trace, 1);
+#endif
 	}
 }
 #else
@@ -291,9 +366,104 @@ int wcnss_pre_alloc_reset(void)
 		n++;
 	}
 
+#if defined(CONFIG_WCNSS_SKB_PRE_ALLOC)
+	for (i = 0; i < ARRAY_SIZE(wcnss_skb_allocs); i++) {
+		wcnss_skb_allocs[i].occupied = 0;
+	}
+#endif
+
 	return n;
 }
 EXPORT_SYMBOL(wcnss_pre_alloc_reset);
+
+#if defined(CONFIG_WCNSS_SKB_PRE_ALLOC)
+struct sk_buff *wcnss_skb_prealloc_get(unsigned int size)
+{
+	int i = 0;
+	unsigned long flags;
+
+	spin_lock_irqsave(&alloc_lock, flags);
+	for (i = 0; i < ARRAY_SIZE(wcnss_skb_allocs); i++) {
+		if (wcnss_skb_allocs[i].occupied)
+			continue;
+
+		if (wcnss_skb_allocs[i].size > size) {
+			/* we found the slot */
+			wcnss_skb_allocs[i].occupied = 1;
+			spin_unlock_irqrestore(&alloc_lock, flags);
+			return wcnss_skb_allocs[i].ptr;
+		}
+	}
+	spin_unlock_irqrestore(&alloc_lock, flags);
+
+	pr_err("wcnss_pre: %s: prealloc not available for size: %d\n",
+	       __func__, size);
+
+	return NULL;
+}
+EXPORT_SYMBOL(wcnss_skb_prealloc_get);
+
+int wcnss_skb_prealloc_put(struct sk_buff *skb)
+{
+	int i = 0;
+	unsigned long flags;
+
+	spin_lock_irqsave(&alloc_lock, flags);
+	for (i = 0; i < ARRAY_SIZE(wcnss_skb_allocs); i++) {
+		if (wcnss_skb_allocs[i].ptr == skb) {
+			wcnss_skb_allocs[i].occupied = 0;
+			spin_unlock_irqrestore(&alloc_lock, flags);
+			return 1;
+		}
+	}
+	spin_unlock_irqrestore(&alloc_lock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL(wcnss_skb_prealloc_put);
+
+static int prealloc_skb_memory_stats_show(struct seq_file *fp, void *data)
+{
+	int i = 0;
+	int used_slots = 0, free_slots = 0;
+	unsigned int tsize = 0, tused = 0, size = 0;
+
+	seq_puts(fp, "\nSKB_Slot_Size(Kb)\t[Used : Free]\n");
+	for (i = 0; i < ARRAY_SIZE(wcnss_skb_allocs); i++) {
+		tsize += wcnss_skb_allocs[i].size;
+		if (size != wcnss_skb_allocs[i].size) {
+			if (size) {
+				seq_printf(
+					fp, "[%d : %d]\n",
+					used_slots, free_slots);
+			}
+
+			size = wcnss_skb_allocs[i].size;
+			used_slots = 0;
+			free_slots = 0;
+			seq_printf(fp, "%d Kb\t\t\t", size / 1024);
+		}
+
+		if (wcnss_skb_allocs[i].occupied) {
+			tused += wcnss_skb_allocs[i].size;
+			++used_slots;
+		} else {
+			++free_slots;
+		}
+	}
+	seq_printf(fp, "[%d : %d]\n", used_slots, free_slots);
+
+	/* Convert byte to Kb */
+	if (tsize)
+		tsize = tsize / 1024;
+	if (tused)
+		tused = tused / 1024;
+	seq_printf(fp, "\nSKB Memory Status:\nTotal Memory: %dKb\n", tsize);
+	seq_printf(fp, "Used: %dKb\nFree: %dKb\n", tused, tsize - tused);
+
+	return 0;
+}
+#endif
 
 static int prealloc_memory_stats_show(struct seq_file *fp, void *data)
 {
@@ -334,6 +504,9 @@ static int prealloc_memory_stats_show(struct seq_file *fp, void *data)
 	seq_printf(fp, "\nMemory Status:\nTotal Memory: %dKb\n", tsize);
 	seq_printf(fp, "Used: %dKb\nFree: %dKb\n", tused, tsize - tused);
 
+#ifdef CONFIG_WCNSS_SKB_PRE_ALLOC
+	prealloc_skb_memory_stats_show(fp, data);
+#endif
 	return 0;
 }
 
@@ -350,7 +523,11 @@ static const struct file_operations prealloc_memory_stats_fops = {
 	.release = single_release,
 };
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+int wcnss_pre_alloc_init(void)
+#else
 static int __init wcnss_pre_alloc_init(void)
+#endif
 {
 	int ret;
 
@@ -374,14 +551,20 @@ static int __init wcnss_pre_alloc_init(void)
 	return ret;
 }
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+void wcnss_pre_alloc_exit(void)
+#else
 static void __exit wcnss_pre_alloc_exit(void)
+#endif
 {
 	wcnss_prealloc_deinit();
 	debugfs_remove_recursive(debug_base);
 }
 
+#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(wcnss_pre_alloc_init);
 module_exit(wcnss_pre_alloc_exit);
 
 MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION(DEVICE "WCNSS Prealloc Driver");
+MODULE_DESCRIPTION("WCNSS Prealloc Driver");
+#endif

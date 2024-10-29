@@ -550,7 +550,7 @@ static int mhi_pm_mission_mode_transition(struct mhi_controller *mhi_cntrl)
 	MHI_CNTRL_LOG("Adding new devices\n");
 
 	/* add supported devices */
-	mhi_create_devices(mhi_cntrl);
+	ret = mhi_create_devices(mhi_cntrl);
 
 	read_lock_bh(&mhi_cntrl->pm_lock);
 
@@ -622,7 +622,7 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 		write_lock_irq(&mhi_cntrl->pm_lock);
 		mhi_set_mhi_state(mhi_cntrl, MHI_STATE_RESET);
 		write_unlock_irq(&mhi_cntrl->pm_lock);
-#ifdef CONFIG_WLAN_EN
+#ifdef SUPPORT_WLAN_EN
 		/* wait for reset to be cleared */
 		ret = wait_event_timeout(mhi_cntrl->state_event,
 				!mhi_cntrl->initiate_mhi_reset, timeout);
@@ -952,11 +952,23 @@ int mhi_async_power_up(struct mhi_controller *mhi_cntrl)
 		}
 	}
 
+	if (mhi_cntrl->mhi_irq_setup)
+	{
+		MHI_CNTRL_ERR("mhi_irq_setup before, Free irq and retry\n");
+		mhi_deinit_free_irq(mhi_cntrl);
+	}
+	
 	ret = mhi_init_irq_setup(mhi_cntrl);
 	if (ret) {
-		MHI_CNTRL_ERR("Error setting up irq\n");
-		goto error_setup_irq;
+		MHI_CNTRL_ERR("Free irq and retry\n");
+		mhi_deinit_free_irq(mhi_cntrl);
+		ret = mhi_init_irq_setup(mhi_cntrl);
+		if (ret) {
+			MHI_CNTRL_ERR("Error setting up irq\n");
+			goto error_setup_irq;
+		}
 	}
+
 
 	/* setup bhi offset & intvec */
 	write_lock_irq(&mhi_cntrl->pm_lock);
@@ -968,6 +980,8 @@ int mhi_async_power_up(struct mhi_controller *mhi_cntrl)
 	}
 
 	mhi_cntrl->bhi = mhi_cntrl->regs + val;
+	MHI_CNTRL_LOG("mhi_async_power_up mhi_ctrl->bhi %pa, val 0x%x\n",
+		    mhi_cntrl->bhi, val);
 
 	/* setup bhie offset if not set */
 	if (mhi_cntrl->fbc_download && !mhi_cntrl->bhie) {
@@ -1701,7 +1715,7 @@ int mhi_force_rddm_mode(struct mhi_controller *mhi_cntrl)
 	return ret;
 }
 EXPORT_SYMBOL(mhi_force_rddm_mode);
-#if 0
+
 #define PCIE_TXVECDB (0x360)
 #define PCIE_TXVECSTATUS (0x368)
 #define PCIE_RXVECDB (0x394)
@@ -1878,7 +1892,7 @@ void mhi_set_pcie_soc_global_reset(struct mhi_controller *mhi_cntrl)
 
 
 	/* TODO: exact time to sleep is uncertain */
-	delay = 10;
+	delay = 20;
 	mhi_mdelay(delay);
 
 	/* Need to toggle V bit back otherwise stuck in reset status */
@@ -1936,4 +1950,3 @@ void mhi_pcie_sw_reset(struct mhi_controller *mhi_cntrl)
 	mhi_set_pcie_mhictrl_reset(mhi_cntrl);
 }
 
-#endif

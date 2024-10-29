@@ -70,6 +70,15 @@ ifneq ($(CONFIG_WLAN_EN),)
     KBUILD_CPPFLAGS += -DSUPPORT_WLAN_EN
 endif
 
+ifneq ($(CONFIG_WCNSS_SKB_PRE_ALLOC),)
+    KBUILD_CPPFLAGS += -DCONFIG_WCNSS_MEM_PRE_ALLOC
+    KBUILD_CPPFLAGS += -DCONFIG_WCNSS_SKB_PRE_ALLOC
+else
+	ifneq ($(CONFIG_WCNSS_MEM_PRE_ALLOC),)
+		KBUILD_CPPFLAGS += -DCONFIG_WCNSS_MEM_PRE_ALLOC
+	endif
+endif
+
 ifneq ($(CONFIG_PCI_RC_SUPPORT_PM),)
     KBUILD_CPPFLAGS += -DPCI_RC_SUPPORT_PM
 endif
@@ -85,6 +94,7 @@ KBUILD_CPPFLAGS += $(CDEFINES)
 
 
 CNSS_GENL_DIR := cnss_genl
+CNSS_PREALLOC_DIR := cnss_prealloc
 CNSS_DIR := cnss2
 DIAG_DIR := diag
 MHI_DIR := mhi
@@ -97,6 +107,10 @@ INIT_INC := -I$(ROOTDIR)
 
 ifeq ($(CONFIG_CNSS_GENL),y)
 	CNSS_GENL_OBJS := $(CNSS_GENL_DIR)/cnss_nl.o
+endif
+
+ifeq ($(CONFIG_WCNSS_MEM_PRE_ALLOC),y)
+	CNSS_PREALLOC_OBJS := $(CNSS_PREALLOC_DIR)/cnss_prealloc.o
 endif
 
 ifneq ($(CONFIG_CNSS2),)
@@ -179,7 +193,8 @@ endif
 
 OBJS := $(INIT_OBJS)                      \
 	$(CNSS_OBJS)                       \
-	$(CNSS_GENL_OBJS)                       \
+	$(CNSS_PREALLOC_OBJS)              \
+	$(CNSS_GENL_OBJS)                  \
 	$(MHI_OBJS)                        \
 	$(QRTR_OBJS)                       \
 	$(QMI_OBJS)                        \

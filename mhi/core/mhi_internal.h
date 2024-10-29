@@ -870,7 +870,7 @@ static inline void *mhi_alloc_coherent(struct mhi_controller *mhi_cntrl,
 				       dma_addr_t *dma_handle,
 				       gfp_t gfp)
 {
-	void *buf = dma_zalloc_coherent(mhi_cntrl->dev, size, dma_handle, gfp);
+	void *buf = dma_alloc_coherent(mhi_cntrl->dev, size, dma_handle, gfp);
 
 	if (buf)
 		atomic_add(size, &mhi_cntrl->alloc_size);
@@ -892,7 +892,7 @@ static inline void mhi_dealloc_device(struct mhi_controller *mhi_cntrl,
 	kfree(mhi_dev);
 }
 int mhi_destroy_device(struct device *dev, void *data);
-void mhi_create_devices(struct mhi_controller *mhi_cntrl);
+int mhi_create_devices(struct mhi_controller *mhi_cntrl);
 int mhi_alloc_bhie_table(struct mhi_controller *mhi_cntrl,
 			 struct image_info **image_info, size_t alloc_size);
 void mhi_free_bhie_table(struct mhi_controller *mhi_cntrl,
@@ -918,6 +918,7 @@ void mhi_deinit_dev_ctxt(struct mhi_controller *mhi_cntrl);
 int mhi_init_irq_setup(struct mhi_controller *mhi_cntrl);
 void mhi_deinit_free_irq(struct mhi_controller *mhi_cntrl);
 int mhi_dtr_init(void);
+void mhi_dtr_exit(void);
 void mhi_rddm_prepare(struct mhi_controller *mhi_cntrl,
 		      struct image_info *img_info);
 void mhi_fw_load_handler(struct mhi_controller *mhi_cntrl);

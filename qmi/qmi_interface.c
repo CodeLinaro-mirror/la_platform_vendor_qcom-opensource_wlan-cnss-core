@@ -21,6 +21,7 @@
 #include <linux/completion.h>
 #include <linux/idr.h>
 #include <linux/string.h>
+#include <linux/version.h>
 #include <net/sock.h>
 #include <linux/workqueue.h>
 #include <linux/soc/qcom/qmi.h>
@@ -595,7 +596,10 @@ static struct socket *qmi_sock_create(struct qmi_handle *qmi,
 				      struct sockaddr_qrtr *sq)
 {
 	struct socket *sock;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+#else
 	int sl = sizeof(*sq);
+#endif
 	int ret;
 
 	ret = sock_create_kern(&init_net, AF_QIPCRTR, SOCK_DGRAM,
@@ -603,7 +607,12 @@ static struct socket *qmi_sock_create(struct qmi_handle *qmi,
 	if (ret < 0)
 		return ERR_PTR(ret);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+	ret = kernel_getsockname(sock, (struct sockaddr *)sq);
+#else
 	ret = kernel_getsockname(sock, (struct sockaddr *)sq, &sl);
+#endif
+
 	if (ret < 0) {
 		sock_release(sock);
 		return ERR_PTR(ret);

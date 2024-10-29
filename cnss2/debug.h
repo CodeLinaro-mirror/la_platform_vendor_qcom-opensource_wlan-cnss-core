@@ -70,4 +70,11 @@ void cnss_debug_deinit(void);
 int cnss_debugfs_create(struct cnss_plat_data *plat_priv);
 void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv);
 
+int cnss_dump_fw_sram_to_file(struct device *dev);
+int cnss_stop_sw_reset(struct device *dev);
+int cnss_sw_reset(struct device *dev);
+int cnss_force_driver_remove(struct device *dev);
+int cnss_set_force_remove_state(struct device *dev);
+
+
 #endif /* _CNSS_DEBUG_H */

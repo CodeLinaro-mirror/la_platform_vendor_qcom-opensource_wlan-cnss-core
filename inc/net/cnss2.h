@@ -100,6 +100,8 @@ struct cnss_wlan_driver {
 	int  (*resume_noirq)(struct pci_dev *pdev);
 	void (*modem_status)(struct pci_dev *, int state);
 	void (*update_status)(struct pci_dev *pdev, uint32_t status);
+	int  (*update_event)(struct pci_dev *pdev,
+			     void *uevent);
 	struct cnss_wlan_runtime_ops *runtime_ops;
 	const struct pci_device_id *id_table;
 	enum cnss_driver_mode (*get_driver_mode)(void);
@@ -127,6 +129,29 @@ enum cnss_driver_status {
 	CNSS_LOAD_UNLOAD,
 	CNSS_RECOVERY,
 	CNSS_FW_DOWN,
+	CNSS_HANG_EVENT,
+	CNSS_BUS_EVENT,
+};
+
+struct cnss_hang_event {
+	void *hang_event_data;
+	u16 hang_event_data_len;
+};
+
+enum cnss_bus_event_type {
+	BUS_EVENT_PCI_LINK_DOWN = 0,
+	BUS_EVENT_PCI_LINK_RESUME_FAIL = 1,
+	BUS_EVENT_INVALID = 0xFFFF,
+};
+
+struct cnss_bus_event {
+	enum cnss_bus_event_type etype;
+	void *event_data;
+};
+
+struct cnss_uevent_data {
+	enum cnss_driver_status status;
+	void *data;
 };
 
 struct cnss_ce_tgt_pipe_cfg {
@@ -269,4 +294,5 @@ extern int cnss_usb_wlan_register_driver(struct cnss_usb_wlan_driver *driver);
 extern void cnss_usb_wlan_unregister_driver(struct cnss_usb_wlan_driver *
 					    driver);
 extern int cnss_set_pcie_gen_speed(struct device *dev, u8 pcie_gen_speed);
+extern int cnss_set_lost_connection(struct device *dev, u8 lost_connection);
 #endif /* _NET_CNSS2_H */

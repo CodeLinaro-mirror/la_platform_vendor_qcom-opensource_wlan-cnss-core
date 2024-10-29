@@ -12,6 +12,7 @@
 #ifndef DIAG_DCI_H
 #define DIAG_DCI_H
 
+#include <linux/version.h>
 #define DCI_PKT_RSP_CODE	0x93
 #define DCI_DELAYED_RSP_CODE	0x94
 #define DCI_CONTROL_PKT_CODE	0x9A
@@ -313,7 +314,11 @@ int diag_dci_set_real_time(struct diag_dci_client_tbl *entry,
 			   uint8_t real_time);
 int diag_dci_copy_health_stats(struct diag_dci_health_stats_proc *stats_proc);
 int diag_dci_write_proc(uint8_t peripheral, int pkt_type, char *buf, int len);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))
+void dci_drain_data(struct timer_list *timer);
+#else
 void dci_drain_data(unsigned long data);
+#endif
 
 #ifdef CONFIG_DIAGFWD_BRIDGE_CODE
 int diag_send_dci_log_mask_remote(int token);
