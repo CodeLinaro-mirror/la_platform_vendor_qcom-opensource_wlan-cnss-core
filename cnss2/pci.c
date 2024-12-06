@@ -1653,6 +1653,26 @@ out:
 	return ret;
 }
 
+#define PCIE_SWITCH_CONFIG_SPACE_ACCESS_TIMEOUT 2000
+#define PCIE_SWITCH_CONFIG_SPACE_ACCESS_DELAY 20
+static int cnss_pci_set_power_state(struct cnss_pci_data *pci_priv,
+				    pci_power_t state)
+{
+	int timeout = PCIE_SWITCH_CONFIG_SPACE_ACCESS_TIMEOUT;
+	int ret;
+
+	do {
+		ret = pci_set_power_state(pci_priv->pci_dev, state);
+		if (ret == 0)
+			break;
+
+		msleep(PCIE_SWITCH_CONFIG_SPACE_ACCESS_DELAY);
+		timeout -= PCIE_SWITCH_CONFIG_SPACE_ACCESS_DELAY;
+	} while (timeout > 0);
+
+	return ret;
+}
+
 int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -1676,7 +1696,7 @@ int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
 	pci_priv->pci_link_state = PCI_LINK_UP;
 
 	if (pci_priv->pci_dev->device != QCA6174_DEVICE_ID) {
-		ret = pci_set_power_state(pci_priv->pci_dev, PCI_D0);
+		ret = cnss_pci_set_power_state(pci_priv, PCI_D0);
 		if (ret) {
 			cnss_pr_err("Failed to set D0, err = %d\n", ret);
 			goto out;
@@ -1714,6 +1734,16 @@ static void cnss_pci_update_link_event(struct cnss_pci_data *pci_priv,
 	cnss_pci_call_driver_uevent(pci_priv, CNSS_BUS_EVENT, &bus_event);
 }
 
+#if IS_ENABLED(CONFIG_MHI_BUS_MISC)
+static inline void cnss_mhi_report_error(struct cnss_pci_data *pci_priv)
+{
+	if (pci_priv->mhi_ctrl)
+		mhi_report_error(pci_priv->mhi_ctrl);
+}
+#else
+static inline void cnss_mhi_report_error(struct cnss_pci_data *pci_priv) {}
+#endif
+
 void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -1733,10 +1763,8 @@ void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv)
 	pci_priv->pci_link_down_ind = true;
 	spin_unlock_irqrestore(&pci_link_down_lock, flags);
 
-	if (pci_priv->mhi_ctrl) {
-		/* Notify MHI about link down*/
-		mhi_report_error(pci_priv->mhi_ctrl);
-	}
+	/* Notify MHI about link down*/
+	cnss_mhi_report_error(pci_priv);
 
 	if (pci_dev->device == QCA6174_DEVICE_ID)
 		disable_irq_nosync(pci_dev->irq);
@@ -2140,6 +2168,23 @@ static int cnss_pci_check_mhi_state_bit(struct cnss_pci_data *pci_priv,
 		CNSS_ASSERT(0);
 
 	return -EINVAL;
+}
+
+static int cnss_pci_is_rddm_state(struct cnss_plat_data *plat_priv)
+{
+	struct cnss_pci_data *pci_priv;
+
+	if (!plat_priv || !plat_priv->bus_priv)
+		return 0;
+
+	if (plat_priv->bus_type != CNSS_BUS_PCI)
+		return 0;
+
+	pci_priv = (struct cnss_pci_data *)plat_priv->bus_priv;
+	if (pci_priv->device_id == QCA6174_DEVICE_ID)
+		return 0;
+
+	return test_bit(CNSS_MHI_TRIGGER_RDDM, &pci_priv->mhi_state);
 }
 
 static int cnss_rddm_trigger_debug(struct cnss_pci_data *pci_priv)
@@ -3980,7 +4025,8 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 
 skip_wait_power_up:
 	if (!test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
-	    !test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
+	    !test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
+	    !cnss_pci_is_rddm_state(plat_priv))
 		goto skip_wait_recovery;
 
 	reinit_completion(&plat_priv->recovery_complete);
@@ -4345,6 +4391,14 @@ static int cnss_pci_runtime_suspend(struct device *dev)
 	plat_priv = pci_priv->plat_priv;
 	if (!plat_priv)
 		return -EAGAIN;
+
+	/* RuntimePM is not fully supported yet on PCIe switch platform.
+	 * Disable runtimePM for now.
+	 */
+	if (plat_priv->pcie_switch_type == PCIE_SWITCH_NTN3) {
+		cnss_pr_dbg("PCIe switch platform, reject RTPM\n");
+		return -EAGAIN;
+	}
 
 	if (!cnss_is_device_powered_on(pci_priv->plat_priv))
 		return -EAGAIN;
