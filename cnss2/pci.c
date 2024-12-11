@@ -12,7 +12,6 @@
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
-#include <linux/pm_runtime.h>
 #include <linux/suspend.h>
 #include <linux/version.h>
 #include <linux/sched.h>
@@ -53,6 +52,7 @@
 #define DEFAULT_FW_FILE_NAME		"amss.bin"
 #define FW_V2_FILE_NAME			"amss20.bin"
 #define FW_V2_FTM_FILE_NAME		"amss20_ftm.bin"
+#define DEFAULT_GENOA_FW_FTM_NAME	"genoaftm.bin"
 #define DEVICE_MAJOR_VERSION_MASK	0xF
 
 #define WAKE_MSI_NAME			"WAKE"
@@ -6370,6 +6370,23 @@ static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 			break;
 		}
 		break;
+	case QCN7605_DEVICE_ID:
+		if (plat_priv->driver_mode == CNSS_FTM) {
+			cnss_pci_add_fw_prefix_name(pci_priv,
+						    plat_priv->firmware_name,
+						    DEFAULT_GENOA_FW_FTM_NAME);
+			snprintf(plat_priv->fw_fallback_name,
+				 MAX_FIRMWARE_NAME_LEN,
+				 DEFAULT_GENOA_FW_FTM_NAME);
+		} else {
+			cnss_pci_add_fw_prefix_name(pci_priv,
+						    plat_priv->firmware_name,
+						    DEFAULT_FW_FILE_NAME);
+			snprintf(plat_priv->fw_fallback_name,
+				 MAX_FIRMWARE_NAME_LEN,
+				 DEFAULT_FW_FILE_NAME);
+		}
+		break;
 	default:
 		cnss_pci_add_fw_prefix_name(pci_priv, plat_priv->firmware_name,
 					    DEFAULT_FW_FILE_NAME);
@@ -6787,9 +6804,6 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	if (cnss_pci_get_drv_supported(pci_priv))
 		cnss_mhi_controller_set_base(pci_priv, bar_start);
 
-	cnss_get_bwscal_info(plat_priv);
-	cnss_pr_dbg("no_bwscale: %d\n", plat_priv->no_bwscale);
-
 	/* BW scale CB needs to be set after registering MHI per requirement */
 	if (!plat_priv->no_bwscale)
 		cnss_mhi_controller_set_bw_scale_cb(pci_priv,
@@ -6853,7 +6867,51 @@ static void cnss_pci_config_regs(struct cnss_pci_data *pci_priv)
 	}
 }
 
-#if !IS_ENABLED(CONFIG_ARCH_QCOM)
+#if IS_ENABLED(CONFIG_ARCH_QCOM)
+/**
+ * cnss_pci_of_reserved_mem_device_init() - Assign reserved memory region
+ *                                          to given PCI device
+ * @pci_priv: driver PCI bus context pointer
+ *
+ * This function shall call corresponding of_reserved_mem_device* API to
+ * assign reserved memory region to PCI device based on where the memory is
+ * defined and attached to (platform device of_node or PCI device of_node)
+ * in device tree.
+ *
+ * Return: 0 for success, negative value for error
+ */
+static int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv)
+{
+	struct device *dev_pci = &pci_priv->pci_dev->dev;
+	int ret;
+
+	/* Use of_reserved_mem_device_init_by_idx() if reserved memory is
+	 * attached to platform device of_node.
+	 */
+	ret = of_reserved_mem_device_init(dev_pci);
+	if (ret) {
+		if (ret == -EINVAL)
+			cnss_pr_vdbg("Ignore, no specific reserved-memory assigned\n");
+		else
+			cnss_pr_err("Failed to init reserved mem device, err = %d\n",
+				    ret);
+	}
+	if (dev_pci->cma_area)
+		cnss_pr_dbg("CMA area is %s\n",
+			    cma_get_name(dev_pci->cma_area));
+
+	return ret;
+}
+
+static int cnss_pci_wake_gpio_init(struct cnss_pci_data *pci_priv)
+{
+	return 0;
+}
+
+static void cnss_pci_wake_gpio_deinit(struct cnss_pci_data *pci_priv)
+{
+}
+#else
 static int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv)
 {
 	return 0;
@@ -7114,16 +7172,30 @@ static void
 cnss_pci_restore_rc_speed(struct cnss_pci_data *pci_priv)
 {
 	int ret;
+	u16 link_speed;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
-	/* if not Genoa, do not restore rc speed */
-	if (pci_priv->device_id != QCN7605_DEVICE_ID) {
+	switch (pci_priv->device_id) {
+	case QCN7605_DEVICE_ID:
+		/* do nothing, keep Gen1*/
+		return;
+	case QCA6490_DEVICE_ID:
+		if (plat_priv->no_bwscale)
+			link_speed = 0;
+		else
+			/* restore to Gen2 */
+			link_speed = PCI_EXP_LNKSTA_CLS_5_0GB;
+		break;
+	default:
 		/* The request 0 will reset maximum GEN speed to default */
-		ret = cnss_pci_set_max_link_speed(pci_priv, plat_priv->rc_num, 0);
-		if (ret)
-			cnss_pr_err("Failed to reset max PCIe RC%x link speed to default, err = %d\n",
-				     plat_priv->rc_num, ret);
+		link_speed = 0;
+		break;
 	}
+
+	ret = cnss_pci_set_max_link_speed(pci_priv, plat_priv->rc_num, link_speed);
+	if (ret)
+		cnss_pr_err("Failed to set max PCIe RC%x link speed to %d, err = %d\n",
+			    plat_priv->rc_num, link_speed, ret);
 }
 
 static void
@@ -7217,13 +7289,15 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (plat_priv->use_pm_domain)
 		dev->pm_domain = &cnss_pm_domain;
 
-	cnss_pci_restore_rc_speed(pci_priv);
-
 	ret = cnss_pci_get_dev_cfg_node(plat_priv);
 	if (ret) {
 		cnss_pr_err("Failed to get device cfg node, err = %d\n", ret);
 		goto reset_ctx;
 	}
+
+	cnss_get_bwscal_info(plat_priv);
+	cnss_pr_dbg("no_bwscale: %d\n", plat_priv->no_bwscale);
+	cnss_pci_restore_rc_speed(pci_priv);
 
 	cnss_get_sleep_clk_supported(plat_priv);
 
@@ -7487,7 +7561,7 @@ int cnss_pci_init(struct cnss_plat_data *plat_priv)
 				    ret);
 			goto out;
 		}
-		if (!plat_priv->bus_priv) {
+		if (cnss_pci_is_sync_probe() && !plat_priv->bus_priv) {
 			cnss_pr_err("Failed to probe PCI driver\n");
 			ret = -ENODEV;
 			goto unreg_pci;
