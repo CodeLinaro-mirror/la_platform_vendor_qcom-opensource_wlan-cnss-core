@@ -3309,6 +3309,25 @@ int icnss_qmi_send(struct device *dev, int type, void *cmd,
 }
 EXPORT_SYMBOL(icnss_qmi_send);
 
+int icnss_register_driver_async_data_cb(struct device *dev, void *cb_ctx,
+					int (*cb)(void *ctx, uint16_t type,
+						  void *event, int event_len))
+{
+	struct icnss_priv *plat_priv = dev_get_drvdata(dev);
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (!test_bit(ICNSS_WLFW_CONNECTED, &plat_priv->state))
+		return -EINVAL;
+
+	plat_priv->get_driver_async_data_cb = cb;
+	plat_priv->get_driver_async_data_ctx = cb_ctx;
+
+	return 0;
+}
+EXPORT_SYMBOL(icnss_register_driver_async_data_cb);
+
 int __icnss_register_driver(struct icnss_driver_ops *ops,
 			    struct module *owner, const char *mod_name)
 {
@@ -4976,9 +4995,25 @@ static void unregister_rproc_restart_level_notifier(void)
 	unregister_trace_android_vh_rproc_recovery_set(rproc_restart_level_notifier, NULL);
 }
 
+static const char *icnss_get_device_name(const struct platform_device_id *device_id)
+{
+	switch (device_id->driver_data)	{
+	case WCN6750_DEVICE_ID:
+		return "MOSELLE";
+
+	case ADRASTEA_DEVICE_ID:
+		return "ADRASTEA";
+
+	case WCN6450_DEVICE_ID:
+		return "EVROS";
+	}
+	return "UNKNOWN";
+}
+
 static int icnss_probe(struct platform_device *pdev)
 {
 	int ret = 0;
+	const char *device_name;
 	struct device *dev = &pdev->dev;
 	struct icnss_priv *priv;
 	const struct of_device_id *of_id;
@@ -4997,8 +5032,8 @@ static int icnss_probe(struct platform_device *pdev)
 	}
 
 	device_id = of_id->data;
-
-	icnss_pr_dbg("Platform driver probe\n");
+	device_name = icnss_get_device_name(device_id);
+	icnss_pr_dbg("Platform driver probe for %s!\n", device_name);
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
