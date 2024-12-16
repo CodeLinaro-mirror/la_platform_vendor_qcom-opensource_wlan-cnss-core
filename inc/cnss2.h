@@ -357,6 +357,7 @@ extern void cnss_audio_smmu_unmap(struct device *dev, dma_addr_t iova,
 				 size_t size);
 extern int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
 					size_t *size);
+extern int cnss_get_direct_link_sid(struct device *dev, uint16_t *sid);
 extern int cnss_get_pci_slot(struct device *dev);
 extern struct kobject *cnss_get_wifi_kobj(struct device *dev);
 extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);

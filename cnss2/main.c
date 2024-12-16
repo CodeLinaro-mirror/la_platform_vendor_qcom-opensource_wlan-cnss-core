@@ -697,6 +697,12 @@ int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
 }
 EXPORT_SYMBOL(cnss_get_fw_lpass_shared_mem);
 
+int cnss_get_direct_link_sid(struct device *dev, uint16_t *sid)
+{
+	return -EINVAL;
+}
+EXPORT_SYMBOL(cnss_get_direct_link_sid);
+
 int cnss_athdiag_read(struct device *dev, u32 offset, u32 mem_type,
 		      u32 data_len, u8 *output)
 {
