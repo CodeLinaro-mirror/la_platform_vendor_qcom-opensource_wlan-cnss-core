@@ -386,6 +386,7 @@ extern bool cnss_audio_is_direct_link_supported(struct device *dev);
 extern bool cnss_get_audio_shared_iommu_group_cap(struct device *dev);
 extern int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
 					size_t *size);
+extern int cnss_get_direct_link_sid(struct device *dev, uint16_t *sid);
 #ifdef CONFIG_SDIO_QCN
 extern int cnss_sdio_wlan_register_driver(struct cnss_sdio_wlan_driver *
 					  driver_ops);

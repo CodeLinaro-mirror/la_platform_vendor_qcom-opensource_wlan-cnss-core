@@ -1888,6 +1888,12 @@ int cnss_pci_force_wake_release(struct device *dev)
 EXPORT_SYMBOL(cnss_pci_force_wake_release);
 #endif
 
+int cnss_get_direct_link_sid(struct device *dev, uint16_t *sid)
+{
+	return -EINVAL;
+}
+EXPORT_SYMBOL(cnss_get_direct_link_sid);
+
 void cnss_pci_fw_name_add_path(struct cnss_pci_data *pci_priv,
 			       char *file_name, char *name)
 {
