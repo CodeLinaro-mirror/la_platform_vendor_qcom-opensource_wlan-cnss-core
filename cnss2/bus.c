@@ -92,6 +92,24 @@ struct cnss_plat_data *cnss_bus_dev_to_plat_priv(struct device *dev)
 	}
 }
 
+struct device *cnss_plat_priv_to_bus_dev(struct cnss_plat_data *plat_priv)
+{
+	void *bus_priv;
+
+	bus_priv = plat_priv->bus_priv;
+	if (!bus_priv)
+		return NULL;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_priv_to_bus_dev(bus_priv);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return NULL;
+	}
+}
+
 int cnss_bus_init(struct cnss_plat_data *plat_priv)
 {
 	if (!plat_priv)
