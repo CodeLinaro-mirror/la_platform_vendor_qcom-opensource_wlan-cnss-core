@@ -6177,6 +6177,13 @@ int cnss_pci_recover_link_down(struct cnss_pci_data *pci_priv)
 		return ret;
 	}
 
+	/*
+	 * If link down happen with pcie enumeration done but wlan driver
+	 * un-initialized, MHI is not yet started, RDDM could be skipped.
+	 */
+	if (!test_bit(CNSS_MHI_INIT, &pci_priv->mhi_state))
+		return 0;
+
 retry:
 	/*
 	 * After PCIe link resumes, 20 to 400 ms delay is observerved
@@ -6492,6 +6499,11 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	if (test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state)) {
 		cnss_pr_dbg("RAM dump is already collected, skip\n");
+		return;
+	}
+
+	if (!test_bit(CNSS_MHI_INIT, &pci_priv->mhi_state)) {
+		cnss_pr_dbg("MHI is not initialized, skip\n");
 		return;
 	}
 
