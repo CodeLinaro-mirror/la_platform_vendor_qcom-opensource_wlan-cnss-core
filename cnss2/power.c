@@ -1983,3 +1983,85 @@ int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
 	plat_priv->powered_on = false;
 	return cnss_power_on_device(plat_priv, false);
 }
+
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
+int cnss_power_reset(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+	struct device *dev;
+
+	if(!plat_priv->power_reset){
+		cnss_pr_info("CNSS needn't to reset power!\n");
+		return ret;
+	}
+
+	dev = cnss_plat_priv_to_bus_dev(plat_priv);
+	if(!dev){
+		cnss_pr_err("Can't get bus device from plat_priv\n");
+		return -ENODEV;
+	}
+
+	ret = cnss_idle_restart(dev);
+	if(ret)
+		goto out;
+
+	cnss_idle_shutdown(dev);
+out:
+	return ret;
+
+}
+
+static int cnss_pm_notify(struct notifier_block *b,
+			 unsigned long event, void *p)
+{
+	struct cnss_plat_data *plat_priv = container_of(b, struct cnss_plat_data,
+							pm_notifier);
+
+	if (!plat_priv) {
+		cnss_pr_err("Find plat_priv failure in pm notifier\n");
+		return NOTIFY_STOP;
+	}
+
+	if (plat_priv->pcie_switch_type != PCIE_SWITCH_NTN3)
+		return NOTIFY_DONE;
+
+	switch (event) {
+	case PM_SUSPEND_PREPARE:
+	case PM_HIBERNATION_PREPARE:
+		plat_priv->power_reset = !cnss_is_device_powered_on(plat_priv);
+		break;
+	case PM_POST_SUSPEND:
+	case PM_POST_HIBERNATION:
+		if (0 != cnss_power_reset(plat_priv))
+			return NOTIFY_STOP;
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+void cnss_pm_notifier_init(struct cnss_plat_data *plat_priv)
+{
+	if (plat_priv->pcie_switch_type != PCIE_SWITCH_NTN3)
+		return;
+
+	plat_priv->pm_notifier.notifier_call = cnss_pm_notify;
+	register_pm_notifier(&plat_priv->pm_notifier);
+}
+
+void cnss_pm_notifier_deinit(struct cnss_plat_data *plat_priv)
+{
+	if (plat_priv->pcie_switch_type != PCIE_SWITCH_NTN3)
+		return;
+
+	unregister_pm_notifier(&plat_priv->pm_notifier);
+}
+#else
+void cnss_pm_notifier_init(struct cnss_plat_data *plat_priv)
+{
+}
+
+void cnss_pm_notifier_deinit(struct cnss_plat_data *plat_priv)
+{
+}
+#endif //CONFIG_PCIE_SWITCH_SUPPORT

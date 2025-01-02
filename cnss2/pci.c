@@ -1307,9 +1307,84 @@ out:
 	return ret;
 }
 
+static void
+cnss_pci_save_restore_state(struct pci_dev *pci_dev,  bool save,
+			    struct pci_saved_state **saved_state,
+			    struct pci_saved_state *default_state,
+			    bool link_down_or_recovery)
+{
+	if (save) {
+		if (link_down_or_recovery) {
+			*saved_state = NULL;
+		} else {
+			pci_save_state(pci_dev);
+			*saved_state = pci_store_saved_state(pci_dev);
+		}
+	} else {
+		if (link_down_or_recovery) {
+			pci_load_saved_state(pci_dev, default_state);
+			pci_restore_state(pci_dev);
+		} else if (*saved_state) {
+			pci_load_and_free_saved_state(pci_dev,
+						      saved_state);
+			pci_restore_state(pci_dev);
+		}
+	}
+}
+
+#ifdef CONFIG_PCIE_SWITCH_SUPPORT
+static void cnss_set_dsp_config_space(struct cnss_pci_data *pci_priv,
+				      bool save)
+{
+	struct pci_dev *ep_dev = pci_priv->pci_dev;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct pci_dev *dsp_dev = NULL;
+	bool link_down_or_recovery;
+
+	if (!pci_priv->pcie_switch_ntn3)
+		return;
+
+	link_down_or_recovery = pci_priv->pci_link_down_ind ||
+		(test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state));
+
+	dsp_dev = pci_upstream_bridge(ep_dev);
+
+	if (dsp_dev && pci_pcie_type(dsp_dev) == PCI_EXP_TYPE_DOWNSTREAM) {
+		cnss_pr_dbg("cnss_set_dsp_config_space: %s DSP state\n",
+			     save?"save":"restore");
+		cnss_pci_save_restore_state(dsp_dev, save,
+					    &pci_priv->dsp_saved_state,
+					    pci_priv->dsp_default_state,
+					    link_down_or_recovery);
+	}
+
+}
+
+static void cnss_set_dsp_default_state(struct cnss_pci_data *pci_priv)
+{
+	struct pci_dev *ep_dev = pci_priv->pci_dev;
+	struct pci_dev *dsp_dev = NULL;
+
+	if (pci_priv->pcie_switch_ntn3) {
+		dsp_dev = pci_upstream_bridge(ep_dev);
+		if (dsp_dev && pci_pcie_type(dsp_dev) == PCI_EXP_TYPE_DOWNSTREAM)
+			pci_priv->dsp_default_state = pci_store_saved_state(dsp_dev);
+	}
+}
+#else
+static void cnss_set_dsp_config_space(struct cnss_pci_data *pci_priv,
+				      bool save)
+{
+}
+
+static void cnss_set_dsp_default_state(struct cnss_pci_data *pci_priv)
+{
+}
+#endif
+
 static int cnss_set_pci_config_space(struct cnss_pci_data *pci_priv, bool save)
 {
-	struct pci_dev *pci_dev = pci_priv->pci_dev;
+	struct pci_dev *ep_dev = pci_priv->pci_dev;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	bool link_down_or_recovery;
 
@@ -1319,23 +1394,12 @@ static int cnss_set_pci_config_space(struct cnss_pci_data *pci_priv, bool save)
 	link_down_or_recovery = pci_priv->pci_link_down_ind ||
 		(test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state));
 
-	if (save) {
-		if (link_down_or_recovery) {
-			pci_priv->saved_state = NULL;
-		} else {
-			pci_save_state(pci_dev);
-			pci_priv->saved_state = pci_store_saved_state(pci_dev);
-		}
-	} else {
-		if (link_down_or_recovery) {
-			pci_load_saved_state(pci_dev, pci_priv->default_state);
-			pci_restore_state(pci_dev);
-		} else if (pci_priv->saved_state) {
-			pci_load_and_free_saved_state(pci_dev,
-						      &pci_priv->saved_state);
-			pci_restore_state(pci_dev);
-		}
-	}
+
+	cnss_set_dsp_config_space(pci_priv, save);
+
+	cnss_pci_save_restore_state(ep_dev, save, &pci_priv->saved_state,
+				    pci_priv->default_state,
+				    link_down_or_recovery);
 
 	return 0;
 }
@@ -5508,6 +5572,8 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	/* Save default config space without BME enabled */
 	pci_save_state(pci_dev);
 	pci_priv->default_state = pci_store_saved_state(pci_dev);
+
+	cnss_set_dsp_default_state(pci_priv);
 
 	pci_set_master(pci_dev);
 
