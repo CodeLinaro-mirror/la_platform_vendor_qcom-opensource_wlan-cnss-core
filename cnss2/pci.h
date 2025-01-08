@@ -181,6 +181,8 @@ struct cnss_pci_data {
 	unsigned long long smmu_fault_timestamp[SMMU_CB_MAX];
 #ifdef CONFIG_PCIE_SWITCH_SUPPORT
 	bool pcie_switch_ntn3;
+	struct pci_saved_state *dsp_saved_state;
+	struct pci_saved_state *dsp_default_state;
 #endif
 };
 
@@ -199,6 +201,15 @@ static inline struct cnss_plat_data *cnss_pci_priv_to_plat_priv(void *bus_priv)
 	struct cnss_pci_data *pci_priv = bus_priv;
 
 	return pci_priv->plat_priv;
+}
+
+static inline struct device *cnss_pci_priv_to_bus_dev(void *bus_priv)
+{
+	struct cnss_pci_data *pci_priv = bus_priv;
+	if(!pci_priv->pci_dev)
+		return NULL;
+
+	return &pci_priv->pci_dev->dev;
 }
 
 static inline void cnss_pci_set_monitor_wake_intr(void *bus_priv, bool val)

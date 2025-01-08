@@ -17,6 +17,7 @@ enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev);
 enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv);
 void *cnss_bus_dev_to_bus_priv(struct device *dev);
 struct cnss_plat_data *cnss_bus_dev_to_plat_priv(struct device *dev);
+struct device *cnss_plat_priv_to_bus_dev(struct cnss_plat_data *plat_priv);
 int cnss_bus_init(struct cnss_plat_data *plat_priv);
 void cnss_bus_deinit(struct cnss_plat_data *plat_priv);
 void cnss_bus_add_fw_prefix_name(struct cnss_plat_data *plat_priv,
