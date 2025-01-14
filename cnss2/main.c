@@ -37,6 +37,7 @@
 #include "bus.h"
 #include "debug.h"
 #include "genl.h"
+#include "pci.h"
 #ifdef CONFIG_DUMP_FW_TO_FILE
 #include "coredump.h"
 #endif
@@ -1740,6 +1741,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	int ret;
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 	struct mhi_controller *mhi_ctrl;
+	plat_priv->fw_crash_data.reason = reason;
 
 	plat_priv->recovery_count++;
 
