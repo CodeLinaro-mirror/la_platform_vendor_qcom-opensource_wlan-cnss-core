@@ -190,7 +190,7 @@ cnss_coredump_build(struct mhi_fw_crash_data *crash_data,
 int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
 				gfp_t gfp, char *type);
 
-static int cnss_coredump_submit(struct cnss_pci_data *pci_priv)
+int cnss_coredump_submit(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_dump_file_data *dump;
 
@@ -203,6 +203,7 @@ static int cnss_coredump_submit(struct cnss_pci_data *pci_priv)
 	cnss_save_buf_to_file((char *)dump, dump->len, "/var/crash/Hamilton%s.bin");
 #endif
 	cnss_qcom_devcd_dump(pci_priv->mhi_ctrl->cntrl_dev, dump, le32_to_cpu(dump->len), GFP_KERNEL, FW_RDDM_DUMP);
+	cnss_pr_info("fw core devcoredump\n");
 
 	return 0;
 }
