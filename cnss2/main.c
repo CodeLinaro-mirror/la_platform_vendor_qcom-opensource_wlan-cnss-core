@@ -1738,6 +1738,8 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			    enum cnss_recovery_reason reason)
 {
 	int ret;
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	struct mhi_controller *mhi_ctrl;
 
 	plat_priv->recovery_count++;
 
@@ -1781,6 +1783,14 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_REASON_DEFAULT:
 	case CNSS_REASON_TIMEOUT:
+		mhi_ctrl = pci_priv->mhi_ctrl;
+		mhi_dump_irq(pci_priv);
+		mhi_dump_event_ring(mhi_ctrl);
+		cnss_pci_dump_msi_data(pci_priv);
+
+		cnss_bus_dump_fw_sram(plat_priv);
+		cnss_coredump_fw_paging_dump(pci_priv);
+		cnss_coredump_remote_dump(plat_priv);
 		break;
 	default:
 		cnss_pr_err("Unsupported recovery reason: %s(%d)\n",
