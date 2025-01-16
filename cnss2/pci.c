@@ -546,7 +546,7 @@ static const struct mhi_controller_config cnss_mhi_config_default = {
 #endif
 	.timeout_ms = 10000,
 	.use_bounce_buf = false,
-	.buf_len = 0x2000,
+	.buf_len = 0x8000,
 	.num_channels = ARRAY_SIZE(cnss_mhi_channels),
 	.ch_cfg = cnss_mhi_channels,
 	.num_events = ARRAY_SIZE(cnss_mhi_events),
