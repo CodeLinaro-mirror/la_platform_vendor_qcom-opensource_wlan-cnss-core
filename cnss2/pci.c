@@ -799,11 +799,6 @@ static int cnss_pci_set_link_down(struct cnss_pci_data *pci_priv)
 #endif /* CONFIG_PCI_MSM */
 
 #if IS_ENABLED(CONFIG_MHI_BUS_MISC)
-static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
-{
-	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
-}
-
 static void cnss_mhi_dump_sfr(struct cnss_pci_data *pci_priv)
 {
 	mhi_dump_sfr(pci_priv->mhi_ctrl);
@@ -853,10 +848,6 @@ static int cnss_mhi_force_reset(struct cnss_pci_data *pci_priv)
 	return mhi_force_reset(pci_priv->mhi_ctrl);
 }
 #else
-static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
-{
-}
-
 static void cnss_mhi_dump_sfr(struct cnss_pci_data *pci_priv)
 {
 }
@@ -902,6 +893,11 @@ static int cnss_mhi_force_reset(struct cnss_pci_data *pci_priv)
 	return -EOPNOTSUPP;
 }
 #endif /* CONFIG_MHI_BUS_MISC */
+
+static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
+{
+	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+}
 
 int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
 {
@@ -2766,8 +2762,10 @@ static void cnss_pci_misc_reg_dump(struct cnss_pci_data *pci_priv,
 	bool do_force_wake_put = true;
 	int i;
 
-	if (!misc_reg)
+	if (!misc_reg) {
+		cnss_pr_err("misc reg null, no dump for %s registers\n", reg_name);
 		return;
+	}
 
 	if (in_interrupt() || irqs_disabled())
 		return;
@@ -2777,8 +2775,10 @@ static void cnss_pci_misc_reg_dump(struct cnss_pci_data *pci_priv,
 
 	if (cnss_pci_force_wake_get(pci_priv)) {
 		/* Continue to dump when device has entered RDDM already */
-		if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
+		if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state)) {
+			cnss_pr_err("force wake fail, no dump for %s registers\n", reg_name);
 			return;
+		}
 		do_force_wake_put = false;
 	}
 
@@ -5538,7 +5538,7 @@ static void cnss_pci_dump_ce_reg(struct cnss_pci_data *pci_priv,
 	}
 }
 
-static void cnss_pci_dump_debug_reg(struct cnss_pci_data *pci_priv)
+void cnss_pci_dump_debug_reg(struct cnss_pci_data *pci_priv)
 {
 	if (cnss_pci_check_link_status(pci_priv))
 		return;
