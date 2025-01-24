@@ -1343,11 +1343,8 @@ self_recovery:
 
 	policy = cnss_determine_recovery_policy(plat_priv);
 	cnss_bus_dev_shutdown(plat_priv, policy);
-	switch (policy) {
-		case FULL_RECOVERY:
-			cnss_bus_dev_powerup(plat_priv);
-			break;
-	}
+	if (policy == FULL_RECOVERY)
+		cnss_bus_dev_powerup(plat_priv);
 
 	return 0;
 }
@@ -2334,9 +2331,7 @@ static ssize_t cnss_serial_id_show(struct device *dev,
 
 	msb &= 0xFFFF;
 	serial_id = ((u64)msb << 32) | lsb;
-	int ret = scnprintf(buf, PAGE_SIZE, "\n%lx\n", serial_id);
-
-	return ret;
+	return scnprintf(buf, PAGE_SIZE, "\n%llx\n", serial_id);
 }
 
 static DEVICE_ATTR(serial_id, 0444, cnss_serial_id_show, NULL);
