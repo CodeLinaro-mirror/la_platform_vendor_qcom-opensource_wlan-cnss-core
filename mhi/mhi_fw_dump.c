@@ -206,10 +206,6 @@ struct paging_header_t {
 	u64 version;   /* dump version */
 	u64 seg_num;   /* paging seg num */
 };
-static struct paging_header_t paging_header;
-
-/*paging dump 1 seg for header, save version, seg_num, each seg address, size*/
-static char paging_dump_header[512];
 
 int fw_paging_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 		   struct bhie_vec_table *fw_table,

@@ -696,7 +696,7 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 		return ret;
 	}
 
-	mhi_log(mhi_dev_ctxt, MHI_MSG_DBG, "fw: %s size %d\n",
+	mhi_log(mhi_dev_ctxt, MHI_MSG_DBG, "fw: %s size %ld\n",
                 fw_info->fw_image, firmware->size);
 
 	ret = bhi_alloc_bhie_xfer(mhi_dev_ctxt,
