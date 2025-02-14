@@ -4792,6 +4792,9 @@ static int icnss_smmu_dt_parse(struct icnss_priv *priv)
 		priv->iommu_domain =
 			iommu_get_domain_for_dev(&pdev->dev);
 
+		if (!priv->iommu_domain)
+			return -EPROBE_DEFER;
+
 		ret = of_property_read_string(dev->of_node, "qcom,iommu-dma",
 					      &iommu_dma_type);
 		if (!ret && !strcmp("fastmap", iommu_dma_type)) {
