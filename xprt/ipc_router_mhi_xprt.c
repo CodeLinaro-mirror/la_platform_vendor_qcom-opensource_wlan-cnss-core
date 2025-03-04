@@ -41,6 +41,8 @@ if (ipc_router_mhi_xprt_debug_mask) \
 #define IPC_ROUTER_MHI_XPRT_MAX_PKT_SIZE 0x1000
 #define IPC_ROUTER_MHI_XPRT_NUM_TRBS 10
 #define MAX_CHECK_NUM 100
+#define IPC_OUT_CHN_MAX_PAYLOAD_SIZE 0x1000
+#define IPC_IN_CHN_MAX_PAYLOAD_SIZE 0x1000
 
 /**
  * ipc_router_mhi_addr_map - Struct for virtual address to IPC Router
@@ -842,6 +844,7 @@ static int ipc_router_mhi_driver_register(
 	mhi_info->dev = dev;
 	mhi_info->node_name = node_name;
 	mhi_info->user_data = mhi_xprtp;
+	mhi_info->max_payload = IPC_OUT_CHN_MAX_PAYLOAD_SIZE;
 	rc = mhi_register_channel(&mhi_xprtp->ch_hndl.out_handle, mhi_info);
 	if (rc) {
 		IPC_RTR_ERR("%s: Error %d registering out_chan for %s\n",
@@ -854,6 +857,7 @@ static int ipc_router_mhi_driver_register(
 	mhi_info->dev = dev;
 	mhi_info->node_name = node_name;
 	mhi_info->user_data = mhi_xprtp;
+	mhi_info->max_payload = IPC_IN_CHN_MAX_PAYLOAD_SIZE;
 	rc = mhi_register_channel(&mhi_xprtp->ch_hndl.in_handle, mhi_info);
 	if (rc) {
 		mhi_deregister_channel(mhi_xprtp->ch_hndl.out_handle);
@@ -963,13 +967,19 @@ static int mhi_xprt_update_config(struct ipc_router_mhi_xprt_config *mhi_xprt_co
 	uint32_t link_id;
 	uint32_t version;
 
-
+#if defined(CONFIG_CNSS_QCA6490) || defined(CONFIG_CNSS_QCA6390)
 	out_chan_id = 20;
 	mhi_xprt_config->out_chan_id = out_chan_id;
 
 	in_chan_id = 21;
 	mhi_xprt_config->in_chan_id = in_chan_id;
+#else
+	out_chan_id = 16;
+	mhi_xprt_config->out_chan_id = out_chan_id;
 
+	in_chan_id = 17;
+	mhi_xprt_config->in_chan_id = in_chan_id;
+#endif
 
 	link_id = 1;
 	mhi_xprt_config->link_id = link_id;
@@ -1085,7 +1095,6 @@ static int ipc_router_mhi_xprt_probe(struct platform_device *pdev)
 	int rc = -ENODEV;
 	struct ipc_router_mhi_xprt_config mhi_xprt_config;
 
-	printk("%s--Enter--\n",__func__);
 
 	if (pdev && pdev->dev.of_node) {
 		rc = parse_devicetree(pdev->dev.of_node, &mhi_xprt_config);
@@ -1102,7 +1111,6 @@ static int ipc_router_mhi_xprt_probe(struct platform_device *pdev)
 		}
 	}
 
-	printk("%s--Exit--\n",__func__);
 	return rc;
 }
 

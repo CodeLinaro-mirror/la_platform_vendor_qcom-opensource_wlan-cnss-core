@@ -17,40 +17,22 @@
 #include <linux/workqueue.h>
 #include <linux/ratelimit.h>
 #include <linux/platform_device.h>
+#ifdef USB_QCOM_DIAG_BRIDGE
+#include <linux/smux.h>
+#endif
 #include "diag_mux.h"
 #include "diagfwd_bridge.h"
+
+#ifdef CONFIG_DIAG_MHI
 #include "diagfwd_mhi.h"
-#ifdef CONFIG_ARCH_QCOM
-#ifdef CONFIG_USB_QCOM_DIAG_BRIDGE
+#endif
+#ifdef CONFIG_DIAG_HSIC
 #include "diagfwd_hsic.h"
+#endif
+#ifdef CONFIG_DIAG_SDIO
 #include "diagfwd_sdio.h"
 #endif
-#ifdef CONFIG_MSM_MHI
-#include "diagfwd_mhi.h"
-#endif
-#include "diag_dci.h"
-
-#ifndef CONFIG_USB_QCOM_DIAG_BRIDGE
-static int diag_hsic_init(void)
-{
-	return -EINVAL;
-}
-#endif
-
-#ifndef CONFIG_MSM_MHI
-static int diag_mhi_init(void)
-{
-	return -EINVAL;
-}
-#endif
-
-#ifndef CONFIG_QCOM_SDIO_CLIENT
-static int diag_sdio_init(void)
-{
-	return -EINVAL;
-}
-#endif
-#endif
+#include "diag_nl.h"
 
 #define BRIDGE_TO_MUX(x)	(x + DIAG_MUX_BRIDGE_BASE)
 
@@ -99,7 +81,16 @@ int diagfwd_bridge_init()
 {
 	int err = 0;
 
+#ifdef CONFIG_DIAG_MHI
 	err = diag_mhi_init();
+#endif
+#ifdef CONFIG_DIAG_HSIC
+	err = diag_hsic_init();
+#endif
+#ifdef CONFIG_DIAG_SDIO
+       err = diag_sdio_init();
+#endif
+
 	if (err){
 		goto fail;
 	}
@@ -124,7 +115,15 @@ int diagfwd_bridge_write(int id, unsigned char *buf, int len)
 
 void diagfwd_bridge_exit()
 {
+#ifdef CONFIG_DIAG_MHI
 	diag_mhi_exit();
+#endif
+#ifdef CONFIG_DIAG_HSIC
+	diag_hsic_exit();
+#endif
+#ifdef CONFIG_DIAG_SDIO
+       diag_sdio_exit();
+#endif
 }
 
 int diag_remote_dev_read_done(int id, unsigned char *buf, int len)

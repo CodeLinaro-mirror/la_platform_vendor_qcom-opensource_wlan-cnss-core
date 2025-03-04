@@ -197,7 +197,11 @@ static int msm_ipc_router_create(struct net *net,
 		return -EPROTOTYPE;
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+	sk = sk_alloc(net, AF_MSM_IPC, GFP_KERNEL, &msm_ipc_proto);
+#else
 	sk = sk_alloc(net, AF_MSM_IPC, GFP_KERNEL, &msm_ipc_proto, kern);
+#endif
 	if (!sk) {
 		IPC_RTR_ERR("%s: sk_alloc failed\n", __func__);
 		return -ENOMEM;
@@ -225,7 +229,7 @@ static int msm_ipc_router_create(struct net *net,
 	return 0;
 }
 
-int msm_ipc_router_bind(struct socket *sock, struct sockaddr *uaddr,
+static int msm_ipc_router_bind(struct socket *sock, struct sockaddr *uaddr,
 			       int uaddr_len)
 {
 	struct sockaddr_msm_ipc *addr = (struct sockaddr_msm_ipc *)uaddr;
@@ -634,13 +638,16 @@ static const struct proto_ops msm_ipc_proto_ops = {
 #endif
 	.listen			= sock_no_listen,
 	.shutdown		= sock_no_shutdown,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
-	.setsockopt		= sock_no_setsockopt,
-	.getsockopt		= sock_no_getsockopt,
-#ifdef CONFIG_COMPAT
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+	.setsockopt	= sock_common_setsockopt,
+	.getsockopt	= sock_common_getsockopt,
+#else
+	.setsockopt	= sock_no_setsockopt,
+	.getsockopt	= sock_no_getsockopt,
+#endif
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) && (defined(CONFIG_COMPAT))
 	.compat_setsockopt	= sock_no_setsockopt,
 	.compat_getsockopt	= sock_no_getsockopt,
-#endif
 #endif
 	.sendmsg		= msm_ipc_router_sendmsg,
 	.recvmsg		= msm_ipc_router_recvmsg,
