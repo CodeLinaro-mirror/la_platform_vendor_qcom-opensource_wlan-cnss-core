@@ -34,12 +34,12 @@
 #include <linux/pci.h>
 
 #include "wlan_firmware_service_v01.h"
+#include "../cnss2/cnss2.h"
 
 #define UNUSED(x)	(void)(x)
 
 struct mhi_device_ctxt;
 
-#ifdef CONFIG_HST_IMX
 struct fw_remote_mem {
 	size_t size;
 	void *vaddr;
@@ -50,7 +50,8 @@ void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt);
 void dump_fw_info_to_kmsg(struct mhi_device_ctxt *mhi_dev_ctxt);
 bool is_ramdump_all_zero(struct mhi_device_ctxt *mhi_dev_ctxt);
 #endif
-#endif
+
+
 
 enum MHI_DEBUG_LEVEL {
 	MHI_MSG_RAW = 0x1,
@@ -116,10 +117,8 @@ struct bhi_ctxt_t {
 	struct bhie_vec_table fw_table;
 	struct bhie_vec_table rddm_table;
 	size_t rddm_size;
-#ifdef CONFIG_HST_IMX
 	struct fw_remote_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01]; /* fw remote heap etc */
 	u32 mem_seg_id;
-#endif
 };
 
 enum MHI_CHAN_DIR {
@@ -376,6 +375,8 @@ struct mhi_ring {
 	u32 msi_enable_cntr;
 	spinlock_t ring_lock;
 	struct dma_pool *dma_pool;
+	bool dma_pool_initialized;
+	u32 max_payload;
 	struct tasklet_struct ev_task;
 	struct work_struct ev_worker;
 	struct mhi_device_ctxt *mhi_dev_ctxt;
@@ -429,11 +430,11 @@ enum MHI_EXEC_ENV {
 	MHI_EXEC_ENV_PBL = 0x0,
 	MHI_EXEC_ENV_SBL = 0x1,
 	MHI_EXEC_ENV_AMSS = 0x2,
-#ifdef CONFIG_HST_IMX
-	MHI_EXEC_ENV_RDDM = 0x3,
-#else
+#ifndef CONFIG_CNSS_QCA6390
 	MHI_EXEC_ENV_BHIE = 0x3,
 	MHI_EXEC_ENV_RDDM = 0x4,
+#else
+	MHI_EXEC_ENV_RDDM = 0x3,
 #endif
 	MHI_EXEC_ENV_DISABLE_TRANSITION, /* local EE, not related to mhi spec */
 };
@@ -667,6 +668,7 @@ extern struct mhi_device_driver *mhi_device_drv;
 irqreturn_t mhi_msi_ipa_handlr(int irq_number, void *dev_id);
 int mhi_reset_all_thread_queues(
 					struct mhi_device_ctxt *mhi_dev_ctxt);
+void mhi_deinit_all_thread_queues(struct mhi_device_ctxt *mhi_dev_ctxt);
 int mhi_add_elements_to_event_rings(
 				struct mhi_device_ctxt *mhi_dev_ctxt,
 					enum STATE_TRANSITION new_state);
@@ -676,6 +678,7 @@ int get_nr_enclosed_el(struct mhi_ring *ring, void *loc_1,
 					void *loc_2, u32 *nr_el);
 int mhi_init_mmio(struct mhi_device_ctxt *mhi_dev_ctxt);
 int mhi_init_device_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt);
+void mhi_deinit_device_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt);
 int mhi_init_local_event_ring(struct mhi_device_ctxt *mhi_dev_ctxt,
 		u32 nr_ev_el, u32 event_ring_index);
 int mhi_send_cmd(struct mhi_device_ctxt *dest_device,
@@ -695,6 +698,7 @@ int mhi_init_chan_ctxt(struct mhi_chan_ctxt *cc_list,
 				   bool preserve_db_state,
 				   enum MHI_BRSTMODE brstmode);
 int mhi_populate_event_cfg(struct mhi_device_ctxt *mhi_dev_ctxt);
+void mhi_destroy_event_cfg(struct mhi_device_ctxt *mhi_dev_ctxt);
 int mhi_get_event_ring_for_channel(struct mhi_device_ctxt *mhi_dev_ctxt,
 					      u32 chan);
 int delete_element(struct mhi_ring *ring, void **rp,
@@ -799,6 +803,7 @@ void mhi_reset_ev_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt,
 				int index);
 void init_event_ctxt_array(struct mhi_device_ctxt *mhi_dev_ctxt);
 int create_local_ev_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt);
+void delete_local_ev_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt);
 enum MHI_STATE mhi_get_m_state(struct mhi_device_ctxt *mhi_dev_ctxt);
 void process_m1_transition(struct work_struct *work);
 int set_mhi_base_state(struct mhi_device_ctxt *mhi_dev_ctxt);
@@ -825,9 +830,7 @@ void mhi_reset_pcie_txvecdb(struct mhi_device_ctxt *mhi_dev_ctxt);
 void mhi_reset_pcie_txvecstatus(struct mhi_device_ctxt *mhi_dev_ctxt);
 void mhi_reset_pcie_rxvecdb(struct mhi_device_ctxt *mhi_dev_ctxt);
 void mhi_reset_pcie_rxvecstatus(struct mhi_device_ctxt *mhi_dev_ctxt);
-#ifdef CONFIG_HST_IMX
 void mhi_set_pcie_mhictrl_reset(struct mhi_device_ctxt *mhi_dev_ctxt);
-#endif
 
 
 #ifdef DUMP_TO_FS
@@ -843,6 +846,6 @@ int fw_remote_mem_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 #endif
 void mhi_dump_event_ring(struct mhi_device_ctxt *mhi_dev_ctxt);
 
-//void mhi_dump_irq(struct mhi_device_ctxt *mhi_dev_ctxt);
+void mhi_dump_irq(struct mhi_device_ctxt *mhi_dev_ctxt);
 
 #endif

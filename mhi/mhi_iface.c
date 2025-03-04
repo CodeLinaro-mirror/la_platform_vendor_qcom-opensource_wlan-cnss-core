@@ -24,6 +24,7 @@
 #include <linux/interrupt.h>
 #include <linux/slab.h>
 #include <linux/err.h>
+#include <linux/version.h>
 
 #define CREATE_TRACE_POINTS
 #include "mhi_trace.h"
@@ -36,15 +37,20 @@
 
 struct mhi_device_driver *mhi_device_drv;
 
-#ifdef CONFIG_HST_IMX
-char hst_fw_img[] = "amss.bin";
-#endif
+char genoa_fw_img[] = "amss.bin";
 
 static int mhi_pci_probe(struct pci_dev *pcie_device,
 		const struct pci_device_id *mhi_device_id);
+
 static int __exit mhi_plat_remove(struct platform_device *pdev);
 
-static const struct pci_device_id mhi_pcie_device_id[] = {
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+#define DEFINE_PCI_DEVICE_TABLE(_table) \
+	const struct pci_device_id _table[]
+#endif
+
+static DEFINE_PCI_DEVICE_TABLE(mhi_pcie_device_id) = {
 	{ MHI_PCIE_VENDOR_ID, MHI_PCIE_DEVICE_ID_9x35,
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
 	{ MHI_PCIE_VENDOR_ID, MHI_PCIE_DEVICE_ID_ZIRC,
@@ -111,7 +117,7 @@ int mhi_ctxt_init(struct mhi_device_ctxt *mhi_dev_ctxt)
 
 	mhi_dev_ctxt->mmio_info.mmio_addr = mhi_dev_ctxt->core.bar0_base;
 
-#ifdef CONFIG_HST_IMX
+
 	/*
 	 * This is a WAR for SYSERR when wlan driver is loaded in below case.
 	 *
@@ -126,22 +132,27 @@ int mhi_ctxt_init(struct mhi_device_ctxt *mhi_dev_ctxt)
 
 	ret_val = mhi_reg_read(mhi_dev_ctxt->mmio_info.mmio_addr, MHIVER);
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "MHIVER: 0x%x", ret_val);
-#endif
+
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "exit\n");
 	return 0;
 
 irq_error:
 	kfree(mhi_dev_ctxt->state_change_work_item_list.q_lock);
+	mhi_dev_ctxt->state_change_work_item_list.q_lock = NULL;
 	kfree(mhi_dev_ctxt->mhi_ev_wq.m0_event);
+	mhi_dev_ctxt->mhi_ev_wq.m0_event = NULL;
 	kfree(mhi_dev_ctxt->mhi_ev_wq.m3_event);
+	mhi_dev_ctxt->mhi_ev_wq.m3_event = NULL;
 	kfree(mhi_dev_ctxt->mhi_ev_wq.bhi_event);
-	dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
+	mhi_dev_ctxt->mhi_ev_wq.bhi_event = NULL;
+	cnss_dma_free_coherent(&mhi_dev_ctxt->plat_dev->dev,
 		   mhi_dev_ctxt->dev_space.dev_mem_len,
 		   mhi_dev_ctxt->dev_space.dev_mem_start,
 		   mhi_dev_ctxt->dev_space.dma_dev_mem_start);
-
+	mhi_dev_ctxt->dev_space.dev_mem_start = NULL;
 	kfree(mhi_dev_ctxt->ev_ring_props);
+	mhi_dev_ctxt->ev_ring_props = NULL;
 	for (j = j - 1; j >= 0; --j)
 		free_irq(mhi_dev_ctxt->core.irq_base + j, NULL);
 
@@ -161,7 +172,7 @@ void mhi_ctxt_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 	kfree(mhi_dev_ctxt->mhi_ev_wq.m3_event);
 	kfree(mhi_dev_ctxt->mhi_ev_wq.bhi_event);
 
-	dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
+	cnss_dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
 		   mhi_dev_ctxt->dev_space.dev_mem_len,
 		   mhi_dev_ctxt->dev_space.dev_mem_start,
 		   mhi_dev_ctxt->dev_space.dma_dev_mem_start);
@@ -564,6 +575,17 @@ static int mhi_plat_probe(struct platform_device *pdev)
 	return 0;
 }
 #else
+
+#if (defined(CONFIG_USE_CUSTOMIZED_DMA_MEM))
+static ulong pmem_start = 0x0;
+module_param(pmem_start, ulong, 0600);
+MODULE_PARM_DESC(pmem_start, "start of physical memoryfor PCI transaction");
+
+static ulong pmem_end = 0xffffffff;
+module_param(pmem_end, ulong, 0600);
+MODULE_PARM_DESC(pmem_end, "end of physical memoryfor PCI transaction");
+#endif
+
 static int mhi_plat_probe(struct platform_device *pdev)
 {
 	//int r = 0, len;
@@ -588,12 +610,14 @@ static int mhi_plat_probe(struct platform_device *pdev)
 #endif
 	if (!mhi_dev_ctxt)
 		return -ENOMEM;
-
+#if (defined(CONFIG_USE_CUSTOMIZED_DMA_MEM))
+	address_window[0] = pmem_start;
+	address_window[1] = pmem_end;
+#else
 	address_window[0] = 0x0;
 	address_window[1] = 0xFFFFFFFFF;
-
+#endif
 	core = &mhi_dev_ctxt->core;
-
 	core->dev_id = PCI_ANY_ID;
 	mhi_dev_ctxt->poll_reset_timeout_ms = BHI_POLL_TIMEOUT_MS << 4;
 
@@ -609,14 +633,18 @@ static int mhi_plat_probe(struct platform_device *pdev)
 		struct firmware_info *fw_info = &bhi_ctxt->firmware_info;
 
 		bhi_ctxt->fw_table.sequence = 1;
-		fw_info->fw_image = hst_fw_img;
+
+		fw_info->fw_image = genoa_fw_img;
 		fw_info->max_sbl_len = 0x40000;
 		fw_info->segment_size = 0x80000;
 
 		INIT_WORK(&bhi_ctxt->fw_load_work, bhi_firmware_download);
 	}
-
+#if (defined(CONFIG_USE_CUSTOMIZED_DMA_MEM))
+	mhi_dev_ctxt->flags.bb_required = true;
+#else
 	mhi_dev_ctxt->flags.bb_required = false;
+#endif
 
 #ifndef CONFIG_NAPIER_X86
 	mhi_dev_ctxt->plat_dev = pdev;
@@ -719,6 +747,8 @@ error:
 	platform_driver_unregister(&mhi_plat_driver);
 platform_error:
 #endif
+	debugfs_remove(mhi_dev_drv->parent);
+	mhi_dev_drv->parent = NULL;
 	class_destroy(mhi_device_drv->mhi_bhi_class);
 
 class_error:

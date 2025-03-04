@@ -92,6 +92,5 @@ ssize_t sysfs_init_m0(struct device *dev, struct device_attribute *attr,
 			const char *buf, size_t count);
 ssize_t sysfs_init_mhi_reset(struct device *dev, struct device_attribute *attr,
 			const char *buf, size_t count);
-void mhi_enable_ltssm(struct mhi_device_ctxt *mhi_dev_ctxt);
 
 #endif

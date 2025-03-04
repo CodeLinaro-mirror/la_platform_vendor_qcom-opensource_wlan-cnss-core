@@ -147,7 +147,7 @@ void mhi_set_wlaon_sw_entry(struct mhi_device_ctxt *mhi_dev_ctxt)
 			    mhi_dev_ctxt->mmio_info.mmio_addr,
 			    WLAON_WARM_SW_ENTRY, 0);
 
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_CNSS_QCA6390
 	mhi_mdelay(10);
 #endif
 
@@ -157,7 +157,7 @@ void mhi_set_wlaon_sw_entry(struct mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "WLAON_WARM_SW_ENTRY 0x%x\n", val);
 }
 
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_CNSS_QCA6390
 void mhi_set_pcie_mhictrl_reset(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	u32 val;
@@ -792,25 +792,20 @@ void process_stt_work_item(
 		break;
 	case STATE_TRANSITION_READY:
 		r = process_ready_transition(mhi_dev_ctxt, cur_work_item);
-		if (mhi_dev_ctxt->dev_exec_env == MHI_EXEC_ENV_DISABLE_TRANSITION) {
-			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
-						"Transition to READY r %d\n", r);
-			complete(&mhi_dev_ctxt->cmd_complete);
-		}
 		break;
 	case STATE_TRANSITION_SBL:
 		write_lock_irq(&mhi_dev_ctxt->pm_xfer_lock);
 		mhi_dev_ctxt->dev_exec_env = MHI_EXEC_ENV_SBL;
 		write_unlock_irq(&mhi_dev_ctxt->pm_xfer_lock);
 		enable_clients(mhi_dev_ctxt, mhi_dev_ctxt->dev_exec_env);
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_CNSS_QCA6390
 		wake_up(mhi_dev_ctxt->mhi_ev_wq.bhi_event);
 #endif
 		break;
 	case STATE_TRANSITION_AMSS:
 		r = process_amss_transition(mhi_dev_ctxt, cur_work_item);
 		break;
-#ifndef CONFIG_HST_IMX
+#ifndef CONFIG_CNSS_QCA6390
 	case STATE_TRANSITION_BHIE:
 		write_lock_irq(&mhi_dev_ctxt->pm_xfer_lock);
 		mhi_dev_ctxt->dev_exec_env = MHI_EXEC_ENV_BHIE;

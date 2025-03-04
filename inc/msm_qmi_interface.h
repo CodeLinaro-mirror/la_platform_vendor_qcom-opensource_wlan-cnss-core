@@ -148,7 +148,7 @@ struct qmi_svc_ops_options {
 		      void *req);
 };
 
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_MSM_QMI_INTERFACE
 
 /* Element info array describing common qmi response structure */
 extern struct elem_info qmi_response_type_v01_ei[];

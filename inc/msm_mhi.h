@@ -176,9 +176,8 @@ enum mhi_rddm_segment {
 	MHI_RDDM_RD_SEGMENT,
 };
 
-#if defined(CONFIG_HST_IMX)
+#if defined(CONFIG_MSM_MHI)
 void mhi_config_single_msi(struct mhi_device *mhi_device, bool msi);
-
 /**
  * mhi_is_device_ready - Check if MHI is ready to register clients
  *
@@ -347,6 +346,8 @@ struct mhi_result *mhi_poll(struct mhi_client_handle *client_handle);
 void mhi_mask_irq(struct mhi_client_handle *client_handle);
 void mhi_unmask_irq(struct mhi_client_handle *client_handle);
 
+void mhi_enable_irq(void);
+
 #else
 static inline bool mhi_is_device_ready(const struct device * const dev,
 				       const char *node_name)
@@ -356,6 +357,11 @@ static inline bool mhi_is_device_ready(const struct device * const dev,
 
 static inline int mhi_register_device(struct mhi_device *mhi_device,
 				      const char *node_name, void *user_data)
+{
+	return -EINVAL;
+};
+
+static inline int mhi_deregister_device(struct mhi_device *mhi_device)
 {
 	return -EINVAL;
 };

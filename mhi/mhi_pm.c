@@ -184,7 +184,6 @@ static int mhi_pm_initiate_m0(struct mhi_device_ctxt *mhi_dev_ctxt)
 	if (!r || mhi_dev_ctxt->mhi_pm_state == MHI_PM_LD_ERR_FATAL_DETECT) {
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 			"Failed to get M0 event, timeout or LD\n");
-#ifdef CONFIG_HST_IMX
 		/* Patch from MSM as gerrit#2559252 */
 		/*
 		 * It's possible device already in error state and we didn't
@@ -194,13 +193,19 @@ static int mhi_pm_initiate_m0(struct mhi_device_ctxt *mhi_dev_ctxt)
 				enum MHI_PM_STATE new_state = MHI_PM_DISABLE;
 				unsigned long flags;
 				enum MHI_STATE state = MHI_STATE_LIMIT;
+				u32 ee = 0;
 
-				mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
+				mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 					"MHI System Error Detected\n");
 				write_lock_irqsave(&mhi_dev_ctxt->pm_xfer_lock,
 						   flags);
 				if (MHI_REG_ACCESS_VALID(mhi_dev_ctxt->mhi_pm_state))
+				{
 					state = mhi_get_m_state(mhi_dev_ctxt);
+					ee = mhi_reg_read(mhi_dev_ctxt->bhi_ctxt.bhi_base, BHI_EXECENV);
+					mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+						"MHI System Error Detected read state 0x%x 0x%x\n", state, ee);
+				}
 
 				if (state == MHI_STATE_SYS_ERR)
 					new_state = mhi_tryset_pm_state
@@ -213,7 +218,6 @@ static int mhi_pm_initiate_m0(struct mhi_device_ctxt *mhi_dev_ctxt)
 						      process_sys_err_worker);
 		}
 		//mhi_intvec_threaded_handlr(0, mhi_cntrl);
-#endif
 		r = -EIO;
 	} else
 		r = 0;
@@ -308,7 +312,7 @@ int mhi_pci_resume(struct device *dev)
 	return r;
 }
 
-#ifdef CONFIG_HST_IMX
+
 void mhi_pcie_sw_reset(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	/*
@@ -331,9 +335,11 @@ void mhi_pcie_sw_reset(struct mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_reset_pcie_rxvecstatus(mhi_dev_ctxt);
 	mhi_set_wlaon_sw_entry(mhi_dev_ctxt);
 	mhi_set_pcie_soc_global_reset(mhi_dev_ctxt);
+#ifdef CONFIG_CNSS_QCA6390
 	mhi_set_pcie_mhictrl_reset(mhi_dev_ctxt);
-}
 #endif
+}
+
 
 static int mhi_pm_slave_mode_power_on(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
@@ -341,6 +347,7 @@ static int mhi_pm_slave_mode_power_on(struct mhi_device_ctxt *mhi_dev_ctxt)
 	u32 timeout = mhi_dev_ctxt->poll_reset_timeout_ms;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "Entered\n");
+
 	mutex_lock(&mhi_dev_ctxt->pm_lock);
 	write_lock_irq(&mhi_dev_ctxt->pm_xfer_lock);
 	mhi_dev_ctxt->mhi_pm_state = MHI_PM_POR;
@@ -409,9 +416,7 @@ static void mhi_pm_slave_mode_power_off(struct mhi_device_ctxt *mhi_dev_ctxt)
 	}
 	process_disable_transition(MHI_PM_SHUTDOWN_PROCESS, mhi_dev_ctxt);
 
-#if defined(CONFIG_HST_IMX) && !defined(SUPPORT_WLAN_EN)
 	mhi_pcie_sw_reset(mhi_dev_ctxt);
-#endif
 }
 
 static int mhi_pm_slave_mode_suspend(struct mhi_device_ctxt *mhi_dev_ctxt)
@@ -640,6 +645,7 @@ int mhi_pm_control_device(struct mhi_device *mhi_device, enum mhi_dev_ctrl ctrl)
 
 	switch (ctrl) {
 	case MHI_DEV_CTRL_INIT:
+		mhi_pcie_sw_reset(mhi_dev_ctxt);
 		return bhi_probe(mhi_dev_ctxt);
 	case MHI_DEV_CTRL_POWER_ON:
 		return mhi_pm_slave_mode_power_on(mhi_dev_ctxt);
@@ -651,7 +657,8 @@ int mhi_pm_control_device(struct mhi_device *mhi_device, enum mhi_dev_ctrl ctrl)
 		mhi_pm_slave_mode_power_off(mhi_dev_ctxt);
 		break;
 	case MHI_DEV_CTRL_TRIGGER_RDDM:
-#ifdef CONFIG_HST_IMX
+
+#ifdef CONFIG_CNSS_QCA6390
 		/* Patch from MSM gerrit#2559251, blinkly awake, should no side effect */
 		mhi_dev_ctxt->runtime_get(mhi_dev_ctxt);
 		mhi_dev_ctxt->runtime_put(mhi_dev_ctxt);
@@ -669,11 +676,7 @@ int mhi_pm_control_device(struct mhi_device *mhi_device, enum mhi_dev_ctrl ctrl)
 		write_unlock_irqrestore(&mhi_dev_ctxt->pm_xfer_lock, flags);
 		break;
 	case MHI_DEV_CTRL_RDDM:
-		/* for this condition ramdump triggered from MHI SYS_ERR,
-		* ramdump collection should be happened once SYS_ERR is received,
-		* so to this place, ramdump is completed. Return directly.
-		*/
-		return 0;
+		return bhi_rddm(mhi_dev_ctxt, false);
 	case MHI_DEV_CTRL_RDDM_KERNEL_PANIC:
 		return bhi_rddm(mhi_dev_ctxt, true);
 	case MHI_DEV_CTRL_DE_INIT:
