@@ -24,7 +24,7 @@
 #include <linux/usb.h>
 #include <linux/mmc/sdio_func.h>
 #ifdef CONFIG_SDIO_QCN
-#include <linux/qcn_sdio_al.h>
+#include "qcn_sdio_al.h"
 #endif
 
 #define CNSS_MAX_FILE_NAME		20
@@ -173,6 +173,7 @@ struct cnss_wlan_driver {
 				    unsigned long thermal_state,
 				    int tcdev_id);
 	int (*get_bus_pm_state)(struct pci_dev *pdev, const struct pci_device_id *id);
+	enum cnss_driver_mode (*get_driver_mode)(void);
 };
 
 struct cnss_usb_wlan_driver {
@@ -246,6 +247,7 @@ struct cnss_wlan_enable_cfg {
 	struct cnss_shadow_reg_v2_cfg *shadow_reg_v2_cfg;
 	bool rri_over_ddr_cfg_valid;
 	struct cnss_rri_over_ddr_cfg rri_over_ddr_cfg;
+	bool send_msi_ce;
 };
 
 enum cnss_driver_mode {
@@ -302,6 +304,7 @@ extern void cnss_schedule_recovery(struct device *dev,
 extern int cnss_self_recovery(struct device *dev,
 			      enum cnss_recovery_reason reason);
 extern int cnss_force_fw_assert(struct device *dev);
+extern int cnss_dump_fw_sram_to_file(struct device *dev);
 extern int cnss_force_collect_rddm(struct device *dev);
 extern int cnss_qmi_send_get(struct device *dev);
 extern int cnss_qmi_send_put(struct device *dev);
@@ -319,11 +322,18 @@ extern int cnss_smmu_map(struct device *dev,
 			 phys_addr_t paddr, uint32_t *iova_addr, size_t size);
 extern struct iommu_domain *cnss_smmu_get_domain(struct device *dev);
 extern int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info);
+extern void cnss_set_driver_status(enum cnss_driver_status driver_status);
 extern int cnss_request_bus_bandwidth(struct device *dev, int bandwidth);
+extern int cnss_set_wlan_unsafe_channel(u16 *unsafe_ch_list, u16 ch_count);
+extern int cnss_get_wlan_unsafe_channel(u16 *unsafe_ch_list, u16 *ch_count,
+					u16 buf_len);
+extern int cnss_wlan_set_dfs_nol(const void *info, u16 info_len);
+extern int cnss_wlan_get_dfs_nol(void *info, u16 info_len);
 extern int cnss_power_up(struct device *dev);
 extern int cnss_power_down(struct device *dev);
 extern int cnss_idle_restart(struct device *dev);
 extern int cnss_idle_shutdown(struct device *dev);
+extern u8 *cnss_common_get_wlan_mac_address(struct device *dev, uint32_t *num);
 extern void cnss_request_pm_qos(struct device *dev, u32 qos_val);
 extern void cnss_remove_pm_qos(struct device *dev);
 extern void cnss_lock_pm_sem(struct device *dev);
@@ -331,6 +341,7 @@ extern void cnss_release_pm_sem(struct device *dev);
 extern void cnss_pci_lock_reg_window(struct device *dev, unsigned long *flags);
 extern void cnss_pci_unlock_reg_window(struct device *dev,
 				       unsigned long *flags);
+extern int cnss_wlan_pm_control(struct device *dev, bool vote);
 extern int cnss_get_pci_slot(struct device *dev);
 extern struct kobject *cnss_get_wifi_kobj(struct device *dev);
 extern int cnss_thermal_cdev_register(struct device *dev,
@@ -351,6 +362,7 @@ extern int cnss_auto_suspend(struct device *dev);
 extern int cnss_auto_resume(struct device *dev);
 extern int cnss_pci_is_drv_connected(struct device *dev);
 extern int cnss_pci_force_wake_request(struct device *dev);
+extern int cnss_pci_force_wake_request_sync(struct device *dev,int timeout_us);
 extern int cnss_pci_is_device_awake(struct device *dev);
 extern int cnss_pci_force_wake_release(struct device *dev);
 extern int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
@@ -424,5 +436,8 @@ extern inline void cnss_sdio_wlan_unregister_sdio_al_channel(void *ch_handle)
 
 }
 #endif
-
+extern void *cnss_dma_alloc_coherent(struct device *dev, size_t size,
+			      dma_addr_t *dma_handle, gfp_t flag);
+extern void cnss_dma_free_coherent(struct device *dev, size_t size,
+			    void *vaddr, dma_addr_t dma_handle);
 #endif /* _NET_CNSS2_H */
