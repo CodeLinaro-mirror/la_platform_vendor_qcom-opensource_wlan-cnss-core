@@ -88,6 +88,16 @@ enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 	}
 }
 
+bool cnss_bus_req_mem_ind_valid(struct cnss_plat_data *plat_priv)
+{
+	enum cnss_dev_bus_type bus_type = cnss_get_bus_type(plat_priv);
+	
+	if (bus_type == CNSS_BUS_USB || bus_type == CNSS_BUS_SDIO)
+		return false;
+	else
+		return true;
+}
+
 void *cnss_bus_dev_to_bus_priv(struct device *dev)
 {
 	if (!dev)
@@ -422,7 +432,7 @@ int cnss_bus_dev_shutdown(struct cnss_plat_data *plat_priv)
 	case CNSS_BUS_PCI:
 		return cnss_pci_dev_shutdown(plat_priv->bus_priv);
 	case CNSS_BUS_USB:
-		return 0;
+		return cnss_usb_dev_shutdown(plat_priv->bus_priv);
 	case CNSS_BUS_SDIO:
 		return cnss_sdio_dev_shutdown(plat_priv->bus_priv);
 	default:

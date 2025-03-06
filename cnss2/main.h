@@ -15,6 +15,7 @@
 
 #include <linux/version.h>
 #include <linux/etherdevice.h>
+#include <linux/gpio.h>
 #include <linux/pm_qos.h>
 #ifdef CONFIG_ARCH_QCOM
 #include <net/cnss2.h>
@@ -24,23 +25,26 @@
 #include <soc/qcom/subsystem_restart.h>
 #endif
 
-#include "qmi.h"
-#include "cnss2.h"
 
+#include "qmi.h"
+
+#ifdef CONFIG_USB_EMULATION
+#define FW_FPGA_ONLY_TEST_BYPASS 1
+#endif
+#include "cnss2.h"
 #define MAX_NO_OF_MAC_ADDR		4
 #define CNSS_RDDM_TIMEOUT_MS		20000
 #define MAX_FIRMWARE_NAME_LEN		32
+#define UNUSED(x)			(void)(x)
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
 #define CNSS_EVENT_SYNC_UNINTERRUPTIBLE (CNSS_EVENT_SYNC | \
 				CNSS_EVENT_UNINTERRUPTIBLE)
 #define QCN7605_CALDB_SIZE 614400
-#define HOST_WAKE_GPIO_IN 144
+#define CNSS_FW_PATH_MAX_LEN 32
 
-#define POWER_ON_RETRY_MAX_TIMES	4
-#define POWER_ON_RETRY_DELAY_MS		500
-
+extern unsigned long quirks;
 enum cnss_bdf_type {
     CNSS_BDF_BIN,
     CNSS_BDF_ELF,
@@ -143,12 +147,24 @@ struct cnss_bus_bw_info {
 	int current_bw_vote;
 };
 
+struct cnss_wlan_mac_addr {
+	u8 mac_addr[MAX_NO_OF_MAC_ADDR][ETH_ALEN];
+	u32 no_of_mac_addr_set;
+};
+
+struct cnss_wlan_mac_info {
+	struct cnss_wlan_mac_addr wlan_mac_addr;
+	bool is_wlan_mac_set;
+};
+
 struct cnss_fw_mem {
 	size_t size;
 	void *va;
 	phys_addr_t pa;
 	bool valid;
-	u32 type;
+	int type;
+	phys_addr_t phys_addr;
+	void *pre_aligned;
 };
 
 enum cnss_driver_event_type {
@@ -214,6 +230,7 @@ enum cnss_debug_quirks {
 	SKIP_DEVICE_BOOT,
 	USE_CORE_ONLY_FW,
 	SKIP_RECOVERY,
+	ENABLE_PCI_LINK_PS,
 };
 
 struct cnss_cal_data {
@@ -223,8 +240,10 @@ struct cnss_cal_data {
 
 struct cnss_plat_data {
 	struct platform_device *plat_dev;
+	enum cnss_driver_mode driver_mode;
 	void *bus_priv;
 	enum cnss_dev_bus_type bus_type;
+	struct gpio_desc *gpio_wl_en;
 	struct cnss_vreg_info *vreg_info;
 	struct cnss_pinctrl_info pinctrl_info;
 	struct cnss_subsys_info subsys_info;
@@ -236,8 +255,10 @@ struct cnss_plat_data {
 	struct cnss_platform_cap cap;
 	struct pm_qos_request qos_request;
 	unsigned long device_id;
+	struct cnss_wlan_driver *driver_ops;
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
+	struct cnss_wlan_mac_info wlan_mac_info;
 	unsigned long driver_state;
 	struct list_head event_list;
 	spinlock_t event_lock; /* spinlock for driver work event handling */
@@ -250,6 +271,7 @@ struct cnss_plat_data {
 	struct wlfw_rf_board_info_s_v01 board_info;
 	struct wlfw_soc_info_s_v01 soc_info;
 	struct wlfw_fw_version_info_s_v01 fw_version_info;
+	char firmware_name[CNSS_FW_PATH_MAX_LEN];
 	struct cnss_dev_mem_info dev_mem_info[CNSS_MAX_DEV_MEM_NUM];
 	u32 fw_mem_seg_len;
 	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
@@ -289,24 +311,15 @@ struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
 unsigned long *cnss_get_debug_quirks(void);
 int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 			   enum cnss_driver_event_type type,
-			   u32 flags, void *data);
+			   u32 flag, void *data);
 int cnss_get_vreg(struct cnss_plat_data *plat_priv);
 int cnss_get_pinctrl(struct cnss_plat_data *plat_priv);
-
-#ifndef CONFIG_MSM_GVM_QUIN
+#ifdef CONFIG_NAPIER_X86
+int cnss_get_wlan_en_pin(struct cnss_plat_data *plat_priv);
+int cnss_free_wlan_en_pin(struct cnss_plat_data *plat_priv);
+#endif
 int cnss_power_on_device(struct cnss_plat_data *plat_priv);
 void cnss_power_off_device(struct cnss_plat_data *plat_priv);
-#else /* CONFIG_MSM_GVM_QUIN */
-static inline int cnss_power_on_device(struct cnss_plat_data *plat_priv)
-{
-	return 0;
-}
-
-static inline void cnss_power_off_device(struct cnss_plat_data *plat_priv)
-{
-}
-#endif /* CONFIG_MSM_GVM_QUIN */
-
 int cnss_register_subsys(struct cnss_plat_data *plat_priv);
 void cnss_unregister_subsys(struct cnss_plat_data *plat_priv);
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv);
@@ -315,5 +328,13 @@ void cnss_set_pin_connect_status(struct cnss_plat_data *plat_priv);
 u32 cnss_get_wake_msi(struct cnss_plat_data *plat_priv);
 bool *cnss_get_qmi_bypass(void);
 bool is_qcn7605_device(u16 device_id);
-void cnss_set_wlan_chip_to_host_wakeup(unsigned int wakeup_gpio_num);
+
+void cnss_set_driver_status(enum cnss_driver_status driver_status);
+u8 *cnss_common_get_wlan_mac_address(struct device *dev, u32 *num);
+
+int cnss_set_wlan_unsafe_channel(u16 *unsafe_ch_list, u16 ch_count);
+int cnss_get_wlan_unsafe_channel(u16 *unsafe_ch_list,
+				 u16 *ch_count, u16 buf_len);
+int cnss_wlan_set_dfs_nol(const void *info, u16 info_len);
+int cnss_wlan_get_dfs_nol(void *info, u16 info_len);
 #endif /* _CNSS_MAIN_H */

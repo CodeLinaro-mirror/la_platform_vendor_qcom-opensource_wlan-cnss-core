@@ -161,6 +161,7 @@ int cnss_usb_unregister_driver_hdlr(struct cnss_usb_data *usb_priv)
 	cnss_usb_dev_shutdown(usb_priv);
 	usb_priv->driver_ops = NULL;
 	usb_priv->plat_priv = NULL;
+	cnss_wlfw_wlan_mode_send_sync(plat_priv, QMI_WLFW_OFF_V01);
 	return 0;
 }
 
@@ -199,14 +200,16 @@ int cnss_usb_dev_shutdown(struct cnss_usb_data *usb_priv)
 int cnss_usb_call_driver_probe(struct cnss_usb_data *usb_priv)
 {
 	int ret = 0;
+#ifndef CONFIG_USB_EMULATION
 	struct cnss_plat_data *plat_priv = usb_priv->plat_priv;
-
+#endif
 	if (!usb_priv->driver_ops) {
 		cnss_pr_err("driver_ops is NULL\n");
 		ret = -EINVAL;
 		goto out;
 	}
 
+#ifndef CONFIG_USB_EMULATION
 	if (test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state) ||
 	    test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
 		ret = usb_priv->driver_ops->probe(usb_priv->usb_intf,
@@ -219,6 +222,14 @@ int cnss_usb_call_driver_probe(struct cnss_usb_data *usb_priv)
 		clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
 		set_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
 	}
+#else
+        cnss_pr_dbg("calling driver_ops->probe %s %d",__func__,__LINE__);
+        ret = usb_priv->driver_ops->probe(usb_priv->usb_intf, usb_priv->usb_device_id);
+	if (ret) {
+		cnss_pr_err("Failed to probe host driver, err = %d\n", ret);
+		goto out;
+	}
+#endif
 
 	return 0;
 
@@ -228,6 +239,7 @@ out:
 
 int cnss_usb_call_driver_remove(struct cnss_usb_data *usb_priv)
 {
+#ifndef CONFIG_USB_EMULATION
 	struct cnss_plat_data *plat_priv = usb_priv->plat_priv;
 
 	if (test_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state) ||
@@ -236,12 +248,13 @@ int cnss_usb_call_driver_remove(struct cnss_usb_data *usb_priv)
 		cnss_pr_dbg("Skip driver remove\n");
 		return 0;
 	}
-
+#endif
 	if (!usb_priv->driver_ops) {
 		cnss_pr_err("driver_ops is NULL\n");
 		return -EINVAL;
 	}
 
+#ifndef CONFIG_USB_EMULATION
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
 	    test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state)) {
 		cnss_pr_dbg("Recovery set after driver probed.Call shutdown\n");
@@ -251,6 +264,9 @@ int cnss_usb_call_driver_remove(struct cnss_usb_data *usb_priv)
 		usb_priv->driver_ops->remove(usb_priv->usb_intf);
 		clear_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
 	}
+#else
+	usb_priv->driver_ops->remove(usb_priv->usb_intf);
+#endif
 	return 0;
 }
 

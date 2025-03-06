@@ -43,8 +43,7 @@ struct ramdump_segment {
 	void *v_address;
 	unsigned long size;
 };
-
-#ifdef CONFIG_HST_IMX
+#if 1
 extern void *create_ramdump_device(const char *dev_name, struct device *parent);
 extern void destroy_ramdump_device(void *dev);
 extern int do_ramdump(void *handle, struct ramdump_segment *segments,

@@ -14,10 +14,8 @@
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/err.h>
-#include <soc/qcom/subsystem_restart.h>
-#include <soc/qcom/subsystem_notif.h>
-#include <net/cnss2.h>
-#include <linux/qcn_sdio_al.h>
+#include "cnss2.h"
+#include "qcn_sdio_al.h"
 #include "main.h"
 #include "sdio.h"
 #include "debug.h"
@@ -43,7 +41,7 @@ int cnss_sdio_call_driver_probe(struct cnss_sdio_data *sdio_priv)
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
 	    test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state)) {
 		ret = sdio_priv->ops->reinit(sdio_priv->al_client_handle->func,
-					     sdio_priv->device_id);
+					     &sdio_priv->device_id);
 		if (ret) {
 			cnss_pr_err("Failed to reinit host driver, err = %d\n",
 				    ret);
@@ -386,8 +384,12 @@ int cnss_sdio_init(struct cnss_plat_data *plat_priv)
 		ret = -ENODEV;
 		goto out;
 	}
+#ifndef CONFIG_NAPIER_X86
 	sdio_info = devm_kzalloc(&plat_priv->plat_dev->dev, sizeof(*sdio_info),
 				 GFP_KERNEL);
+#else
+	sdio_info = kzalloc(sizeof(*sdio_info), GFP_KERNEL);
+#endif
 	if (!sdio_info) {
 		ret = -ENOMEM;
 		goto out;
