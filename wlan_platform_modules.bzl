@@ -218,11 +218,11 @@ def _define_modules_for_target_variant(target, variant):
     ]
     if target == "sun":
         cnss_utils_dep_list = cnss_utils_dep_list + ["//vendor/qcom/opensource/data-kernel/drivers/smem-mailbox:{}_smem_mailbox".format(tv),]
-    #if target == "sdxkova":
-    #    tgt = "target-aarch64_cortex-a53_musl"
-    #    board = "sdx85"
-    #    pkg_ver = "1.0"
-    #    cnss_utils_dep_list = cnss_utils_dep_list + ["//build_dir/{}/linux-{}/smem-mailbox-{}:{}_smem_mailbox".format(tgt, board, pkg_ver, tv),]
+    if target == "sdxkova":
+        tgt = "target-aarch64_cortex-a53_musl"
+        board = "sdx85"
+        pkg_ver = "1.0"
+        cnss_utils_dep_list = cnss_utils_dep_list + ["//build_dir/{}/linux-{}/smem-mailbox-{}:{}_smem_mailbox".format(tgt, board, pkg_ver, tv),]
     _define_platform_config_rule(module, target, variant)
     defconfig = ":{}/{}_defconfig_generate_{}".format(module, tv, variant)
     ddk_module(
