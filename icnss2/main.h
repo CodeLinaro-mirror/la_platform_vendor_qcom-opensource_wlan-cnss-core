@@ -35,7 +35,7 @@
 #define QCA6750_PATH_PREFIX    "qca6750/"
 #define ADRASTEA_PATH_PREFIX   "adrastea/"
 #define WCN6450_PATH_PREFIX    "wcn6450/"
-#define ICNSS_MAX_FILE_NAME      35
+#define ICNSS_MAX_FILE_NAME      50
 #define ICNSS_PCI_EP_WAKE_OFFSET 4
 #define ICNSS_DISABLE_M3_SSR 0
 #define ICNSS_ENABLE_M3_SSR 1
@@ -591,6 +591,7 @@ struct icnss_priv {
 	enum icnss_phy_qam_cap phy_qam_cap;
 	bool rproc_fw_download;
 	struct wlchip_serial_id_v01 serial_id;
+	u64 fw_caps;
 };
 
 struct icnss_reg_info {
