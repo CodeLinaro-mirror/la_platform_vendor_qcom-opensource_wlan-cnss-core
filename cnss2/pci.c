@@ -2674,6 +2674,26 @@ void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 }
 EXPORT_SYMBOL(cnss_get_msi_address);
 
+bool cnss_is_one_msi(struct device *dev)
+{
+	bool single_msi = false;
+	struct cnss_pci_data *pci_priv = dev_get_drvdata(dev);
+
+	if (!pci_priv)
+	{
+		cnss_pr_err("pci_priv is NULL");
+		return false;
+	}
+
+	if (cnss_get_pci_msi_vectors(pci_priv) == 1)
+		single_msi = true;
+
+	cnss_pr_info("cnss_is_one_msi %d\n", single_msi);
+	
+	return single_msi;
+}
+EXPORT_SYMBOL(cnss_is_one_msi);
+
 static char *get_wake_msi_name(void)
 {
 	return (char *)WAKE_MSI_NAME;
