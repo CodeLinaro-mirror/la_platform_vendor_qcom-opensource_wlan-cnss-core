@@ -3189,7 +3189,11 @@ int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
 /* Saving dump to file system is always needed in this case. */
 static bool cnss_dump_enabled(void)
 {
+#if IS_ENABLED(CONFIG_PCIE_QCOM_ECAM)
+	return false;
+#else
 	return true;
+#endif
 }
 #endif /* CONFIG_QCOM_RAMDUMP */
 
