@@ -195,7 +195,7 @@ void mhi_set_pcie_soc_global_reset(struct mhi_device_ctxt *mhi_dev_ctxt)
 			    PCIE_SOC_GLOBAL_RESET, val);
 
 	/* TODO: exact time to sleep is uncertain */
-	delay = 10;
+	delay = 20;
 	mhi_mdelay(delay);
 
 	/* Need to toggle V bit back otherwise stuck in reset status */
