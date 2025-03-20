@@ -5479,9 +5479,19 @@ static int cnss_remove(struct platform_device *plat_dev)
 	return 0;
 }
 
+static void cnss_shutdown(struct platform_device *plat_dev)
+{
+	struct cnss_plat_data *plat_priv = platform_get_drvdata(plat_dev);
+
+	pr_err("=====wlan cnss do shutdown=======\n");
+
+	cnss_power_off_device(plat_priv); 
+}
+
 static struct platform_driver cnss_platform_driver = {
 	.probe  = cnss_probe,
 	.remove = cnss_remove,
+	.shutdown = cnss_shutdown,
 	.driver = {
 		.name = "cnss2",
 		.of_match_table = cnss_of_match_table,
