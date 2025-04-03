@@ -3189,7 +3189,11 @@ int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
 /* Saving dump to file system is always needed in this case. */
 static bool cnss_dump_enabled(void)
 {
+#if IS_ENABLED(CONFIG_PCIE_QCOM_ECAM)
+	return false;
+#else
 	return true;
+#endif
 }
 #endif /* CONFIG_QCOM_RAMDUMP */
 
@@ -5370,6 +5374,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	cnss_get_cpr_info(plat_priv);
 	cnss_aop_interface_init(plat_priv);
 	cnss_init_control_params(plat_priv);
+	cnss_pm_notifier_init(plat_priv);
 
 	ret = cnss_get_resources(plat_priv);
 	if (ret)
@@ -5460,6 +5465,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 
 	plat_priv->audio_iommu_domain = NULL;
 	cnss_genl_exit();
+	cnss_pm_notifier_deinit(plat_priv);
 	cnss_unregister_ims_service(plat_priv);
 	cnss_unregister_coex_service(plat_priv);
 	cnss_bus_deinit(plat_priv);
