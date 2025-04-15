@@ -1408,6 +1408,11 @@ int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
 		else
 			req->shadow_reg_v3_len = config->num_shadow_reg_v3_cfg;
 
+		plat_priv->num_shadow_regs_v3 = req->shadow_reg_v3_len;
+
+		cnss_pr_dbg("Shadow reg v3 len: %d\n",
+			    plat_priv->num_shadow_regs_v3);
+
 		memcpy(req->shadow_reg_v3, config->shadow_reg_v3_cfg,
 		       sizeof(struct wlfw_shadow_reg_v3_cfg_s_v01)
 		       * req->shadow_reg_v3_len);

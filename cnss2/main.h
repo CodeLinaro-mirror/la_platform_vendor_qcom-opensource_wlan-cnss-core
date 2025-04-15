@@ -560,6 +560,9 @@ struct cnss_plat_data {
 	u8 use_fw_path_with_prefix;
 	char firmware_name[MAX_FIRMWARE_NAME_LEN];
 	char fw_fallback_name[MAX_FIRMWARE_NAME_LEN];
+	u32 sram_dump_start_addr;
+	u32 sram_dump_size;
+	u8 *sram_dump;
 	struct completion rddm_complete;
 	struct completion recovery_complete;
 	struct cnss_control_params ctrl_params;
@@ -594,6 +597,9 @@ struct cnss_plat_data {
 	bool adsp_pc_enabled;
 	u64 feature_list;
 	struct kobject *wifi_kobj;
+	u16 hang_event_data_len;
+	u32 hang_data_addr_offset;
+	uint32_t num_shadow_regs_v3;
 
 	struct fw_remote_mem remote_mem[BHI_WLFW_MAX_NUM_MEM_SEG_V01];
 	struct fw_remote_crash_data remote_crash_data;
