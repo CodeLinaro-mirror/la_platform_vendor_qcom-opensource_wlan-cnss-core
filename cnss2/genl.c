@@ -91,7 +91,7 @@ static struct genl_family cnss_genl_family = {
 	.n_mcgrps = ARRAY_SIZE(cnss_genl_mcast_grp),
 };
 
-#if defined(CONFIG_CNSS2_X86) && defined(CONFIG_DUMP_FW_TO_FILE)
+#if defined(CONFIG_CNSS2_X86) && defined(CONFIG_DUMP_FW_TO_FILE_AT_KERNEL)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 #define vfs_write kernel_write
 #endif

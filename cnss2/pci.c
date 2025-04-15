@@ -6750,7 +6750,8 @@ static struct dev_pm_domain cnss_pm_domain = {
 				   cnss_pci_runtime_idle)
 	}
 };
-
+	
+#ifndef CONFIG_CNSS2_X86
 static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 {
 	struct device_node *child;
@@ -6798,6 +6799,8 @@ static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 
 	return -EINVAL;
 }
+#endif
+
 static int cnss_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
 {
@@ -6826,12 +6829,15 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	mutex_init(&pci_priv->bus_lock);
 	if (plat_priv->use_pm_domain)
 		dev->pm_domain = &cnss_pm_domain;
-
+	
+#ifndef CONFIG_CNSS2_X86
 	ret = cnss_pci_get_dev_cfg_node(plat_priv);
 	if (ret) {
 		cnss_pr_err("Failed to get device cfg node, err = %d\n", ret);
 		goto reset_ctx;
 	}
+#endif
+
 	cnss_pci_of_reserved_mem_device_init(pci_priv);
 
 	ret = cnss_register_subsys(plat_priv);
@@ -6935,11 +6941,11 @@ disable_bus:
 dereg_pci_event:
 	cnss_dereg_pci_event(pci_priv);
 deinit_smmu:
-	cnss_pci_deinit_smmu(pci_priv);
 #ifndef CONFIG_CNSS2_X86
+	cnss_pci_deinit_smmu(pci_priv);
+#endif
 unregister_ramdump:
 	cnss_unregister_ramdump(plat_priv);
-#endif
 unregister_subsys:
 	cnss_unregister_subsys(plat_priv);
 reset_ctx:
@@ -7456,9 +7462,9 @@ int cnss_pci_dump_fw_sram(struct cnss_pci_data *pci_priv)
 	        memcpy(buf, &val, sizeof(val));
 	        buf += sizeof(val);
 	}
-
+#ifdef CONFIG_DUMP_FW_TO_FILE_AT_KERNEL
 	cnss_save_buf_to_file(crash_data->sram_dump_buf, fw_sram_size, "/var/crash/fwsram%s.bin");
-
+#endif
 	/** dev_coredumpv(&pci_priv->pci_dev->dev, buf, fw_sram_size, GFP_KERNEL); */
 	cnss_pr_info("fw sram devcoredump\n");
 

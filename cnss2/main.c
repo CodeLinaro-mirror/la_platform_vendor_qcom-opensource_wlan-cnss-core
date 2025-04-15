@@ -3401,7 +3401,12 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 
 	struct cnss_ramdump_info_v2 *info_v2 = &plat_priv->ramdump_info_v2;
 	struct cnss_dump_data *dump_data = dump_data = &info_v2->dump_data;
+#ifndef CONFIG_CNSS2_X86
 	struct device *dev = &plat_priv->plat_dev->dev;
+#else
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	struct device *dev = &pci_priv->pci_dev->dev;
+#endif
 #ifndef CONFIG_CNSS2_X86
 	u32 ramdump_size = 0;
 
@@ -4062,7 +4067,13 @@ static struct attribute_group cnss_attr_group = {
 
 static int cnss_create_sysfs_link(struct cnss_plat_data *plat_priv)
 {
+#ifndef CONFIG_CNSS2_X86
 	struct device *dev = &plat_priv->plat_dev->dev;
+#else
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	struct device *dev = &pci_priv->pci_dev->dev;
+#endif
+	
 	int ret;
 
 	ret = sysfs_create_link(kernel_kobj, &dev->kobj, "cnss");
@@ -4104,10 +4115,13 @@ static int cnss_create_sysfs(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("PCI device not probed yet\n");
 		return 0;
 	}
-#endif
 
+	ret = devm_device_add_group(&pci_priv->pci_dev->dev,
+				    &cnss_attr_group);
+#else
 	ret = devm_device_add_group(&plat_priv->plat_dev->dev,
 				    &cnss_attr_group);
+#endif
 	if (ret) {
 		cnss_pr_err("Failed to create cnss device group, err = %d\n",
 			    ret);
@@ -4142,19 +4156,45 @@ static int devm_cnss_group_match(struct device *dev, void *res, void *data)
 
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
+#ifdef CONFIG_CNSS2_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+        if (!pci_priv)
+                return;
+#else
+	if (!plat_priv->plat_dev)
+		return;
+#endif
+
 	cnss_remove_sysfs_link(plat_priv);
+	
+#ifdef CONFIG_CNSS2_X86
+	devres_release(&pci_priv->pci_dev->dev,
+			       devm_cnss_group_remove, devm_cnss_group_match,
+			       (void *)&cnss_attr_group);
+#else
 	devres_release(&plat_priv->plat_dev->dev,
 			       devm_cnss_group_remove, devm_cnss_group_match,
 			       (void *)&cnss_attr_group);
+#endif
 }
 #else
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
+#ifdef CONFIG_CNSS2_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+        if (!pci_priv)
+                return;
+#else
 	if (!plat_priv->plat_dev)
 		return;
+#endif
 
 	cnss_remove_sysfs_link(plat_priv);
+#ifdef CONFIG_CNSS2_X86
+	devm_device_remove_group(&pci_priv->pci_dev->dev, &cnss_attr_group);
+#else
 	devm_device_remove_group(&plat_priv->plat_dev->dev, &cnss_attr_group);
+#endif
 }
 #endif
 
@@ -4398,12 +4438,14 @@ static const struct of_device_id cnss_of_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, cnss_of_match_table);
 
+#ifndef CONFIG_CNSS2_X86
 static inline bool
 cnss_use_nv_mac(struct cnss_plat_data *plat_priv)
 {
 	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				     "use-nv-mac");
 }
+#endif
 
 int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
 {
@@ -4425,12 +4467,14 @@ int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
 }
 EXPORT_SYMBOL(cnss_set_wfc_mode);
 
+#ifndef CONFIG_CNSS2_X86
 static inline bool
 cnss_is_converged_dt(struct cnss_plat_data *plat_priv)
 {
 	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 		"qcom,converged-dt");
 }
+#endif
 
 static int cnss_tcdev_get_max_state(struct thermal_cooling_device *tcdev,
 				    unsigned long *thermal_state)
@@ -4751,13 +4795,17 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->dev_node = NULL;
 	plat_priv->device_id = device_id->driver_data;
 
+#ifndef CONFIG_CNSS2_X86
 	plat_priv->is_converged_dt = cnss_is_converged_dt(plat_priv);
 	cnss_pr_dbg("Probing platform driver from %s DT\n",
 		    plat_priv->is_converged_dt ? "converged" : "single");
-	
+#endif
+
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv);
 	plat_priv->driver_mode = CNSS_DRIVER_MODE_MAX;
+#ifndef CONFIG_CNSS2_X86
 	plat_priv->use_nv_mac = cnss_use_nv_mac(plat_priv);
+#endif
 	plat_priv->use_fw_path_with_prefix =
 		cnss_use_fw_path_with_prefix(plat_priv);
 	cnss_set_plat_priv(plat_dev, plat_priv);
