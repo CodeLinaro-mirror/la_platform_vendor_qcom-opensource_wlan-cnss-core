@@ -39,9 +39,7 @@
 #include "genl.h"
 #include "reg.h"
 #include "pci.h"
-#ifdef CONFIG_DUMP_FW_TO_FILE
 #include "coredump.h"
-#endif
 
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
@@ -4236,11 +4234,14 @@ static int cnss_reboot_notifier(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+#ifndef CONFIG_ENABLE_CNSS_SRAM_DUMP
 static void cnss_sram_dump_init(struct cnss_plat_data *plat_priv)
 {
+}
+#else
 	if (plat_priv->device_id == KIWI_DEVICE_ID){
-		plat_priv->sram_dump_start_addr = SRAM_START;
-		plat_priv->sram_dump_size = SRAM_DUMP_SIZE;
+		plat_priv->sram_dump_start_addr = KIWI_PCIE_FW_SRAM_IO_START;
+		plat_priv->sram_dump_size = KIWI_PCIE_FW_SRAM_IO_END - KIWI_PCIE_FW_SRAM_IO_START;
 	} 
 
 	/* Postpone sram_dump allocation to when it is required.
@@ -4249,6 +4250,7 @@ static void cnss_sram_dump_init(struct cnss_plat_data *plat_priv)
 	 * in cnss_sram_dump_deinit().
 	 */
 }
+#endif
 static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 {
 	int ret;
@@ -4300,6 +4302,12 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	cnss_sram_dump_init(plat_priv);
 	return 0;
 }
+
+#ifndef CONFIG_ENABLE_CNSS_SRAM_DUMP
+static void cnss_sram_dump_deinit(struct cnss_plat_data *plat_priv)
+{
+}
+#else
 static void cnss_sram_dump_deinit(struct cnss_plat_data *plat_priv)
 {
 	/* Free sram_dump, if it was allocated */
@@ -4308,6 +4316,7 @@ static void cnss_sram_dump_deinit(struct cnss_plat_data *plat_priv)
 		plat_priv->sram_dump = NULL;
 	}
 }
+#endif
 
 static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 {

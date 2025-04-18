@@ -499,7 +499,7 @@ skip_req_fw:
 		goto error_fw_load;
 	}
 
-	dev_info(dev, "fw_name=%s, edl_image=%s\n", fw_name, mhi_cntrl->edl_image);
+	dev_info(dev, "fw_name=%s", fw_name);
 	/* Wait for ready since EDL image was loaded */
 	if (fw_name && fw_name == mhi_cntrl->edl_image) {
 		release_firmware(firmware);
@@ -514,7 +514,7 @@ skip_req_fw:
 	 * If we're doing fbc, populate vector tables while
 	 * device transitioning into MHI READY state
 	 */
-	dev_err(dev, "mhi_cntrl->fbc_download = %d\n", mhi_cntrl->fbc_download);
+	dev_dbg(dev, "mhi_cntrl->fbc_download = %d\n", mhi_cntrl->fbc_download);
 	if (mhi_cntrl->fbc_download) {
 		ret = mhi_alloc_bhie_table(mhi_cntrl, &mhi_cntrl->fbc_image, fw_sz);
 		if (ret) {
@@ -536,7 +536,7 @@ fw_load_ready_state:
 		goto error_ready_state;
 	}
 
-	dev_info(dev, "Wait for device to enter SBL or Mission mode\n");
+	dev_dbg(dev, "Wait for device to enter SBL or Mission mode\n");
 	return;
 
 error_ready_state:

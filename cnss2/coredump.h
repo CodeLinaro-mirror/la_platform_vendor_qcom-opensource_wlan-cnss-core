@@ -53,4 +53,7 @@ int cnss_coredump_submit(struct cnss_pci_data *pci_priv);
 
 int cnss_coredump_remote_dump(struct cnss_plat_data *plat_priv);
 int cnss_coredump_fw_paging_dump(struct cnss_pci_data *pci_priv);
+
+int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
+				gfp_t gfp, char *type);
 #endif

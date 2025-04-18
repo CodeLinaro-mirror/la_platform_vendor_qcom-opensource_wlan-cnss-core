@@ -1918,6 +1918,11 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	cnss_pci_dump_sbl_log(pci_priv, sbl_log_start, sbl_log_size);
 }
 
+#ifndef CONFIG_ENABLE_CNSS_SRAM_DUMP
+static void cnss_pci_dump_sram(struct cnss_pci_data *pci_priv)
+{
+}
+#else
 static void cnss_pci_dump_sram(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv;
@@ -1960,6 +1965,8 @@ static void cnss_pci_dump_sram(struct cnss_pci_data *pci_priv)
 			cond_resched();
 	}
 }
+#endif
+
 static int cnss_pci_handle_mhi_poweron_timeout(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -2962,6 +2969,8 @@ static void cnss_pci_dump_shadow_reg(struct cnss_pci_data *pci_priv)
 		pci_priv->debug_reg[j].offset = reg_offset;
 		if (cnss_pci_reg_read(pci_priv, reg_offset,
 				      &pci_priv->debug_reg[j].val))
+			cnss_pr_dbg("PCIE_SHADOW_REG_VALUE_%d = 0x%x\n",
+					i, pci_priv->debug_reg[j].val);
 			goto force_wake_put;
 	}
 
@@ -2970,6 +2979,8 @@ static void cnss_pci_dump_shadow_reg(struct cnss_pci_data *pci_priv)
 		pci_priv->debug_reg[j].offset = reg_offset;
 		if (cnss_pci_reg_read(pci_priv, reg_offset,
 				      &pci_priv->debug_reg[j].val))
+			cnss_pr_dbg("PCIE_SHADOW_REG_INTER_%d = 0x%x\n",
+					i, pci_priv->debug_reg[j].val);
 			goto force_wake_put;
 	}
 
@@ -4831,13 +4842,7 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 	mhi_dump_irq(pci_priv);
 	mhi_dump_event_ring(mhi_ctrl);
 	cnss_pci_dump_msi_data(pci_priv);
-
-
-	/** cnss_bus_dump_fw_sram(plat_priv); */
-	/** cnss_coredump_fw_paging_dump(pci_priv); */
-	/** cnss_coredump_remote_dump(plat_priv); */
-
-
+	
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 				   CNSS_REASON_TIMEOUT);
 }
@@ -5634,6 +5639,17 @@ void cnss_pci_dump_debug_reg(struct cnss_pci_data *pci_priv)
 	cnss_pci_dump_ce_reg(pci_priv, CNSS_CE_10);
 }
 
+static void cnss_pci_mhi_reg_dump(struct cnss_pci_data *pci_priv)
+{
+	if (!cnss_pci_check_link_status(pci_priv))
+		cnss_mhi_debug_reg_dump(pci_priv);
+
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
+	cnss_pci_dump_misc_reg(pci_priv);
+	cnss_pci_dump_shadow_reg(pci_priv);
+}
+
+
 int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 {
 	int ret;
@@ -5652,13 +5668,8 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 
 	cnss_auto_resume(&pci_priv->pci_dev->dev);
 
-	if (!cnss_pci_check_link_status(pci_priv))
-		cnss_mhi_debug_reg_dump(pci_priv);
-
-	cnss_pci_soc_scratch_reg_dump(pci_priv);
-	cnss_pci_dump_misc_reg(pci_priv);
-	cnss_pci_dump_shadow_reg(pci_priv);
-
+	cnss_pci_mhi_reg_dump(pci_priv);
+		
 	/* If link is still down here, directly trigger link down recovery */
 	ret = cnss_pci_check_link_status(pci_priv);
 	if (ret) {
@@ -5981,7 +5992,14 @@ void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv)
 		return;
 
 	fw_image = pci_priv->mhi_ctrl->fbc_image;
+
+	if (!fw_image)
+		return;
+	
 	rddm_image = pci_priv->mhi_ctrl->rddm_image;
+	
+	if (!rddm_image)
+		return;
 
 	for (i = 0; i < fw_image->entries; i++) {
 		cnss_pci_remove_dump_seg(pci_priv, dump_seg, CNSS_FW_IMAGE, i,
@@ -7450,10 +7468,13 @@ int cnss_pci_dump_fw_sram(struct cnss_pci_data *pci_priv)
 	struct mhi_fw_crash_data *crash_data = &pci_priv->plat_priv->fw_crash_data;
 
 	switch(pci_priv->pci_dev->device) {
+		/*meet failure when downloading fw sram, will check it later*/
+#ifdef CONFIG_ENABLE_CNSS_SRAM_DUMP
 		case KIWI_DEVICE_ID:
 			fw_sram_io_start = KIWI_PCIE_FW_SRAM_IO_START;
 			fw_sram_io_end = KIWI_PCIE_FW_SRAM_IO_END;
 			break;
+#endif
 		default:
 			cnss_pr_err("fw sram is not supported, device id 0x%x\n",
 				    pci_priv->pci_dev->device);
@@ -7478,10 +7499,8 @@ int cnss_pci_dump_fw_sram(struct cnss_pci_data *pci_priv)
 #ifdef CONFIG_DUMP_FW_TO_FILE_AT_KERNEL
 	cnss_save_buf_to_file(crash_data->sram_dump_buf, fw_sram_size, "/var/crash/fwsram%s.bin");
 #endif
-	/** dev_coredumpv(&pci_priv->pci_dev->dev, buf, fw_sram_size, GFP_KERNEL); */
+	cnss_qcom_devcd_dump(pci_priv->mhi_ctrl->cntrl_dev, crash_data->sram_dump_buf, fw_sram_size, GFP_KERNEL, FW_RDDM_DUMP);
 	cnss_pr_info("fw sram devcoredump\n");
-
-	cnss_invoke_qca_dump_app(FW_SRAM_DUMP);
 
 	return 0;
 }

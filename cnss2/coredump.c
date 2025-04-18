@@ -187,8 +187,6 @@ cnss_coredump_build(struct mhi_fw_crash_data *crash_data,
 	return dump_data;
 }
 
-int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
-				gfp_t gfp, char *type);
 
 int cnss_coredump_submit(struct cnss_pci_data *pci_priv)
 {
