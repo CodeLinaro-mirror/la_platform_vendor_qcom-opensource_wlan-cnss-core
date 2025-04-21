@@ -251,6 +251,7 @@ static int mhi_fw_load_bhi(struct mhi_controller *mhi_cntrl,
 		{ NULL },
 	};
 
+	dev_dbg(dev, "enter mhi_fw_load_bhi\n");
 	read_lock_bh(pm_lock);
 	if (!MHI_REG_ACCESS_VALID(mhi_cntrl->pm_state)) {
 		read_unlock_bh(pm_lock);
@@ -269,12 +270,14 @@ static int mhi_fw_load_bhi(struct mhi_controller *mhi_cntrl,
 	mhi_write_reg(mhi_cntrl, base, BHI_IMGTXDB, session_id);
 	read_unlock_bh(pm_lock);
 
+	dev_dbg(dev, "start waiting for the image download to complete %d s\n", mhi_cntrl->timeout_ms/1000);
 	/* Wait for the image download to complete */
 	ret = wait_event_timeout(mhi_cntrl->state_event,
 			   MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state) ||
 			   mhi_read_reg_field(mhi_cntrl, base, BHI_STATUS,
 					      BHI_STATUS_MASK, &tx_status) || tx_status,
 			   msecs_to_jiffies(mhi_cntrl->timeout_ms));
+	dev_info(dev, "image download complete\n");
 	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state))
 		goto invalid_pm_state;
 
@@ -298,7 +301,7 @@ static int mhi_fw_load_bhi(struct mhi_controller *mhi_cntrl,
 	return (!ret) ? -ETIMEDOUT : 0;
 
 invalid_pm_state:
-
+	dev_err(dev, "invalid_pm_state\n");
 	return -EIO;
 }
 
@@ -409,6 +412,7 @@ void mhi_fw_load_handler(struct mhi_controller *mhi_cntrl)
 	size_t size, fw_sz;
 	int i, ret;
 
+	dev_dbg(dev, "enter mhi_fw_load_handler\n");
 	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state)) {
 		dev_err(dev, "Device MHI is not in valid state\n");
 		return;
@@ -429,6 +433,7 @@ void mhi_fw_load_handler(struct mhi_controller *mhi_cntrl)
 		}
 	}
 
+	dev_dbg(dev, "mhi_cntrl->ee = %u\n", mhi_cntrl->ee);
 	/* wait for ready on pass through or any other execution environment */
 	if (!MHI_FW_LOAD_CAPABLE(mhi_cntrl->ee))
 		goto fw_load_ready_state;
@@ -457,6 +462,7 @@ void mhi_fw_load_handler(struct mhi_controller *mhi_cntrl)
 		goto error_fw_load;
 	}
 
+	dev_dbg(dev, "start request_firmware\n");
 	ret = request_firmware(&firmware, fw_name, dev);
 	if (ret) {
 		dev_err(dev, "Error loading firmware: %d\n", ret);
@@ -476,6 +482,7 @@ skip_req_fw:
 	buf = dma_alloc_coherent(mhi_cntrl->cntrl_dev, size, &dma_addr,
 				 GFP_KERNEL);
 	if (!buf) {
+		dev_err(dev, "error: dma_alloc_coherent fail, buf is null!\n");
 		release_firmware(firmware);
 		goto error_fw_load;
 	}
@@ -492,6 +499,7 @@ skip_req_fw:
 		goto error_fw_load;
 	}
 
+	dev_info(dev, "fw_name=%s", fw_name);
 	/* Wait for ready since EDL image was loaded */
 	if (fw_name && fw_name == mhi_cntrl->edl_image) {
 		release_firmware(firmware);
@@ -506,6 +514,7 @@ skip_req_fw:
 	 * If we're doing fbc, populate vector tables while
 	 * device transitioning into MHI READY state
 	 */
+	dev_dbg(dev, "mhi_cntrl->fbc_download = %d\n", mhi_cntrl->fbc_download);
 	if (mhi_cntrl->fbc_download) {
 		ret = mhi_alloc_bhie_table(mhi_cntrl, &mhi_cntrl->fbc_image, fw_sz);
 		if (ret) {
@@ -527,10 +536,11 @@ fw_load_ready_state:
 		goto error_ready_state;
 	}
 
-	dev_info(dev, "Wait for device to enter SBL or Mission mode\n");
+	dev_dbg(dev, "Wait for device to enter SBL or Mission mode\n");
 	return;
 
 error_ready_state:
+	dev_err(dev, "error_ready_state\n");
 	if (mhi_cntrl->fbc_download) {
 		mhi_free_bhie_table(mhi_cntrl, mhi_cntrl->fbc_image);
 		mhi_cntrl->fbc_image = NULL;
@@ -542,6 +552,7 @@ error_fw_load:
 	write_unlock_irq(&mhi_cntrl->pm_lock);
 	if (new_state == MHI_PM_FW_DL_ERR)
 		wake_up_all(&mhi_cntrl->state_event);
+	dev_err(dev, "error_fw_load\n");
 }
 
 int mhi_download_amss_image(struct mhi_controller *mhi_cntrl)

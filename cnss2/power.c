@@ -1039,6 +1039,7 @@ static u32 cnss_cmd_db_read_addr(struct cnss_plat_data *plat_priv,
 }
 #endif
 
+#ifndef CONFIG_CNSS2_X86
 int cnss_get_tcs_info(struct cnss_plat_data *plat_priv)
 {
 	struct platform_device *plat_dev = plat_priv->plat_dev;
@@ -1152,6 +1153,22 @@ int cnss_aop_mbox_init(struct cnss_plat_data *plat_priv)
 
 	return 0;
 }
+#else
+int cnss_get_tcs_info(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+int cnss_get_cpr_info(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+int cnss_aop_mbox_init(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+#endif
 
 #if IS_ENABLED(CONFIG_MSM_QMP)
 static int cnss_aop_set_vreg_param(struct cnss_plat_data *plat_priv,
@@ -1271,6 +1288,7 @@ update_cpr:
 	return 0;
 }
 
+#ifndef CONFIG_CNSS2_X86
 int cnss_enable_int_pow_amp_vreg(struct cnss_plat_data *plat_priv)
 {
 	struct platform_device *plat_dev = plat_priv->plat_dev;
@@ -1324,3 +1342,10 @@ int cnss_enable_int_pow_amp_vreg(struct cnss_plat_data *plat_priv)
 
 	return 0;
 }
+#else
+int cnss_enable_int_pow_amp_vreg(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+#endif
+

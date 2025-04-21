@@ -18,6 +18,7 @@
 #include <linux/timer.h>
 #include <linux/thermal.h>
 #include <linux/version.h>
+#include <linux/irq.h>
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0))
 #include <linux/panic_notifier.h>
 #endif
@@ -37,9 +38,9 @@
 #include "bus.h"
 #include "debug.h"
 #include "genl.h"
-#ifdef CONFIG_DUMP_FW_TO_FILE
+#include "reg.h"
+#include "pci.h"
 #include "coredump.h"
-#endif
 
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
@@ -106,6 +107,34 @@ struct cnss_driver_event {
 	int ret;
 	void *data;
 };
+
+static void cnss_msi_interrupt_check(struct cnss_plat_data *plat_priv)
+{
+	struct cnss_pci_data *pci_priv;
+	struct pci_dev *pci_dev;
+	struct irq_desc *desc;
+	int irq;
+	
+	pci_priv = plat_priv ? plat_priv->bus_priv : NULL;
+	pci_dev = pci_priv ? pci_priv->pci_dev : NULL;
+
+	if (!pci_dev)
+		return;
+
+	if (!cnss_pci_is_one_msi(pci_priv))
+		return;
+	cnss_pr_info("cnss_msi_interrupt_check: one msi\n");
+	
+	irq = pci_dev->irq;
+	desc = irq_to_desc(irq);
+	/* positive irq depth means irq is disabled */
+	while (desc->depth) {
+		enable_irq(irq);
+		cnss_pr_info("enable irq %d\n", irq);
+	}
+
+	return;
+}
 
 static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
@@ -604,7 +633,8 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 
 	if (test_bit(QMI_BYPASS, &plat_priv->ctrl_params.quirks))
 		return 0;
-
+	
+	cnss_msi_interrupt_check(plat_priv);
 	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
 	cnss_bus_free_qdss_mem(plat_priv);
 
@@ -1738,6 +1768,9 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			    enum cnss_recovery_reason reason)
 {
 	int ret;
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	struct mhi_controller *mhi_ctrl;
+	plat_priv->fw_crash_data.reason = reason;
 
 	plat_priv->recovery_count++;
 
@@ -1781,6 +1814,17 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_REASON_DEFAULT:
 	case CNSS_REASON_TIMEOUT:
+		mhi_ctrl = pci_priv->mhi_ctrl;
+		mhi_dump_irq(pci_priv);
+		mhi_dump_event_ring(mhi_ctrl);
+		cnss_pci_dump_msi_data(pci_priv);
+
+		cnss_pci_dump_debug_reg(pci_priv);
+		
+		cnss_bus_dump_fw_sram(plat_priv);
+		cnss_coredump_fw_paging_dump(pci_priv);
+		cnss_coredump_remote_dump(plat_priv);
+
 		break;
 	default:
 		cnss_pr_err("Unsupported recovery reason: %s(%d)\n",
@@ -1940,6 +1984,47 @@ int cnss_force_fw_assert(struct device *dev)
 	return 0;
 }
 EXPORT_SYMBOL(cnss_force_fw_assert);
+
+int cnss_dump_fw_fullram(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_pci_data *pci_priv;
+	enum cnss_recovery_reason reason_back;
+	struct mhi_fw_crash_data *crash_data;
+	struct fw_remote_crash_data *fw_crash_data;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+
+	pci_priv = plat_priv->bus_priv;
+	reason_back = plat_priv->fw_crash_data.reason;
+	plat_priv->fw_crash_data.reason = CNSS_REASON_DEFAULT;
+
+	// build dump info, only save in buffer
+	cnss_bus_dump_fw_sram(plat_priv);
+	cnss_coredump_fw_paging_dump(pci_priv);
+	cnss_coredump_remote_dump(plat_priv);
+
+	// submit dump to file
+	cnss_coredump_submit(pci_priv);
+
+
+	// free the full ram mem
+	crash_data = &pci_priv->plat_priv->fw_crash_data;
+	fw_crash_data = &plat_priv->remote_crash_data;
+	vfree(crash_data->paging_dump_buf);
+	vfree(crash_data->sram_dump_buf);
+	vfree(fw_crash_data->remote_buf);
+	crash_data->paging_dump_buf_len = 0;
+	crash_data->sram_dump_buf_len = 0;
+	fw_crash_data->remote_buf_len = 0;
+	plat_priv->fw_crash_data.reason = reason_back;
+
+	return 0;
+}
 
 int cnss_dump_fw_sram(struct device *dev)
 {
@@ -2902,11 +2987,18 @@ do_elf_dump:
 }
 
 #ifdef CONFIG_CNSS2_SSR_DRIVER_DUMP
-void wlan_driver_release(struct device *dev)
+/**
+ * cnss_host_ramdump_dev_release() - callback function for device release
+ * @dev: device to be released
+ *
+ * Return: None
+ */
+static void cnss_host_ramdump_dev_release(struct device *dev)
 {
-	cnss_pr_info("Freeing %s\n", dev->kobj.name);
+	cnss_pr_dbg("free host ramdump device\n");
 	kfree(dev);
 }
+
 int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 			 struct cnss_ssr_driver_dump_entry *ssr_entry,
 			 size_t num_entries_loaded)
@@ -2939,10 +3031,102 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		[CNSS_HOST_CE_HISTORY_MAX] = "hif_ce_history_max",
 		[CNSS_HOST_ONLY_FOR_CRIT_CE] = "hif_ce_only_for_crit",
 		[CNSS_HOST_HIF_EVENT_HISTORY] = "hif_event_history",
-		[CNSS_HOST_HIF_EVENT_HIST_MAX] = "hif_event_hist_max"
+		[CNSS_HOST_HIF_EVENT_HIST_MAX] = "hif_event_hist_max",
+		[CNSS_HOST_DP_WBM_DESC_REL] = "wbm_desc_rel_ring",
+		[CNSS_HOST_DP_WBM_DESC_REL_HANDLE] = "wbm_desc_rel_ring_handle",
+		[CNSS_HOST_DP_TCL_CMD] = "tcl_cmd_ring",
+		[CNSS_HOST_DP_TCL_CMD_HANDLE] = "tcl_cmd_ring_handle",
+		[CNSS_HOST_DP_TCL_STATUS] = "tcl_status_ring",
+		[CNSS_HOST_DP_TCL_STATUS_HANDLE] = "tcl_status_ring_handle",
+		[CNSS_HOST_DP_REO_REINJ] = "reo_reinject_ring",
+		[CNSS_HOST_DP_REO_REINJ_HANDLE] = "reo_reinject_ring_handle",
+		[CNSS_HOST_DP_RX_REL] = "rx_rel_ring",
+		[CNSS_HOST_DP_RX_REL_HANDLE] = "rx_rel_ring_handle",
+		[CNSS_HOST_DP_REO_EXP] = "reo_exception_ring",
+		[CNSS_HOST_DP_REO_EXP_HANDLE] = "reo_exception_ring_handle",
+		[CNSS_HOST_DP_REO_CMD] = "reo_cmd_ring",
+		[CNSS_HOST_DP_REO_CMD_HANDLE] = "reo_cmd_ring_handle",
+		[CNSS_HOST_DP_REO_STATUS] = "reo_status_ring",
+		[CNSS_HOST_DP_REO_STATUS_HANDLE] = "reo_status_ring_handle",
+		[CNSS_HOST_DP_TCL_DATA_0] = "tcl_data_ring_0",
+		[CNSS_HOST_DP_TCL_DATA_0_HANDLE] = "tcl_data_ring_0_handle",
+		[CNSS_HOST_DP_TX_COMP_0] = "tx_comp_ring_0",
+		[CNSS_HOST_DP_TX_COMP_0_HANDLE] = "tx_comp_ring_0_handle",
+		[CNSS_HOST_DP_TCL_DATA_1] = "tcl_data_ring_1",
+		[CNSS_HOST_DP_TCL_DATA_1_HANDLE] = "tcl_data_ring_1_handle",
+		[CNSS_HOST_DP_TX_COMP_1] = "tx_comp_ring_1",
+		[CNSS_HOST_DP_TX_COMP_1_HANDLE] = "tx_comp_ring_1_handle",
+		[CNSS_HOST_DP_TCL_DATA_2] = "tcl_data_ring_2",
+		[CNSS_HOST_DP_TCL_DATA_2_HANDLE] = "tcl_data_ring_2_handle",
+		[CNSS_HOST_DP_TX_COMP_2] = "tx_comp_ring_2",
+		[CNSS_HOST_DP_TX_COMP_2_HANDLE] = "tx_comp_ring_2_handle",
+		[CNSS_HOST_DP_REO_DST_0] = "reo_dest_ring_0",
+		[CNSS_HOST_DP_REO_DST_0_HANDLE] = "reo_dest_ring_0_handle",
+		[CNSS_HOST_DP_REO_DST_1] = "reo_dest_ring_1",
+		[CNSS_HOST_DP_REO_DST_1_HANDLE] = "reo_dest_ring_1_handle",
+		[CNSS_HOST_DP_REO_DST_2] = "reo_dest_ring_2",
+		[CNSS_HOST_DP_REO_DST_2_HANDLE] = "reo_dest_ring_2_handle",
+		[CNSS_HOST_DP_REO_DST_3] = "reo_dest_ring_3",
+		[CNSS_HOST_DP_REO_DST_3_HANDLE] = "reo_dest_ring_3_handle",
+		[CNSS_HOST_DP_REO_DST_4] = "reo_dest_ring_4",
+		[CNSS_HOST_DP_REO_DST_4_HANDLE] = "reo_dest_ring_4_handle",
+		[CNSS_HOST_DP_REO_DST_5] = "reo_dest_ring_5",
+		[CNSS_HOST_DP_REO_DST_5_HANDLE] = "reo_dest_ring_5_handle",
+		[CNSS_HOST_DP_REO_DST_6] = "reo_dest_ring_6",
+		[CNSS_HOST_DP_REO_DST_6_HANDLE] = "reo_dest_ring_6_handle",
+		[CNSS_HOST_DP_REO_DST_7] = "reo_dest_ring_7",
+		[CNSS_HOST_DP_REO_DST_7_HANDLE] = "reo_dest_ring_7_handle",
+		[CNSS_HOST_DP_PDEV_0] = "dp_pdev_0",
+		[CNSS_HOST_DP_WLAN_CFG_CTX] = "wlan_cfg_ctx",
+		[CNSS_HOST_DP_SOC] = "dp_soc",
+		[CNSS_HOST_HAL_RX_FST] = "hal_rx_fst",
+		[CNSS_HOST_DP_FISA] = "dp_fisa",
+		[CNSS_HOST_DP_FISA_HW_FSE_TABLE] = "dp_fisa_hw_fse_table",
+		[CNSS_HOST_DP_FISA_SW_FSE_TABLE] = "dp_fisa_sw_fse_table",
+		[CNSS_HOST_HIF] = "hif",
+		[CNSS_HOST_QDF_NBUF_HIST] = "qdf_nbuf_history",
+		[CNSS_HOST_TCL_WBM_MAP] = "tcl_wbm_map_array",
+		[CNSS_HOST_RX_MAC_BUF_RING_0] = "rx_mac_buf_ring_0",
+		[CNSS_HOST_RX_MAC_BUF_RING_0_HANDLE] = "rx_mac_buf_ring_0_handle",
+		[CNSS_HOST_RX_MAC_BUF_RING_1] = "rx_mac_buf_ring_1",
+		[CNSS_HOST_RX_MAC_BUF_RING_1_HANDLE] = "rx_mac_buf_ring_1_handle",
+		[CNSS_HOST_RX_REFILL_0] = "rx_refill_buf_ring_0",
+		[CNSS_HOST_RX_REFILL_0_HANDLE] = "rx_refill_buf_ring_0_handle",
+		[CNSS_HOST_CE_0] = "ce_0",
+		[CNSS_HOST_CE_0_SRC_RING] = "ce_0_src_ring",
+		[CNSS_HOST_CE_0_SRC_RING_CTX] = "ce_0_src_ring_ctx",
+		[CNSS_HOST_CE_1] = "ce_1",
+		[CNSS_HOST_CE_1_STATUS_RING] = "ce_1_status_ring",
+		[CNSS_HOST_CE_1_STATUS_RING_CTX] = "ce_1_status_ring_ctx",
+		[CNSS_HOST_CE_1_DEST_RING] = "ce_1_dest_ring",
+		[CNSS_HOST_CE_1_DEST_RING_CTX] = "ce_1_dest_ring_ctx",
+		[CNSS_HOST_CE_2] = "ce_2",
+		[CNSS_HOST_CE_2_STATUS_RING] = "ce_2_status_ring",
+		[CNSS_HOST_CE_2_STATUS_RING_CTX] = "ce_2_status_ring_ctx",
+		[CNSS_HOST_CE_2_DEST_RING] = "ce_2_dest_ring",
+		[CNSS_HOST_CE_2_DEST_RING_CTX] = "ce_2_dest_ring_ctx",
+		[CNSS_HOST_CE_3] = "ce_3",
+		[CNSS_HOST_CE_3_SRC_RING] = "ce_3_src_ring",
+		[CNSS_HOST_CE_3_SRC_RING_CTX] = "ce_3_src_ring_ctx",
+		[CNSS_HOST_CE_4] = "ce_4",
+		[CNSS_HOST_CE_4_SRC_RING] = "ce_4_src_ring",
+		[CNSS_HOST_CE_4_SRC_RING_CTX] = "ce_4_src_ring_ctx",
+		[CNSS_HOST_CE_5] = "ce_5",
+		[CNSS_HOST_CE_6] = "ce_6",
+		[CNSS_HOST_CE_7] = "ce_7",
+		[CNSS_HOST_CE_7_STATUS_RING] = "ce_7_status_ring",
+		[CNSS_HOST_CE_7_STATUS_RING_CTX] = "ce_7_status_ring_ctx",
+		[CNSS_HOST_CE_7_DEST_RING] = "ce_7_dest_ring",
+		[CNSS_HOST_CE_7_DEST_RING_CTX] = "ce_7_dest_ring_ctx",
+		[CNSS_HOST_CE_8] = "ce_8",
+		[CNSS_HOST_DP_TCL_DATA_3] = "tcl_data_ring_3",
+		[CNSS_HOST_DP_TCL_DATA_3_HANDLE] = "tcl_data_ring_3_handle",
+		[CNSS_HOST_DP_TX_COMP_3] = "tx_comp_ring_3",
+		[CNSS_HOST_DP_TX_COMP_3_HANDLE] = "tx_comp_ring_3_handle"
 	};
-	int i, j;
+	int i;
 	int ret = 0;
+	enum cnss_host_dump_type j;
 
 	if (!dump_enabled()) {
 		cnss_pr_info("Dump collection is not enabled\n");
@@ -2955,10 +3139,10 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		return -ENOMEM;
 	}
 
+	new_device->release = cnss_host_ramdump_dev_release;
 	device_initialize(new_device);
 	dev_set_name(new_device, "wlan_driver");
 	dev_ret = device_add(new_device);
-	new_device->release = wlan_driver_release;
 	if (dev_ret) {
 		cnss_pr_err("Failed to add new device\n");
 		goto put_device;
@@ -2966,6 +3150,14 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 
 	INIT_LIST_HEAD(&head);
 	for (i = 0; i < num_entries_loaded; i++) {
+		/* If region name registered by driver is not present in
+		 * wlan_str. type for that entry will not be set, but entry will
+		 * be added. Which will result in entry type being 0. Currently
+		 * entry type 0 is for wlan_logs, which will result in parsing
+		 * issue for wlan_logs as parsing is done based upon type field.
+		 * So initialize type with -1(Invalid) to avoid such issues.
+		 */
+		meta_info.entry[i].type = -1;
 		seg = kcalloc(1, sizeof(*seg), GFP_KERNEL);
 		if (!seg) {
 			cnss_pr_err("Failed to alloc seg entry %d\n", i);
@@ -2976,9 +3168,8 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		seg->da = (dma_addr_t)ssr_entry[i].buffer_pointer;
 		seg->size = ssr_entry[i].buffer_size;
 
-		for (j = 0; j < ARRAY_SIZE(wlan_str); j++) {
-			if (strncmp(ssr_entry[i].region_name, wlan_str[j],
-				    strlen(wlan_str[j])) == 0) {
+		for (j = 0; j < CNSS_HOST_DUMP_TYPE_MAX; j++) {
+			if (strcmp(ssr_entry[i].region_name, wlan_str[j]) == 0) {
 				meta_info.entry[i].type = j;
 			}
 		}
@@ -2989,6 +3180,13 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 	}
 
 	seg = kcalloc(1, sizeof(*seg), GFP_KERNEL);
+
+	if (!seg) {
+		cnss_pr_err("%s: Failed to allocate mem for host dump seg\n",
+			    __func__);
+		goto skip_host_dump;
+	}
+
 	meta_info.magic = CNSS_RAMDUMP_MAGIC;
 	meta_info.version = CNSS_RAMDUMP_VERSION;
 	meta_info.chipset = plat_priv->device_id;
@@ -2997,7 +3195,9 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 	seg->da = (dma_addr_t)&meta_info;
 	seg->size = sizeof(meta_info);
 	list_add(&seg->node, &head);
+
 	ret = qcom_elf_dump(&head, new_device, ELF_CLASS, HOST_RDDM_DUMP);
+skip_host_dump:
 	while (!list_empty(&head)) {
 		seg = list_first_entry(&head, struct qcom_dump_segment, node);
 		list_del(&seg->node);
@@ -3006,7 +3206,8 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 	device_del(new_device);
 put_device:
 	put_device(new_device);
-//	kfree(new_device);
+	kfree(new_device);
+	cnss_pr_dbg("host ramdump result %d\n", ret);
 	return ret;
 }
 #endif
@@ -3228,7 +3429,12 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 
 	struct cnss_ramdump_info_v2 *info_v2 = &plat_priv->ramdump_info_v2;
 	struct cnss_dump_data *dump_data = dump_data = &info_v2->dump_data;
+#ifndef CONFIG_CNSS2_X86
 	struct device *dev = &plat_priv->plat_dev->dev;
+#else
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	struct device *dev = &pci_priv->pci_dev->dev;
+#endif
 #ifndef CONFIG_CNSS2_X86
 	u32 ramdump_size = 0;
 
@@ -3889,7 +4095,13 @@ static struct attribute_group cnss_attr_group = {
 
 static int cnss_create_sysfs_link(struct cnss_plat_data *plat_priv)
 {
+#ifndef CONFIG_CNSS2_X86
 	struct device *dev = &plat_priv->plat_dev->dev;
+#else
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	struct device *dev = &pci_priv->pci_dev->dev;
+#endif
+	
 	int ret;
 
 	ret = sysfs_create_link(kernel_kobj, &dev->kobj, "cnss");
@@ -3931,10 +4143,13 @@ static int cnss_create_sysfs(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("PCI device not probed yet\n");
 		return 0;
 	}
-#endif
 
+	ret = devm_device_add_group(&pci_priv->pci_dev->dev,
+				    &cnss_attr_group);
+#else
 	ret = devm_device_add_group(&plat_priv->plat_dev->dev,
 				    &cnss_attr_group);
+#endif
 	if (ret) {
 		cnss_pr_err("Failed to create cnss device group, err = %d\n",
 			    ret);
@@ -3969,19 +4184,45 @@ static int devm_cnss_group_match(struct device *dev, void *res, void *data)
 
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
+#ifdef CONFIG_CNSS2_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+        if (!pci_priv)
+                return;
+#else
+	if (!plat_priv->plat_dev)
+		return;
+#endif
+
 	cnss_remove_sysfs_link(plat_priv);
+	
+#ifdef CONFIG_CNSS2_X86
+	devres_release(&pci_priv->pci_dev->dev,
+			       devm_cnss_group_remove, devm_cnss_group_match,
+			       (void *)&cnss_attr_group);
+#else
 	devres_release(&plat_priv->plat_dev->dev,
 			       devm_cnss_group_remove, devm_cnss_group_match,
 			       (void *)&cnss_attr_group);
+#endif
 }
 #else
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
+#ifdef CONFIG_CNSS2_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+        if (!pci_priv)
+                return;
+#else
 	if (!plat_priv->plat_dev)
 		return;
+#endif
 
 	cnss_remove_sysfs_link(plat_priv);
+#ifdef CONFIG_CNSS2_X86
+	devm_device_remove_group(&pci_priv->pci_dev->dev, &cnss_attr_group);
+#else
 	devm_device_remove_group(&plat_priv->plat_dev->dev, &cnss_attr_group);
+#endif
 }
 #endif
 
@@ -4023,6 +4264,23 @@ static int cnss_reboot_notifier(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+#ifndef CONFIG_ENABLE_CNSS_SRAM_DUMP
+static void cnss_sram_dump_init(struct cnss_plat_data *plat_priv)
+{
+}
+#else
+	if (plat_priv->device_id == KIWI_DEVICE_ID){
+		plat_priv->sram_dump_start_addr = KIWI_PCIE_FW_SRAM_IO_START;
+		plat_priv->sram_dump_size = KIWI_PCIE_FW_SRAM_IO_END - KIWI_PCIE_FW_SRAM_IO_START;
+	} 
+
+	/* Postpone sram_dump allocation to when it is required.
+	 *
+	 * Now it is allocated in cnss_pci_dump_sram() for PCI, and only freed
+	 * in cnss_sram_dump_deinit().
+	 */
+}
+#endif
 static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 {
 	int ret;
@@ -4071,8 +4329,24 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("QMI IPC connection call back register failed, err = %d\n",
 			    ret);
 
+	cnss_sram_dump_init(plat_priv);
 	return 0;
 }
+
+#ifndef CONFIG_ENABLE_CNSS_SRAM_DUMP
+static void cnss_sram_dump_deinit(struct cnss_plat_data *plat_priv)
+{
+}
+#else
+static void cnss_sram_dump_deinit(struct cnss_plat_data *plat_priv)
+{
+	/* Free sram_dump, if it was allocated */
+	if (plat_priv->sram_dump) {
+		vfree(plat_priv->sram_dump);
+		plat_priv->sram_dump = NULL;
+	}
+}
+#endif
 
 static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 {
@@ -4090,6 +4364,7 @@ static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 	unregister_pm_notifier(&cnss_pm_notifier);
 	del_timer(&plat_priv->fw_boot_timer);
 	wakeup_source_unregister(plat_priv->recovery_ws);
+	cnss_sram_dump_deinit(plat_priv);
 }
 
 static void cnss_init_time_sync_period_default(struct cnss_plat_data *plat_priv)
@@ -4202,12 +4477,14 @@ static const struct of_device_id cnss_of_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, cnss_of_match_table);
 
+#ifndef CONFIG_CNSS2_X86
 static inline bool
 cnss_use_nv_mac(struct cnss_plat_data *plat_priv)
 {
 	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				     "use-nv-mac");
 }
+#endif
 
 int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
 {
@@ -4229,12 +4506,14 @@ int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
 }
 EXPORT_SYMBOL(cnss_set_wfc_mode);
 
+#ifndef CONFIG_CNSS2_X86
 static inline bool
 cnss_is_converged_dt(struct cnss_plat_data *plat_priv)
 {
 	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 		"qcom,converged-dt");
 }
+#endif
 
 static int cnss_tcdev_get_max_state(struct thermal_cooling_device *tcdev,
 				    unsigned long *thermal_state)
@@ -4555,13 +4834,17 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->dev_node = NULL;
 	plat_priv->device_id = device_id->driver_data;
 
+#ifndef CONFIG_CNSS2_X86
 	plat_priv->is_converged_dt = cnss_is_converged_dt(plat_priv);
 	cnss_pr_dbg("Probing platform driver from %s DT\n",
 		    plat_priv->is_converged_dt ? "converged" : "single");
-	
+#endif
+
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv);
 	plat_priv->driver_mode = CNSS_DRIVER_MODE_MAX;
+#ifndef CONFIG_CNSS2_X86
 	plat_priv->use_nv_mac = cnss_use_nv_mac(plat_priv);
+#endif
 	plat_priv->use_fw_path_with_prefix =
 		cnss_use_fw_path_with_prefix(plat_priv);
 	cnss_set_plat_priv(plat_dev, plat_priv);
