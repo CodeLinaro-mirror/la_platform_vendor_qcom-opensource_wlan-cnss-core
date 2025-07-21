@@ -9,7 +9,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#include <linux/mod_devicetable.h>
+#endif
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/module.h>

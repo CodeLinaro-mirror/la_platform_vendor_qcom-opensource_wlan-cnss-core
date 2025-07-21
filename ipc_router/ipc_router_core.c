@@ -9,7 +9,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#include <linux/mod_devicetable.h>
+#endif
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -4007,7 +4010,7 @@ static void *ipc_router_create_log_ctx(char *name)
 #else
 	sub_log_ctx->log_ctx = NULL;
 #endif
-	strlcpy(sub_log_ctx->log_ctx_name, name,
+	strncpy(sub_log_ctx->log_ctx_name, name,
 			LOG_CTX_NAME_LEN);
 	INIT_LIST_HEAD(&sub_log_ctx->list);
 	list_add_tail(&sub_log_ctx->list, &log_ctx_list);
@@ -4345,7 +4348,7 @@ int parse_devicetree(struct device_node *node)
 	key = "qcom,default-peripheral";
 	peripheral = of_get_property(node, key, NULL);
 	if (peripheral)
-		strlcpy(default_peripheral, peripheral, PIL_SUBSYSTEM_NAME_LEN);
+		strncpy(default_peripheral, peripheral, PIL_SUBSYSTEM_NAME_LEN);
 #endif
 	return 0;
 }

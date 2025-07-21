@@ -904,7 +904,7 @@ static int ipc_router_mhi_config_init(
 	INIT_WORK(&mhi_xprtp->read_work, mhi_xprt_read_data);
 	init_waitqueue_head(&mhi_xprtp->write_wait_q);
 	mhi_xprtp->xprt_version = mhi_xprt_config->xprt_version;
-	strlcpy(mhi_xprtp->xprt_name, mhi_xprt_config->xprt_name,
+	strncpy(mhi_xprtp->xprt_name, mhi_xprt_config->xprt_name,
 		XPRT_NAME_LEN);
 
 	/* Initialize XPRT operations and parameters registered with IPC RTR */

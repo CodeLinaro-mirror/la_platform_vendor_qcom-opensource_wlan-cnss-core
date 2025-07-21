@@ -525,7 +525,8 @@ static inline unsigned int set_section_name(const char *name,
 		return 0;
 
 	ret = idx;
-	idx += strlcpy((strtab + idx), name, MAX_NAME_LENGTH);
+	strncpy((strtab + idx), name, MAX_NAME_LENGTH);
+	idx += strlen(name);
 	*strtable_idx = idx + 1;
 
 	return ret;

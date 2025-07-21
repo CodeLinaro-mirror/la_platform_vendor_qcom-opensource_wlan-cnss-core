@@ -9,7 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+#include <linux/version.h>
 #include <linux/delay.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
@@ -18,7 +18,6 @@
 #if defined(SUPPORT_WLAN_EN)
 #include <linux/of_gpio.h>
 #endif
-#include <linux/pm_wakeup.h>
 #include <linux/rwsem.h>
 #include <linux/suspend.h>
 #include <linux/timer.h>
@@ -28,6 +27,12 @@
 #include <soc/qcom/ramdump.h>
 #include <soc/qcom/subsystem_notif.h>
 #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#include <linux/device.h>
+#include <linux/vmalloc.h>
+#include <linux/platform_device.h>
+#endif
+#include <linux/pm_wakeup.h>
 
 #include "main.h"
 #include "bus.h"
@@ -407,7 +412,7 @@ int cnss_wlan_enable(struct device *dev,
 	memset(&req, 0, sizeof(req));
 
 	req.host_version_valid = 1;
-	strlcpy(req.host_version, host_version,
+	strncpy(req.host_version, host_version,
 		QMI_WLFW_MAX_STR_LEN_V01 + 1);
 
 	req.tgt_cfg_valid = 1;
@@ -1862,7 +1867,7 @@ static int cnss_init_dump_entry(struct cnss_plat_data *plat_priv)
 	ramdump_info->dump_data.len = ramdump_info->ramdump_size;
 	ramdump_info->dump_data.version = CNSS_DUMP_FORMAT_VER;
 	ramdump_info->dump_data.magic = CNSS_DUMP_MAGIC_VER_V2;
-	strlcpy(ramdump_info->dump_data.name, CNSS_DUMP_NAME,
+	strncpy(ramdump_info->dump_data.name, CNSS_DUMP_NAME,
 		sizeof(ramdump_info->dump_data.name));
 	dump_entry.id = MSM_DUMP_DATA_CNSS_WLAN;
 	dump_entry.addr = virt_to_phys(&ramdump_info->dump_data);
@@ -1966,7 +1971,7 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 	dump_data->version = CNSS_DUMP_FORMAT_VER_V2;
 	dump_data->magic = CNSS_DUMP_MAGIC_VER_V2;
 	dump_data->seg_version = CNSS_DUMP_SEG_VER;
-	strlcpy(dump_data->name, CNSS_DUMP_NAME,
+	strncpy(dump_data->name, CNSS_DUMP_NAME,
 		sizeof(dump_data->name));
 	dump_entry.id = MSM_DUMP_DATA_CNSS_WLAN;
 	dump_entry.addr = virt_to_phys(dump_data);
@@ -2148,7 +2153,7 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 	dump_data->version = CNSS_DUMP_FORMAT_VER_V2;
 	dump_data->magic = CNSS_DUMP_MAGIC_VER_V2;
 	dump_data->seg_version = CNSS_DUMP_SEG_VER;
-	strlcpy(dump_data->name, CNSS_DUMP_NAME,
+	strncpy(dump_data->name, CNSS_DUMP_NAME,
 		sizeof(dump_data->name));
 #ifndef CONFIG_NAPIER_X86
 	info_v2->ramdump_dev = create_ramdump_device(dev_name, &plat_priv->plat_dev->dev);
@@ -2773,7 +2778,11 @@ out:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+void cnss_remove(struct platform_device *plat_dev)
+#else
 static int cnss_remove(struct platform_device *plat_dev)
+#endif
 {
 #ifdef CONFIG_NAPIER_X86
 	struct cnss_plat_data *plat_priv = plat_env;
@@ -2805,7 +2814,9 @@ static int cnss_remove(struct platform_device *plat_dev)
 #endif
 	plat_env = NULL;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
 	return 0;
+#endif
 }
 #ifndef CONFIG_NAPIER_X86
 static struct platform_driver cnss_platform_driver = {
