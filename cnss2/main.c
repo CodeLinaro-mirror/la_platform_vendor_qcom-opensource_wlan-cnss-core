@@ -1282,10 +1282,15 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	cnss_pr_info("wow ssr count %d suspend %d\n", plat_priv->wow_ssr_count,
 								  bus_suspend);
 	plat_priv->recovery_count++;
-	if (bus_suspend) {
+	/* CNSS_REASON_FW_ASSERTION_FAIL means cds_trigger_recovery_handler
+	 * in f/w already assertion state. This is case match some platform
+	 * which resume takes too long time (114s) which leads f/w got crash
+	 * during wow resuming.
+	 */
+	if (bus_suspend || reason == CNSS_REASON_FW_ASSERTION_FAIL) {
 		plat_priv->wow_ssr_count++;
-		cnss_pr_info("crash during wow count %d\n",
-						     plat_priv->wow_ssr_count);
+		cnss_pr_info("crash during wow count %d reason %d\n",
+			      plat_priv->wow_ssr_count, reason);
 	}
 
 	if (plat_priv->device_id == QCA6174_DEVICE_ID)
@@ -1318,6 +1323,9 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		cnss_dump_fw_sram_to_file(plat_priv);
 		cnss_pci_dump_fw_remote_mem_to_file(plat_priv->bus_priv);
 		cnss_pci_dump_fw_paging_to_file(plat_priv->bus_priv);
+		break;
+	case CNSS_REASON_FW_ASSERTION_FAIL:
+		goto self_recovery;
 		break;
 	default:
 		cnss_pr_err("Unsupported recovery reason: %s(%d)\n",
