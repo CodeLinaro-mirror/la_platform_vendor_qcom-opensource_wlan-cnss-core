@@ -98,7 +98,7 @@ static int firmware_dump(struct mhi_device_ctxt *mhi_dev_ctxt,
 	}
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) || (defined(CONFIG_SET_FS))
 	set_fs(fs);
-#3ndif
+#endif
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "exit\n");
 	return status;
 }

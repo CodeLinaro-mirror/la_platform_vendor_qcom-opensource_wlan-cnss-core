@@ -12,6 +12,7 @@
 
 #include <linux/acpi.h>
 #include <linux/delay.h>
+#include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
 #include <linux/panic_notifier.h>
 #endif
@@ -275,8 +276,7 @@ void cnss_request_pm_qos(struct device *dev, u32 qos_val)
 		return;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
-	dev_pm_qos_add_request(dev, &plat_priv->qos_request, PM_QOS_CPU_DMA_LATENCY,
-			   qos_val);
+	cpu_latency_qos_add_request(&plat_priv->qos_request, qos_val);
 #else
 	pm_qos_add_request(&plat_priv->qos_request, PM_QOS_CPU_DMA_LATENCY,
 			   qos_val);
@@ -292,7 +292,7 @@ void cnss_remove_pm_qos(struct device *dev)
 		return;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
-	dev_pm_qos_remove_request(&plat_priv->qos_request);
+	cpu_latency_qos_remove_request(&plat_priv->qos_request);
 #else
 	pm_qos_remove_request(&plat_priv->qos_request);
 #endif
@@ -1136,7 +1136,10 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 {
 	struct cnss_subsys_info *subsys_info =
 		&plat_priv->subsys_info;
-
+	
+	cnss_pr_info("cnss_do_recovery reason: %s(%d)\n",
+			cnss_recovery_reason_to_str(reason), reason);
+	
 	plat_priv->recovery_count++;
 
 	if (plat_priv->device_id == QCA6174_DEVICE_ID)
@@ -1157,6 +1160,10 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		else
 			goto self_recovery;
 	case CNSS_REASON_DEFAULT:
+			cnss_pr_info("CNSS_REASON_DEFAULT, shutdown device\n");
+			complete(&plat_priv->rddm_complete);
+			cnss_bus_dev_shutdown(plat_priv);
+		break;
 	case CNSS_REASON_TIMEOUT:
 		break;
 	default:
@@ -1559,6 +1566,7 @@ static void cnss_driver_event_work(struct work_struct *work)
 	spin_unlock_irqrestore(&plat_priv->event_lock, flags);
 
 	cnss_pm_relax(plat_priv);
+	cnss_pr_dbg("cnss_driver_event_work done\n");
 }
 
 #ifdef CONFIG_NAPIER_X86

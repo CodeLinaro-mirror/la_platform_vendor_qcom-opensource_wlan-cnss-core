@@ -2,7 +2,7 @@ KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 
 interface_type ?= pcie
 emulation_build ?= 0
-unified_driver ?= 0
+unified_driver ?= 1
 unified_prealloc ?= 0
 
 ifeq ($(unified_driver), 1)

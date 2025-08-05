@@ -106,6 +106,9 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_DEV_REMOVED:
 			seq_puts(s, "DEV_REMOVED");
 			continue;
+		case CNSS_DEV_SHUTDOWN:
+			seq_puts(s, "DEV_SHUTDOWN");
+			continue;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);
