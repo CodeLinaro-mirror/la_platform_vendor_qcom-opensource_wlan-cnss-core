@@ -108,6 +108,9 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_IN_PANIC:
 			seq_puts(s, "IN_PANIC");
 			continue;
+		case CNSS_DEV_SHUTDOWN:
+			seq_puts(s, "DEV_SHUTDOWN");
+			continue;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);

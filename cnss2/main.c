@@ -1379,6 +1379,10 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		else
 			goto self_recovery;
 	case CNSS_REASON_DEFAULT:
+			cnss_pr_info("CNSS_REASON_DEFAULT, shutdown device\n");
+			complete(&plat_priv->rddm_complete);
+			cnss_bus_dev_shutdown(plat_priv);
+		break;
 	case CNSS_REASON_TIMEOUT:
 #ifdef DUMP_TO_FS
 		cnss_dump_fw_sram_to_file(plat_priv);
@@ -1835,6 +1839,7 @@ static void cnss_driver_event_work(struct work_struct *work)
 	spin_unlock_irqrestore(&plat_priv->event_lock, flags);
 
 	cnss_pm_relax(plat_priv);
+	cnss_pr_dbg("cnss_driver_event_work done\n");
 }
 
 #ifdef CONFIG_ARCH_QCOM

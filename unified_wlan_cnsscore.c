@@ -50,6 +50,8 @@ void *cnss_dma_alloc_coherent(struct device *dev, size_t size,
 
 	dev = &plat_dev->dev;
 	vaddr = dma_alloc_coherent(dev, size, dma_handle, flag);
+        //pr_err("nFore_add_debug %d cnss_dma_alloc_coherent vaddr %p, dma_paddr 0x%x\n",
+        //       __LINE__, vaddr, *dma_handle);
 	if (!vaddr) {
 		pr_err("%s, alloc failed!\n", __func__);
 		return NULL;
@@ -70,6 +72,8 @@ void cnss_dma_free_coherent(struct device *dev, size_t size,
 	}
 
 	dev = &plat_dev->dev;
+        //pr_err("nFore_add_debug %d cnss_dma_free_coherent vaddr %p, dma_paddr 0x%x\n",
+        //       __LINE__, vaddr, dma_handle);
 	dma_free_coherent(dev, size, vaddr, dma_handle);
 
 	return;
@@ -81,12 +85,21 @@ void *cnss_dma_alloc_coherent(struct device *dev, size_t size,
 			      dma_addr_t *dma_handle, gfp_t flag)
 {
 	return dma_alloc_coherent(dev, size, dma_handle, flag);
+	/*
+        void *vaddr;
+	vaddr = dma_alloc_coherent(dev, size, dma_handle, flag);
+        pr_err("nFore_add_debug %d cnss_dma_alloc_coherent vaddr %p, dma_paddr 0x%x\n",
+               __LINE__, vaddr, *dma_handle);
+	return vaddr;
+	*/
 }
 EXPORT_SYMBOL(cnss_dma_alloc_coherent);
 
 void cnss_dma_free_coherent(struct device *dev, size_t size,
 			    void *vaddr, dma_addr_t dma_handle)
 {
+    //pr_err("nFore_add_debug %d cnss_dma_free_coherent vaddr %p, dma_paddr 0x%x\n",
+     //          __LINE__, vaddr, dma_handle);
 	dma_free_coherent(dev, size, vaddr, dma_handle);
 }
 EXPORT_SYMBOL(cnss_dma_free_coherent);

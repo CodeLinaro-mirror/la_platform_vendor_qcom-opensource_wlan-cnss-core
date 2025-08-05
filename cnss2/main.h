@@ -201,6 +201,7 @@ enum cnss_driver_state {
 	CNSS_DRIVER_DEBUG,
 	CNSS_DEV_REMOVED,
 	CNSS_IN_PANIC,
+	CNSS_DEV_SHUTDOWN,
 };
 
 struct cnss_recovery_data {

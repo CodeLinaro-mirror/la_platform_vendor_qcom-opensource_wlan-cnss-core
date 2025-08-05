@@ -34,7 +34,9 @@
 #include "mhi_bhi.h"
 #include "mhi_trace.h"
 #include "../cnss2/main.h"
+#ifdef CONFIG_WLAN_CNSS_CORE
 #include "unified_wlan_cnsscore.h"
+#endif
 
 static int
 prepare_dma_mem(struct mhi_device_ctxt *mhi_dev_ctxt,

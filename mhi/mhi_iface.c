@@ -87,9 +87,9 @@ int mhi_ctxt_init(struct mhi_device_ctxt *mhi_dev_ctxt)
 	}
 
 	for (j = 0; j < mhi_dev_ctxt->mmio_info.nr_event_rings; j++) {
-		mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE,
-			"MSI_number = %d, event ring number = %d\n",
-			mhi_dev_ctxt->ev_ring_props[j].msi_vec, j);
+		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+			"irq_base = %d, MSI_number = %d, event ring number = %d\n",
+			mhi_dev_ctxt->core.irq_base, mhi_dev_ctxt->ev_ring_props[j].msi_vec, j);
 
 		/* outside of requested irq boundary */
 		if (mhi_dev_ctxt->core.max_nr_msis <=
@@ -178,10 +178,14 @@ void mhi_ctxt_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 		   mhi_dev_ctxt->dev_space.dma_dev_mem_start);
 
 	for (i = 0; i < mhi_dev_ctxt->core.max_nr_msis; i++)
+	{
+		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+		"mhi_ctxt_exit = %d, MSI_number = %d, event ring number = %d\n",
+		mhi_dev_ctxt->core.irq_base, mhi_dev_ctxt->ev_ring_props[i].msi_vec, i);
 		free_irq(mhi_dev_ctxt->core.irq_base +
 			mhi_dev_ctxt->ev_ring_props[i].msi_vec,
 			(void *)&mhi_dev_ctxt->mhi_local_event_ctxt[i]);
-
+	}
 	kfree(mhi_dev_ctxt->ev_ring_props);
 }
 
@@ -352,7 +356,7 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 
 	mhi_dev_ctxt->core.max_nr_msis = msi_requested;
 	mhi_dev_ctxt->core.irq_base = pcie_device->irq;
-	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE,
+	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 		"Setting IRQ Base to 0x%x\n", mhi_dev_ctxt->core.irq_base);
 
 	/* Initialize MHI CNTXT */
