@@ -27,7 +27,7 @@
 #include <soc/qcom/ramdump.h>
 #include <soc/qcom/subsystem_notif.h>
 #endif
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 12)
 #include <linux/device.h>
 #include <linux/vmalloc.h>
 #include <linux/platform_device.h>
@@ -412,8 +412,9 @@ int cnss_wlan_enable(struct device *dev,
 	memset(&req, 0, sizeof(req));
 
 	req.host_version_valid = 1;
+	memset(req.host_version, 0, sizeof(req.host_version));
 	strncpy(req.host_version, host_version,
-		QMI_WLFW_MAX_STR_LEN_V01 + 1);
+		QMI_WLFW_MAX_STR_LEN_V01);
 
 	req.tgt_cfg_valid = 1;
 	if (config->num_ce_tgt_cfg > QMI_WLFW_MAX_NUM_CE_V01)
@@ -2778,7 +2779,7 @@ out:
 	return ret;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 12)
 void cnss_remove(struct platform_device *plat_dev)
 #else
 static int cnss_remove(struct platform_device *plat_dev)
@@ -2814,7 +2815,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 #endif
 	plat_env = NULL;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 12)
 	return 0;
 #endif
 }

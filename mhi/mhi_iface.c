@@ -42,7 +42,7 @@ char hst_fw_img[] = "amss.bin";
 
 static int mhi_pci_probe(struct pci_dev *pcie_device,
 		const struct pci_device_id *mhi_device_id);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 12)
 static void __exit mhi_plat_remove(struct platform_device *pdev);
 #else
 static int __exit mhi_plat_remove(struct platform_device *pdev);
@@ -664,7 +664,7 @@ static void __exit mhi_exit(void)
 	platform_driver_unregister(&mhi_plat_driver);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 12)
 static void __exit mhi_plat_remove(struct platform_device *pdev)
 #else
 static int __exit mhi_plat_remove(struct platform_device *pdev)
@@ -674,7 +674,7 @@ static int __exit mhi_plat_remove(struct platform_device *pdev)
 	struct mhi_device_ctxt *mhi_dev_ctxt = platform_get_drvdata(pdev);
 	ipc_log_context_destroy(mhi_dev_ctxt->mhi_ipc_log);
 #endif
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 12)
 	return 0;
 #endif
 }

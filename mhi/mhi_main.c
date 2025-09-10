@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 #include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 12)
 #include <linux/platform_device.h>
 #endif
 #include <linux/completion.h>
