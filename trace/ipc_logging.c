@@ -3,8 +3,9 @@
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
+#ifndef CONFIG_NAPIER_X86
 #include <asm/arch_timer.h>
+#endif
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
@@ -473,8 +474,11 @@ EXPORT_SYMBOL(tsv_timestamp_write);
 int tsv_qtimer_write(struct encode_context *ectxt)
 {
 	int ret;
+#ifdef CONFIG_NAPIER_X86
+	uint64_t t_now = rdtsc();
+#else
 	uint64_t t_now = __arch_counter_get_cntvct();
-
+#endif
 	ret = tsv_write_header(ectxt, TSV_TYPE_QTIMER, sizeof(t_now));
 	if (ret)
 		return ret;
@@ -989,6 +993,7 @@ int ipc_log_context_destroy(void *ctxt)
 }
 EXPORT_SYMBOL(ipc_log_context_destroy);
 
+#ifndef CONFIG_WLAN_CNSS_CORE
 static int __init ipc_logging_init(void)
 {
 	check_and_create_debugfs();
@@ -999,7 +1004,6 @@ static int __init ipc_logging_init(void)
 	return 0;
 }
 
-#ifndef CONFIG_WLAN_CNSS_CORE
 module_init(ipc_logging_init);
 
 MODULE_DESCRIPTION("ipc logging");
