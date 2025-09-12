@@ -947,7 +947,6 @@ static void cnss_pci_set_wlaon_pwr_ctrl(struct cnss_pci_data *pci_priv,
 					bool set_vddd4blow, bool set_shutdown,
 					bool do_force_wake)
 {
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int ret;
 	u32 val, val_ori;
 
