@@ -4,7 +4,6 @@
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include <asm/arch_timer.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
