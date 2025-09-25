@@ -733,12 +733,14 @@ int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv, int type)
 	}
 
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
-	    test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state)) {
+	    test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state) &&
+	    !test_bit(CNSS_DEV_SHUTDOWN, &plat_priv->driver_state)) {
 		pci_priv->driver_ops->shutdown(pci_priv->pci_dev, type);
 		set_bit(CNSS_DEV_SHUTDOWN, &plat_priv->driver_state);
 	} else if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state)) {
 		pci_priv->driver_ops->remove(pci_priv->pci_dev);
 		clear_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
+		clear_bit(CNSS_DEV_SHUTDOWN, &plat_priv->driver_state);
 	}
 
 	return 0;
@@ -3807,7 +3809,7 @@ void cnss_pci_shutdown(struct pci_dev *pci_dev)
 		 * global reset will be called in
 		 * mhi_pm_slave_mode_power_off
 		 */
-		cnss_bus_dev_shutdown(plat_priv);
+		cnss_bus_dev_shutdown(plat_priv, FULL_RECOVERY);
 	}
 
 }
