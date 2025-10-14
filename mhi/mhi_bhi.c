@@ -757,6 +757,9 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 
 				bhi_base = mhi_dev_ctxt->core.bar0_base;
 				pcie_word_val = mhi_reg_read(bhi_base, BHIOFF);
+				mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+					"patch-1: bar0_base 0x%llx pcie_word_val %d",
+					mhi_dev_ctxt->core.bar0_base, pcie_word_val);
 
 				/* confirm it's a valid reading */
 				if (unlikely(pcie_word_val == U32_MAX)) {
@@ -765,8 +768,8 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 					return -EIO;
 				}
 				bhi_base += pcie_word_val;
-
-				pr_err("patch-1: clear rx-vec, bhi_base as 0x%p", bhi_ctxt->bhi_base);
+				mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+					"patch-1: clear rx-vec, bhi_base as 0x%llx", bhi_base);
 				if (bhi_base) {
 					/*
 					 * This controller supports rddm, we need to manually clear
@@ -774,7 +777,7 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 					 */
 					bhie_off = mhi_reg_read(bhi_base, BHIE_OFFSET);
 					if (unlikely(bhie_off == U32_MAX)) {
-						pr_err("Error getting bhie offset\n");
+						mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,"Error getting bhie offset\n");
 						/* TODO: goto bhie_error as MSM to avoid memory leak */
 						return -1;
 					}
@@ -783,7 +786,7 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 					memset_io(bhi_base + BHIE_RXVECADDR_LOW_OFFS,
 							0, BHIE_RXVECSTATUS_OFFS - BHIE_RXVECADDR_LOW_OFFS + 4);
 				} else {
-					pr_err("patch-1: bhi_base not initialized, ignore patch-1");
+					mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,"patch-1: bhi_base not initialized, ignore patch-1");
 				}
 			}
 #endif
