@@ -873,6 +873,8 @@ void bhi_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 	/* vector table is the last entry in bhie_mem_info */
 	fw_table->bhi_vec_entry = NULL;
 
+	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "Freed bhie fw\n");
+
 	if (!rddm_table->bhie_mem_info)
 		return;
 
@@ -887,6 +889,8 @@ void bhi_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 	kfree(rddm_table->bhie_mem_info);
 	rddm_table->bhie_mem_info = NULL;
 	rddm_table->bhi_vec_entry = NULL;
+
+	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "Freed rddm fw\n");
 
 	// Clear s_mhi_dev_ctxt
 	s_mhi_dev_ctxt = NULL;

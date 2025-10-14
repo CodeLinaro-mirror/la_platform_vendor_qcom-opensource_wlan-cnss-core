@@ -901,7 +901,7 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 	return 0;
 
 stop_mhi:
-	cnss_pci_stop_mhi(pci_priv);
+	cnss_pci_stop_mhi(pci_priv, FULL_RECOVERY);
 	cnss_suspend_pci_link(pci_priv);
 power_off:
 	cnss_power_off_device(plat_priv);
@@ -929,7 +929,7 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv, int type)
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
 	cnss_pci_set_auto_suspended(pci_priv, FULL_RECOVERY);
 
-	cnss_pci_stop_mhi(pci_priv);
+	cnss_pci_stop_mhi(pci_priv, type);
 
 	ret = cnss_suspend_pci_link(pci_priv);
 	if (ret)
@@ -1220,6 +1220,8 @@ int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv;
 
+	cnss_pr_info("Enter cnss_pci_unregister_driver_hdlr\n");
+
 	if (!pci_priv)
 		return -EINVAL;
 
@@ -1228,6 +1230,8 @@ int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 	cnss_pci_dev_shutdown(pci_priv, FULL_RECOVERY);
 	pci_priv->driver_ops = NULL;
 	clear_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
+
+	cnss_pr_info("Exit cnss_pci_unregister_driver_hdlr\n");
 
 	return 0;
 }
@@ -3436,6 +3440,8 @@ int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 	int ret = 0;
 	enum mhi_dev_ctrl mhi_dev_state = cnss_to_mhi_dev_state(mhi_state);
 
+	cnss_pr_dbg("Enter: State to set - %s\n", cnss_mhi_state_to_str(mhi_state));
+
 	if (!pci_priv) {
 		cnss_pr_err("pci_priv is NULL!\n");
 		return -ENODEV;
@@ -3495,7 +3501,7 @@ out:
 	return ret;
 }
 
-void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv)
+void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv, int type)
 {
 	struct cnss_plat_data *plat_priv;
 
@@ -3510,15 +3516,22 @@ void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv)
 	plat_priv = pci_priv->plat_priv;
 
 	cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_RESUME);
+	cnss_pr_info("cnss_pci_stop_mhi: CNSS state - 0x%lx, type - %d\n", plat_priv->driver_state, type);
 	if (!test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state))
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_POWER_OFF);
 
-	if (plat_priv->ramdump_info_v2.dump_data_valid ||
-	    test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state))
-		return;
-
-	if (!test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state))
+	cnss_pr_info("cnss_pci_stop_mhi: ramdump_info_v2 - %d\n", plat_priv->ramdump_info_v2.dump_data_valid);
+	if(!type){
+		if (plat_priv->ramdump_info_v2.dump_data_valid ||
+		    test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state))
+			return;
+		cnss_pr_info("cnss_pci_stop_mhi: checking MHI deinit condition\n");
+		if (!test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state))
+			cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_DEINIT);
+	} else {
+		cnss_pr_info("cnss_pci_stop_mhi: deinit MHI\n");
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_DEINIT);
+	}
 }
 
 static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)

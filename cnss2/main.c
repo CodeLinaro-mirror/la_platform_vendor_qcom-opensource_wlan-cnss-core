@@ -1346,6 +1346,9 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 
 	cnss_pr_info("wow ssr count %d suspend %d\n", plat_priv->wow_ssr_count,
 								  bus_suspend);
+	cnss_pr_info("cnss_do_recovery reason: %s(%d)\n",
+			cnss_recovery_reason_to_str(reason), reason);
+
 	plat_priv->recovery_count++;
 	if (bus_suspend) {
 		plat_priv->wow_ssr_count++;
@@ -1380,6 +1383,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			goto self_recovery;
 	case CNSS_REASON_DEFAULT:
 			cnss_pr_info("CNSS_REASON_DEFAULT, shutdown device\n");
+			cnss_pr_info("CNSS state: 0x%lx\n", plat_priv->driver_state);
 			complete(&plat_priv->rddm_complete);
 			cnss_bus_dev_shutdown(plat_priv, ONLY_SHUTDOWN);
 		break;
