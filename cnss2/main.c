@@ -1136,17 +1136,17 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 {
 	struct cnss_subsys_info *subsys_info =
 		&plat_priv->subsys_info;
-	
+
 	cnss_pr_info("cnss_do_recovery reason: %s(%d)\n",
 			cnss_recovery_reason_to_str(reason), reason);
-	
+
 	plat_priv->recovery_count++;
 
 	if (plat_priv->device_id == QCA6174_DEVICE_ID)
 		goto self_recovery;
 
 	cnss_bus_recovery_update_status(plat_priv);
-	
+
 	switch (reason) {
 	case CNSS_REASON_LINK_DOWN:
 		if (test_bit(LINK_DOWN_SELF_RECOVERY, &quirks))
@@ -1161,6 +1161,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			goto self_recovery;
 	case CNSS_REASON_DEFAULT:
 			cnss_pr_info("CNSS_REASON_DEFAULT, shutdown device\n");
+			cnss_pr_info("CNSS state: 0x%lx\n", plat_priv->driver_state);
 			complete(&plat_priv->rddm_complete);
 			cnss_bus_dev_shutdown(plat_priv, ONLY_SHUTDOWN);
 		break;
