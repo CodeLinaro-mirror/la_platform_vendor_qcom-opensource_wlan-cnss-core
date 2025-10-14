@@ -2352,7 +2352,7 @@ void mhi_reg_write(struct mhi_device_ctxt *mhi_dev_ctxt,
 		   uintptr_t io_offset, u32 val)
 {
 	mhi_log(mhi_dev_ctxt, MHI_MSG_RAW,
-		"d.s 0x%p off: 0x%lx 0x%x\n", io_addr, io_offset, val);
+		"d.s 0x%llx off: 0x%lx 0x%x\n", io_addr, io_offset, val);
 	iowrite32(val, io_addr + io_offset);
 	/* Flush write to device */
 	wmb();
