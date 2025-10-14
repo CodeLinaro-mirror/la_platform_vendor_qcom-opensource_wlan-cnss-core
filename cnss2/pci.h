@@ -128,7 +128,7 @@ static inline int cnss_pci_get_auto_suspended(void *bus_priv)
 
 int cnss_pci_get_bar_info(struct cnss_pci_data *pci_priv, void __iomem **va,
 			  phys_addr_t *pa);
-void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv);
+void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv, int type);
 void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv);
 int cnss_pm_request_resume(struct cnss_pci_data *pci_priv);
 int cnss_pci_dev_ramdump(struct cnss_pci_data *pci_priv);
