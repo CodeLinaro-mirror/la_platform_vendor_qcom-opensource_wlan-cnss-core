@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/of_reserved_mem.h>
 #if defined(SUPPORT_WLAN_EN)
 #include <linux/of_gpio.h>
 #endif
@@ -2597,7 +2598,7 @@ static void cnss_free_caldb_mem(struct cnss_plat_data *plat_priv)
 	vfree(plat_priv->caldb_mem);
 }
 
-static const struct platform_device_id cnss_platform_id_table[] = {
+static const struct platform_device_id cnss2_platform_id_table[] = {
 	{ .name = "qca6174", .driver_data = QCA6174_DEVICE_ID, },
 	{ .name = "qca6290", .driver_data = QCA6290_DEVICE_ID, },
 	{ .name = "qca6390", .driver_data = QCA6390_DEVICE_ID, },
@@ -2608,31 +2609,34 @@ static const struct platform_device_id cnss_platform_id_table[] = {
 	{ },
 };
 
-static const struct of_device_id cnss_of_match_table[] = {
+static const struct of_device_id cnss2_of_match_table[] = {
 	{
 		.compatible = "qcom,cnss",
-		.data = (void *)&cnss_platform_id_table[0]},
+		.data = (void *)&cnss2_platform_id_table[0]},
 	{
 		.compatible = "qcom,cnss-qca6290",
-		.data = (void *)&cnss_platform_id_table[1]},
+		.data = (void *)&cnss2_platform_id_table[1]},
 	{
 		.compatible = "qcom,cnss-qca6390",
-		.data = (void *)&cnss_platform_id_table[2]},
+		.data = (void *)&cnss2_platform_id_table[2]},
+	{
+		.compatible = "qcom,cnss2",
+		.data = (void *)&cnss2_platform_id_table[2]},
 	{
 		.compatible = "qcom,cnss-qcn7605",
-		.data = (void *)&cnss_platform_id_table[3]},
+		.data = (void *)&cnss2_platform_id_table[3]},
 	{
 		.compatible = "qcom,cnss-qnc7605-sdio",
-		.data = (void *)&cnss_platform_id_table[4]},
+		.data = (void *)&cnss2_platform_id_table[4]},
 	{
 		.compatible = "qcom,cnss-qca6490",
-		.data = (void *)&cnss_platform_id_table[5]},
+		.data = (void *)&cnss2_platform_id_table[5]},
 	{
 		.compatible = "qcom,cnss-qca-converged",
-		.data = (void *)&cnss_platform_id_table[6]},
+		.data = (void *)&cnss2_platform_id_table[6]},
 	{ },
 };
-MODULE_DEVICE_TABLE(of, cnss_of_match_table);
+MODULE_DEVICE_TABLE(of, cnss2_of_match_table);
 
 static inline bool cnss_is_converged_dt(struct cnss_plat_data *plat_priv)
 {
@@ -2653,7 +2657,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	int ret = 0;
 	struct cnss_plat_data *plat_priv;
 	int retry = 0;
-#ifndef CONFIG_NAPIER_X86 
+#ifndef CONFIG_NAPIER_X86
 	const struct of_device_id *of_id;
 	const struct platform_device_id *device_id;
 
@@ -2663,12 +2667,21 @@ static int cnss_probe(struct platform_device *plat_dev)
 		goto out;
 	}
 
-	of_id = of_match_device(cnss_of_match_table, &plat_dev->dev);
+	of_id = of_match_device(cnss2_of_match_table, &plat_dev->dev);
 	if (!of_id || !of_id->data) {
 		cnss_pr_err("Failed to find of match device!\n");
 		ret = -ENODEV;
 		goto out;
 	}
+
+#ifdef CONFIG_USE_CUSTOMIZED_DMA_MEM
+	ret = of_reserved_mem_device_init(&plat_dev->dev);
+	if (ret) {
+		pr_err("%s,memory init fail:%d\n", __func__,ret);
+		return -1;
+	}
+	cnss_set_plat_dev(plat_dev);
+#endif
 
 	device_id = of_id->data;
 
@@ -2690,6 +2703,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 #else
 	plat_priv->device_id = device_id->driver_data;
 	plat_priv->is_converged_dt = cnss_is_converged_dt(plat_priv);
+	cnss_pr_info("%s, name = %s, device_id = 0x%lX!\n", __func__, device_id->name, device_id->driver_data);
 #endif
 #else /* CONFIG_NAPIER_X86 */
 
@@ -2715,6 +2729,8 @@ static int cnss_probe(struct platform_device *plat_dev)
 #endif
 #endif /* CONFIG_NAPIER_X86 */
 
+	cnss_pr_info("%s, plat deviceid = 0x%lX!\n", __func__, plat_priv->device_id);
+
 	plat_priv->single_msi = !!force_single_msi;
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv);
 	cnss_pr_dbg("bus type selected  %d\n", plat_priv->bus_type);
@@ -2723,7 +2739,7 @@ static int cnss_probe(struct platform_device *plat_dev)
                      "ssr_period is (%d) ms\n",
                      plat_priv->cssr_timeout, cssr_enable, ssr_period);
 	cnss_set_plat_priv(plat_dev, plat_priv);
-#ifndef CONFIG_NAPIER_X86 
+#ifndef CONFIG_NAPIER_X86
 	platform_set_drvdata(plat_dev, plat_priv);
 #endif
 	ret = cnss_get_resources(plat_priv);
@@ -2853,7 +2869,7 @@ power_off:
 free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
-#ifndef CONFIG_NAPIER_X86 
+#ifndef CONFIG_NAPIER_X86
 	platform_set_drvdata(plat_dev, NULL);
 	cnss_set_plat_priv(plat_dev, NULL);
 #else
@@ -2907,7 +2923,7 @@ static struct platform_driver cnss_platform_driver = {
 	.driver = {
 		.name = "cnss2",
 		.owner = THIS_MODULE,
-		.of_match_table = cnss_of_match_table,
+		.of_match_table = cnss2_of_match_table,
 #ifdef CONFIG_CNSS_ASYNC
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 #endif
@@ -2926,7 +2942,7 @@ static int __init cnss_initialize(void)
 	int ret = 0;
 
 	cnss_debug_init();
-#ifdef CONFIG_NAPIER_X86 
+#ifdef CONFIG_NAPIER_X86
 	ret = cnss_probe(NULL);
 #else
 	ret = platform_driver_register(&cnss_platform_driver);

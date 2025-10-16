@@ -49,6 +49,7 @@ void wcnss_pre_alloc_exit(void);
 
 #ifdef CONFIG_USE_CUSTOMIZED_DMA_MEM
 void *cnss_get_plat_dev(void);
+void cnss_set_plat_dev(struct platform_device *plat_dev);
 #endif
 
 #endif

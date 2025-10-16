@@ -37,6 +37,11 @@ void *cnss_get_plat_dev(void)
 	return s_plat_dev;
 }
 
+void cnss_set_plat_dev(struct platform_device *plat_dev)
+{
+	s_plat_dev = plat_dev;
+}
+
 void *cnss_dma_alloc_coherent(struct device *dev, size_t size,
 			      dma_addr_t *dma_handle, gfp_t flag)
 {
@@ -161,12 +166,18 @@ static int unified_pdrv_init(void)
 		goto fail6;
 	}
 #endif
+	/* cnss Registration */
+	ret = cnss_initialize();
+	if (ret){
+		printk("%s: updrv: failed to register cnss\n",__func__);
+		goto fail7;
+	}
 	/* ipc_router_mhi_xprt Registration */
 #ifdef CONFIG_MHI_XPRT
 	ret = ipc_router_mhi_xprt_init();
 	if (ret){
 		printk("%s: updrv: failed to register ipc_router_mhi_xprt (ipc_xprt)\n",__func__);
-		goto fail7;
+		goto fail8;
 	}
 #endif
 	/* ipc_router_hsic_xprt Registration */
@@ -174,24 +185,25 @@ static int unified_pdrv_init(void)
 	ret = msm_ipc_router_hsic_xprt_init();
 	if (ret){
 		printk("%s: updrv: failed to register ipc_router_hsic_xprt\n",__func__);
-		goto fail8;
+		goto fail9;
 	}
 #endif
 #ifdef CONFIG_SDIO_XPRT
 	ret = msm_ipc_router_sdio_xprt_init();
 	if (ret){
                 printk("%s: updrv: failed to register ipc_router_sdio_xprt\n",__func__);
-                goto fail9;
+                goto fail10;
         }
 
 #endif
+#if 0
 	/* cnss Registration */
 	ret = cnss_initialize();
 	if (ret){
 		printk("%s: updrv: failed to register cnss\n",__func__);
 		goto fail10;
 	}
-
+#endif
 #ifdef CONFIG_MSM_DIAG_INTERFACE
 	/* diag Registration */
 	ret = diagchar_init();
@@ -251,27 +263,27 @@ fail12:
 #ifdef CONFIG_MSM_DIAG_INTERFACE
 fail11:
 #endif
-	cnss_exit();
-fail10:
 #ifdef CONFIG_SDIO_XPRT
-fail9:
+fail10:
 #endif
 #ifdef CONFIG_HSIC_XPRT
 	msm_ipc_router_hsic_xprt_deinit();
-fail8:
+fail9:
 #endif
 #ifdef CONFIG_MHI_XPRT
 	ipc_router_mhi_xprt_deinit();
 #endif
 #ifdef CONFIG_MHI_XPRT
-fail7:
+fail8:
 #endif
+	cnss_exit();
+fail7:
 #ifdef CONFIG_DIAG_IPC_BRIDGE
 	diag_bridge_exit(); /* ipc_bridge  */
 fail6:
 #endif
 	qmi_interface_deinit();
-#ifdef CONFIG_DIAG_IPC_BRIDGE	
+#ifdef CONFIG_DIAG_IPC_BRIDGE
 	diag_bridge_exit();
 #endif
 fail5:
@@ -331,7 +343,7 @@ static void unified_pdrv_deinit(void)
 	mhi_exit();
 #endif
 }
-
+#if 0
 static const struct platform_device_id cnss2_platform_id_table[] = {
 	{ .name = "qca6390", .driver_data = QCA6390_DEVICE_ID, },
 	{ .name = "qcn7605", .driver_data = QCN7605_DEVICE_ID, },
@@ -345,10 +357,11 @@ static const struct of_device_id cnss2_of_match_table[] = {
 	{ },
 };
 MODULE_DEVICE_TABLE(of, cnss2_of_match_table);
-
+#endif
 static int cnss2_probe(struct platform_device *plat_dev)
 {
 	int ret;
+#if 0
 #ifdef CONFIG_USE_CUSTOMIZED_DMA_MEM
 	const struct of_device_id *of_id;
 
@@ -368,6 +381,7 @@ static int cnss2_probe(struct platform_device *plat_dev)
 	}
 	s_plat_dev = plat_dev;
 #endif
+#endif
 	ret = unified_pdrv_init();
 
 	return ret;
@@ -380,6 +394,7 @@ static int cnss2_remove(struct platform_device *plat_dev)
 
 	return 0;
 }
+#if 0
 #ifdef CONFIG_USE_CUSTOMIZED_DMA_MEM
 static struct platform_driver cnss2_platform_driver = {
 	.probe  = cnss2_probe,
@@ -391,14 +406,15 @@ static struct platform_driver cnss2_platform_driver = {
 	},
 };
 #endif
+#endif
 static int cnss2_module_init(void)
 {
 	int ret;
-#ifdef CONFIG_USE_CUSTOMIZED_DMA_MEM
-	ret = platform_driver_register(&cnss2_platform_driver);
-#else
+//#ifdef CONFIG_USE_CUSTOMIZED_DMA_MEM
+//	ret = platform_driver_register(&cnss2_platform_driver);
+//#else
 	ret = cnss2_probe(NULL);
-#endif
+//#endif
 	if (ret)
 		pr_err("register platform driver failed, ret = %d\n", ret);
 
@@ -408,11 +424,11 @@ static int cnss2_module_init(void)
 static void cnss2_module_exit(void)
 {
 	unified_pdrv_deinit();
-#ifdef CONFIG_USE_CUSTOMIZED_DMA_MEM
-	platform_driver_unregister(&cnss2_platform_driver);
-#else
+//#ifdef CONFIG_USE_CUSTOMIZED_DMA_MEM
+//	platform_driver_unregister(&cnss2_platform_driver);
+//#else
 	cnss2_remove(NULL);
-#endif
+//#endif
 }
 
 module_init(cnss2_module_init);
