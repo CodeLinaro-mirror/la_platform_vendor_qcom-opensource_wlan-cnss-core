@@ -636,7 +636,7 @@ int mhi_pm_control_device(struct mhi_device *mhi_device, enum mhi_dev_ctrl ctrl)
 {
 	struct mhi_device_ctxt *mhi_dev_ctxt = mhi_device->mhi_dev_ctxt;
 	unsigned long flags;
-	int rddm_retry = (200000) / BHIE_RDDM_DELAY_TIME_US; /* time to enter rddm */
+	int rddm_retry = 17; /* time to enter rddm - rddm_retry*BHIE_RDDM_POLL_TIME_MS */
 	u32 cur_exec;
 
 	if (!mhi_dev_ctxt)
@@ -678,9 +678,11 @@ int mhi_pm_control_device(struct mhi_device *mhi_device, enum mhi_dev_ctrl ctrl)
 		mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "Waiting for device to enter RDDM\n");
 		while (rddm_retry--) {
 			cur_exec = mhi_reg_read(mhi_dev_ctxt->bhi_ctxt.bhi_base, BHI_EXECENV);
-			if (cur_exec == MHI_EXEC_ENV_RDDM)
+			if (cur_exec == MHI_EXEC_ENV_RDDM){
+				mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "RDDM detected after %d tries\n", 17-rddm_retry);
 				break;
-			udelay(BHIE_RDDM_DELAY_TIME_US);
+			}
+			mdelay(BHIE_RDDM_POLL_TIME_MS);
 		}
 		if (rddm_retry <= 0) {
 			/* This is a hardware reset should gurantee device enter rddm */
