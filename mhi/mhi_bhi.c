@@ -784,7 +784,7 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 				bhi_base = mhi_dev_ctxt->core.bar0_base;
 				pcie_word_val = mhi_reg_read(bhi_base, BHIOFF);
 				mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
-					"patch-1: bar0_base 0x%llx pcie_word_val %d",
+					"patch-1: bar0_base 0x%p pcie_word_val %d",
 					mhi_dev_ctxt->core.bar0_base, pcie_word_val);
 
 				/* confirm it's a valid reading */
@@ -795,7 +795,7 @@ int bhi_probe(struct mhi_device_ctxt *mhi_dev_ctxt)
 				}
 				bhi_base += pcie_word_val;
 				mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
-					"patch-1: clear rx-vec, bhi_base as 0x%llx", bhi_base);
+					"patch-1: clear rx-vec, bhi_base as 0x%p", bhi_base);
 				if (bhi_base) {
 					/*
 					 * This controller supports rddm, we need to manually clear
