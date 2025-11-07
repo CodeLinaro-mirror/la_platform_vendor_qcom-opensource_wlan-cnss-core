@@ -733,6 +733,26 @@ int cnss_get_direct_link_sid(struct device *dev, uint16_t *sid)
 }
 EXPORT_SYMBOL(cnss_get_direct_link_sid);
 
+int cnss_register_tsf_captured_handler(struct device *dev,
+				    wlan_tsf_handler_t handler,
+				    void *context)
+{
+	return -EINVAL;
+}
+EXPORT_SYMBOL(cnss_register_tsf_captured_handler);
+
+int cnss_unregister_tsf_captured_handler(struct device *dev, void *context)
+{
+	return -EINVAL;
+}
+EXPORT_SYMBOL(cnss_unregister_tsf_captured_handler);
+
+int cnss_pci_get_iova_info(struct device *dev, uint64_t *addr, uint64_t *size)
+{
+	return -EINVAL;
+}
+EXPORT_SYMBOL(cnss_pci_get_iova_info);
+
 int cnss_athdiag_read(struct device *dev, u32 offset, u32 mem_type,
 		      u32 data_len, u8 *output)
 {

@@ -23,6 +23,8 @@
 
 #define CNSS_SSR_DRIVER_DUMP_MAX_REGIONS 32
 
+typedef void (*wlan_tsf_handler_t)(void *, uint64_t);
+
 enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_NONE,
 	CNSS_BUS_WIDTH_IDLE,
@@ -452,6 +454,11 @@ extern int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
 					size_t *size);
 extern int cnss_get_direct_link_sid(struct device *dev, uint16_t *sid);
 extern int cnss_get_pci_slot(struct device *dev);
+extern int cnss_register_tsf_captured_handler(struct device *dev,
+				    wlan_tsf_handler_t handler,
+				    void *context);
+extern int cnss_unregister_tsf_captured_handler(struct device *dev, void *context);
+extern int cnss_pci_get_iova_info(struct device *dev, uint64_t *addr, uint64_t *size);
 extern struct kobject *cnss_get_wifi_kobj(struct device *dev);
 extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);
 extern bool cnss_audio_is_direct_link_supported(struct device *dev);
