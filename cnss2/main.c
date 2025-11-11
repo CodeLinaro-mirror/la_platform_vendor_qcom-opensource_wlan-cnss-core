@@ -2133,13 +2133,18 @@ void cnss_unregister_subsys(struct cnss_plat_data *plat_priv) {
  */
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 {
-#ifndef CONFIG_NAPIER_X86
 	int ret = 0;
 	const char *dev_name = "wlan";
-#endif
 	struct cnss_ramdump_info_v2 *info_v2;
 	struct cnss_dump_data *dump_data;
 
+#ifdef CONFIG_NAPIER_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	if (!pci_priv || !pci_priv->pci_dev) {
+		cnss_pr_err("PCI device not probed yet\n");
+		return -ENODEV;
+	}
+#endif
 
 	info_v2 = &plat_priv->ramdump_info_v2;
 	dump_data = &info_v2->dump_data;
@@ -2154,21 +2159,22 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 	dump_data->seg_version = CNSS_DUMP_SEG_VER;
 	strncpy(dump_data->name, CNSS_DUMP_NAME,
 		sizeof(dump_data->name));
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_NAPIER_X86
+	info_v2->ramdump_dev = create_ramdump_device(dev_name, &pci_priv->pci_dev->dev);
+#else
 	info_v2->ramdump_dev = create_ramdump_device(dev_name, &plat_priv->plat_dev->dev);
+#endif
 	if (!info_v2->ramdump_dev) {
 		cnss_pr_err("Failed to create ramdump device!\n");
 		ret = -ENOMEM;
 		goto free_ramdump;
 	}
-#endif
 	return 0;
-#ifndef CONFIG_NAPIER_X86
+
 free_ramdump:
 	kfree(info_v2->dump_data_vaddr);
 	info_v2->dump_data_vaddr = NULL;
 	return ret;
-#endif
 }
 
 void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
@@ -2177,10 +2183,8 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
 
 	info_v2 = &plat_priv->ramdump_info_v2;
 
-#ifndef CONFIG_NAPIER_X86
 	if (info_v2->ramdump_dev)
 		destroy_ramdump_device(info_v2->ramdump_dev);
-#endif
 
 	kfree(info_v2->dump_data_vaddr);
 	info_v2->dump_data_vaddr = NULL;
