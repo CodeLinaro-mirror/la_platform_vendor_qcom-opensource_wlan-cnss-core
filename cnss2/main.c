@@ -1168,12 +1168,17 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			goto self_recovery;
 #endif
 	case CNSS_REASON_DEFAULT:
-			cnss_pr_info("CNSS_REASON_DEFAULT, shutdown device\n");
-			cnss_pr_info("CNSS state: 0x%lx\n", plat_priv->driver_state);
-			complete(&plat_priv->rddm_complete);
-			cnss_bus_dev_shutdown(plat_priv, ONLY_SHUTDOWN);
+		cnss_pr_info("CNSS_REASON_DEFAULT, shutdown device\n");
+		cnss_pr_info("CNSS state: 0x%lx\n", plat_priv->driver_state);
+		complete(&plat_priv->rddm_complete);
+		cnss_bus_dev_shutdown(plat_priv, ONLY_SHUTDOWN);
 		break;
 	case CNSS_REASON_TIMEOUT:
+#ifdef CONFIG_CNSS_TIMEOUT_SHUTDOWN
+		cnss_pr_info("CNSS_REASON_TIMEOUT, shutdown device\n");
+		cnss_pr_info("CNSS state: 0x%lx\n", plat_priv->driver_state);
+		cnss_bus_dev_shutdown(plat_priv, ONLY_SHUTDOWN);
+#endif
 		break;
 	default:
 		cnss_pr_err("Unsupported recovery reason: %s(%d)\n",
