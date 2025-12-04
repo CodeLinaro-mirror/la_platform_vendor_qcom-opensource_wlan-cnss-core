@@ -123,6 +123,7 @@ module_param(force_single_msi, bool, 0600);
 MODULE_PARM_DESC(force_single_msi, "Force single MSI mode");
 
 static unsigned int wow_wake_enable;
+int cnss_enable_wow_wake(const char *val, const struct kernel_param *kp);
 int cnss_enable_wow_wake(const char *val, const struct kernel_param *kp)
 {
 	int ret;
@@ -168,7 +169,7 @@ struct cnss_driver_event {
 	int ret;
 	void *data;
 };
-
+#ifndef CONFIG_NAPIER_X86
 static void cnss_msi_interrupt_check(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_pci_data *pci_priv;
@@ -197,7 +198,7 @@ static void cnss_msi_interrupt_check(struct cnss_plat_data *plat_priv)
 
 	return;
 }
-
+#endif
 static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
 {
@@ -493,7 +494,7 @@ int cnss_wlan_enable(struct device *dev,
 		goto out;
 
 skip_cfg:
-	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, mode);
+	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, (enum wlfw_driver_mode_enum_v01)mode);
 out:
 	return ret;
 }
@@ -509,7 +510,9 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 	if (qmi_bypass)
 		return 0;
 
+#ifndef CONFIG_NAPIER_X86
 	cnss_msi_interrupt_check(plat_priv);
+#endif
 	return cnss_wlfw_wlan_mode_send_sync(plat_priv, QMI_WLFW_OFF_V01);
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
@@ -1635,6 +1638,27 @@ static int cnss_wlfw_server_arrive_hdlr(struct cnss_plat_data *plat_priv)
 out:
 	return ret;
 }
+
+int cnss_register_tsf_captured_handler(struct device *dev,
+				       wlan_tsf_handler_t handler,
+				       void *ctx)
+{
+	return -EINVAL;
+}
+EXPORT_SYMBOL(cnss_register_tsf_captured_handler);
+
+int cnss_unregister_tsf_captured_handler(struct device *dev, void *ctx)
+{
+	return -EINVAL;
+}
+EXPORT_SYMBOL(cnss_unregister_tsf_captured_handler);
+
+int cnss_set_host_param(struct device *dev,
+			struct cnss_wlan_host_param *param)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_set_host_param);
 
 static int cnss_cold_boot_cal_start_hdlr(struct cnss_plat_data *plat_priv)
 {
@@ -2782,6 +2806,7 @@ out:
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 12)
+void cnss_remove(struct platform_device *plat_dev);
 void cnss_remove(struct platform_device *plat_dev)
 #else
 static int cnss_remove(struct platform_device *plat_dev)
@@ -2836,6 +2861,7 @@ static struct platform_driver cnss_platform_driver = {
 };
 #endif
 #ifdef CONFIG_WLAN_CNSS_CORE
+int cnss_initialize(void);
 int cnss_initialize(void)
 #else
 static int __init cnss_initialize(void)
@@ -2856,6 +2882,7 @@ static int __init cnss_initialize(void)
 }
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+void cnss_exit(void);
 void cnss_exit(void)
 #else
 static void __exit cnss_exit(void)

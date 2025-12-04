@@ -533,7 +533,7 @@ static const struct file_operations bhi_fops = {
 	.open = bhi_open,
 };
 
-int bhi_expose_dev_bhi(struct mhi_device_ctxt *mhi_dev_ctxt)
+static int bhi_expose_dev_bhi(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	int ret_val;
 	struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;

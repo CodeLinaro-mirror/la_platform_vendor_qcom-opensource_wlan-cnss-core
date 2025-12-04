@@ -28,6 +28,7 @@ static struct cnss_dfs_nol_info {
 	u16 dfs_nol_info_len;
 } dfs_nol_info;
 
+int cnss_set_wlan_unsafe_channel(u16 *unsafe_ch_list, u16 ch_count);
 int cnss_set_wlan_unsafe_channel(u16 *unsafe_ch_list, u16 ch_count)
 {
 	mutex_lock(&unsafe_channel_list_lock);
@@ -48,6 +49,8 @@ int cnss_set_wlan_unsafe_channel(u16 *unsafe_ch_list, u16 ch_count)
 }
 EXPORT_SYMBOL(cnss_set_wlan_unsafe_channel);
 
+int cnss_get_wlan_unsafe_channel(u16 *unsafe_ch_list,
+				 u16 *ch_count, u16 buf_len);
 int cnss_get_wlan_unsafe_channel(u16 *unsafe_ch_list,
 				 u16 *ch_count, u16 buf_len)
 {
@@ -72,6 +75,7 @@ int cnss_get_wlan_unsafe_channel(u16 *unsafe_ch_list,
 }
 EXPORT_SYMBOL(cnss_get_wlan_unsafe_channel);
 
+int cnss_wlan_set_dfs_nol(const void *info, u16 info_len);
 int cnss_wlan_set_dfs_nol(const void *info, u16 info_len)
 {
 	void *temp;
@@ -101,6 +105,7 @@ int cnss_wlan_set_dfs_nol(const void *info, u16 info_len)
 }
 EXPORT_SYMBOL(cnss_wlan_set_dfs_nol);
 
+int cnss_wlan_get_dfs_nol(void *info, u16 info_len);
 int cnss_wlan_get_dfs_nol(void *info, u16 info_len)
 {
 	int len;

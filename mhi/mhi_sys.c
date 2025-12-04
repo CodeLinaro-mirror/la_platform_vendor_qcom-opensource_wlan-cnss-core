@@ -130,7 +130,7 @@ static ssize_t mhi_dbgfs_chan_read(struct file *fp, char __user *buf,
 		return -ENOMEM;
 }
 
-int mhi_dbgfs_open(struct inode *inode, struct file *fp)
+static int mhi_dbgfs_open(struct inode *inode, struct file *fp)
 {
 	fp->private_data = inode->i_private;
 	return 0;
