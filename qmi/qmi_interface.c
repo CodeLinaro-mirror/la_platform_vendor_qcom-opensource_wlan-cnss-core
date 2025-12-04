@@ -2300,6 +2300,7 @@ int qmi_svc_unregister(struct qmi_handle *handle)
 EXPORT_SYMBOL(qmi_svc_unregister);
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+int qmi_interface_init(void);
 int qmi_interface_init(void)
 #else
 static int __init qmi_interface_init(void)

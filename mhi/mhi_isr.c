@@ -388,6 +388,7 @@ void mhi_dump_event_ring(struct mhi_device_ctxt *mhi_dev_ctxt)
 
 void mhi_dump_irq(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
+/*
 	int irq;
 	struct irq_desc *desc;
 
@@ -401,6 +402,7 @@ void mhi_dump_irq(struct mhi_device_ctxt *mhi_dev_ctxt)
 	desc = irq_to_desc(irq);
 	mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
 		"MSI1 irq=%d, depth=%d\n", irq, desc->depth);
+*/
 }
 
 void mhi_ev_task(unsigned long data)

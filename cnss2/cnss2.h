@@ -106,6 +106,8 @@ struct cnss_wlan_runtime_ops {
 	int (*runtime_resume)(struct pci_dev *pdev);
 };
 
+typedef void (*wlan_tsf_handler_t)(void *, uint64_t);
+
 enum cnss_driver_status {
 	CNSS_UNINITIALIZED,
 	CNSS_INITIALIZED,
@@ -234,6 +236,10 @@ struct cnss_shadow_reg_v2_cfg {
 struct cnss_rri_over_ddr_cfg {
 	u32 base_addr_low;
 	u32 base_addr_high;
+};
+
+struct cnss_wlan_host_param {
+	const char *chip_name;
 };
 
 struct cnss_wlan_enable_cfg {
@@ -398,6 +404,13 @@ extern bool cnss_get_audio_shared_iommu_group_cap(struct device *dev);
 extern int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
 					size_t *size);
 extern int cnss_get_direct_link_sid(struct device *dev, uint16_t *sid);
+extern int cnss_pci_get_iova_info(struct device *dev, uint64_t *addr, uint64_t *size);
+extern int cnss_register_tsf_captured_handler(struct device *dev,
+                                       wlan_tsf_handler_t handler,
+                                       void *ctx);
+extern int cnss_unregister_tsf_captured_handler(struct device *dev, void *ctx);
+extern int cnss_set_host_param(struct device *dev,
+			struct cnss_wlan_host_param *param);
 #ifdef CONFIG_SDIO_QCN
 extern int cnss_sdio_wlan_register_driver(struct cnss_sdio_wlan_driver *
 					  driver_ops);

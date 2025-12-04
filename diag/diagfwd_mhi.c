@@ -106,7 +106,7 @@ static int generate_nl_msg(unsigned char *buf, size_t len)
 #undef WLAN_NL_CNSS_FW_MSG
 }
 
-void my_write_xx(int dev_id, unsigned char *data, size_t len)
+static void my_write_xx(int dev_id, unsigned char *data, size_t len)
 {
 	/* Check input params */
 	if (!data || len > DIAG_MAX_HDLC_BUF_SIZE)
@@ -151,7 +151,7 @@ static void nl_srv_rcv(struct sk_buff *skb)
 	return;
 }
 
-int nl_srv_create(void)
+static int nl_srv_create(void)
 {
 #define NETLINK_CUSTOM_FW 27
 	int retcode = 0;
@@ -172,7 +172,7 @@ int nl_srv_create(void)
 #undef NETLINK_CUSTOM_FW
 }
 
-void nl_srv_destroy(void)
+static void nl_srv_destroy(void)
 {
 	if (srv_sock)
 		netlink_kernel_release(srv_sock);

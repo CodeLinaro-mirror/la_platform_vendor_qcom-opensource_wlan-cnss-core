@@ -3685,8 +3685,8 @@ int msm_ipc_router_lookup_server_name(struct msm_ipc_port_name *srv_name,
 
 	return i;
 }
-
-int msm_ipc_router_close(void)
+#if 0
+static int msm_ipc_router_close(void)
 {
 	struct msm_ipc_router_xprt_info *xprt_info, *tmp_xprt_info;
 
@@ -3700,7 +3700,7 @@ int msm_ipc_router_close(void)
 	up_write(&xprt_info_list_lock_lha5);
 	return 0;
 }
-
+#endif
 /**
  * pil_vote_load_worker() - Process vote to load the modem
  *
@@ -4329,7 +4329,7 @@ void msm_ipc_router_xprt_notify(struct msm_ipc_router_xprt *xprt,
  *
  * @return: 0 on success, -ENODEV on failure.
  */
-int parse_devicetree(struct device_node *node)
+static int parse_devicetree(struct device_node *node)
 {
 #ifdef CONFIG_ARCH_QCOM
 	char *key;
@@ -4464,6 +4464,7 @@ static int ipc_router_core_deinit(void)
 }
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+int msm_ipc_router_init(void);
 int msm_ipc_router_init(void)
 #else
 static int msm_ipc_router_init(void)

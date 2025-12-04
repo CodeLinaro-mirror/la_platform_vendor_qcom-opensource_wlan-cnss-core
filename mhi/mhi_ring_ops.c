@@ -183,8 +183,8 @@ int get_element_index(struct mhi_ring *ring,
 	*index = ((uintptr_t)address - (uintptr_t)ring->base) / ring->el_size;
 	return r;
 }
-
-int get_element_addr(struct mhi_ring *ring,
+#if 0
+static int get_element_addr(struct mhi_ring *ring,
 				uintptr_t index, void **address)
 {
 	uintptr_t ring_size = 0;
@@ -196,3 +196,4 @@ int get_element_addr(struct mhi_ring *ring,
 			(index % ring_size) * ring->el_size);
 	return 0;
 }
+#endif

@@ -219,6 +219,7 @@ static int diagfwd_sdio_probe(struct platform_device *pdev)
 #endif
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+int diagchar_init(void);
 int diagchar_init(void)
 #else
 static int __init diagchar_init(void)
@@ -269,6 +270,7 @@ static int __init diagchar_init(void)
 }
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+void diagchar_exit(void);
 void diagchar_exit(void)
 #else
 static void diagchar_exit(void)

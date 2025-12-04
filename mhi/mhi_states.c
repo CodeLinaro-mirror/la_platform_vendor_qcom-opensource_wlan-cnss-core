@@ -770,7 +770,7 @@ static int process_amss_transition(
 	return 0;
 }
 
-void process_stt_work_item(
+static void process_stt_work_item(
 			struct mhi_device_ctxt  *mhi_dev_ctxt,
 			enum STATE_TRANSITION cur_work_item)
 {

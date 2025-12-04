@@ -191,7 +191,7 @@ free_local_ec_list:
 	mhi_dev_ctxt->mhi_local_event_ctxt = NULL;
 	return r;
 }
-void ring_ev_db(struct mhi_device_ctxt *mhi_dev_ctxt, u32 event_ring_index)
+static void ring_ev_db(struct mhi_device_ctxt *mhi_dev_ctxt, u32 event_ring_index)
 {
 	struct mhi_ring *event_ctxt = NULL;
 	u64 db_value = 0;
@@ -267,7 +267,7 @@ void init_event_ctxt_array(struct mhi_device_ctxt *mhi_dev_ctxt)
 	}
 }
 
-int init_local_ev_ring_by_type(struct mhi_device_ctxt *mhi_dev_ctxt,
+static int init_local_ev_ring_by_type(struct mhi_device_ctxt *mhi_dev_ctxt,
 		  enum MHI_TYPE_EVENT_RING type)
 {
 	int ret_val = 0;

@@ -456,6 +456,7 @@ out:
 }
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+int cnss_utils_init(void);
 int cnss_utils_init(void)
 #else
 static int __init cnss_utils_init(void)
@@ -478,6 +479,7 @@ static int __init cnss_utils_init(void)
 }
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+void cnss_utils_exit(void);
 void cnss_utils_exit(void)
 #else
 static void __exit cnss_utils_exit(void)
