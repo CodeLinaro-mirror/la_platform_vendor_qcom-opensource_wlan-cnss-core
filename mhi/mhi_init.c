@@ -45,7 +45,7 @@ static int mhi_init_sync(struct mhi_device_ctxt *mhi_dev_ctxt)
 	return 0;
 }
 
-size_t calculate_mhi_space(struct mhi_device_ctxt *mhi_dev_ctxt)
+static size_t calculate_mhi_space(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	size_t mhi_dev_mem = 0;
 
@@ -63,7 +63,7 @@ size_t calculate_mhi_space(struct mhi_device_ctxt *mhi_dev_ctxt)
 	return mhi_dev_mem;
 }
 
-void init_dev_ev_ctxt(struct mhi_event_ctxt *ev_ctxt,
+static void init_dev_ev_ctxt(struct mhi_event_ctxt *ev_ctxt,
 		 dma_addr_t p_base_addr, size_t len)
 {
 	ev_ctxt->mhi_event_ring_base_addr = p_base_addr;
@@ -72,7 +72,7 @@ void init_dev_ev_ctxt(struct mhi_event_ctxt *ev_ctxt,
 	ev_ctxt->mhi_event_ring_len = len;
 }
 
-void init_local_ev_ctxt(struct mhi_ring *ev_ctxt,
+static void init_local_ev_ctxt(struct mhi_ring *ev_ctxt,
 		 void *v_base_addr, size_t len)
 {
 	ev_ctxt->base = v_base_addr;
@@ -82,8 +82,8 @@ void init_local_ev_ctxt(struct mhi_ring *ev_ctxt,
 	ev_ctxt->el_size = sizeof(union mhi_event_pkt);
 	ev_ctxt->overwrite_en = 0;
 }
-
-void init_dev_chan_ctxt(struct mhi_chan_ctxt *chan_ctxt,
+#if 0
+static void init_dev_chan_ctxt(struct mhi_chan_ctxt *chan_ctxt,
 		 dma_addr_t p_base_addr, size_t len, int ev_index)
 {
 	chan_ctxt->mhi_trb_ring_base_addr = p_base_addr;
@@ -95,7 +95,7 @@ void init_dev_chan_ctxt(struct mhi_chan_ctxt *chan_ctxt,
 	chan_ctxt->mhi_event_ring_index = ev_index;
 }
 
-void init_local_chan_ctxt(struct mhi_ring *chan_ctxt,
+static void init_local_chan_ctxt(struct mhi_ring *chan_ctxt,
 		 void *v_base_addr, size_t len)
 {
 	chan_ctxt->base = v_base_addr;
@@ -105,7 +105,7 @@ void init_local_chan_ctxt(struct mhi_ring *chan_ctxt,
 	chan_ctxt->el_size = sizeof(union mhi_event_pkt);
 	chan_ctxt->overwrite_en = 0;
 }
-
+#endif
 /**
  * mhi_cmd_ring_init-  Initialization of the command ring
  *
@@ -137,7 +137,7 @@ static int mhi_cmd_ring_init(struct mhi_cmd_ctxt *cmd_ctxt,
 	return 0;
 }
 
-int init_mhi_dev_mem(struct mhi_device_ctxt *mhi_dev_ctxt)
+static int init_mhi_dev_mem(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	size_t mhi_mem_index = 0, ring_len;
 	void *dev_mem_start;

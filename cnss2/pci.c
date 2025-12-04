@@ -2124,6 +2124,12 @@ int cnss_get_direct_link_sid(struct device *dev, uint16_t *sid)
 }
 EXPORT_SYMBOL(cnss_get_direct_link_sid);
 
+int cnss_pci_get_iova_info(struct device *dev, uint64_t *addr, uint64_t *size)
+{
+	return -EINVAL;
+}
+EXPORT_SYMBOL(cnss_pci_get_iova_info);
+
 void cnss_pci_fw_name_add_path(struct cnss_pci_data *pci_priv,
 			       char *file_name, char *name)
 {
@@ -2578,7 +2584,7 @@ static int cnss_pci_get_one_msi_assignment(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-bool cnss_pci_fallback_one_msi(struct cnss_pci_data *pci_priv,
+static bool cnss_pci_fallback_one_msi(struct cnss_pci_data *pci_priv,
 			       int *num_vectors)
 {
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
@@ -2603,7 +2609,7 @@ bool cnss_pci_fallback_one_msi(struct cnss_pci_data *pci_priv,
 	return true;
 }
 
-bool cnss_pci_alloc_irq_vectors(struct cnss_pci_data *pci_priv)
+static bool cnss_pci_alloc_irq_vectors(struct cnss_pci_data *pci_priv)
 {
 	int num_vectors;
 	int ret;
@@ -3651,6 +3657,17 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	pci_save_state(pci_dev);
 	pci_priv->default_state = pci_store_saved_state(pci_dev);
 
+	if (pci_dev->device == QCA6490_DEVICE_ID || pci_dev->device == QCA6390_DEVICE_ID) {
+		/* Disable L1SS for QCA6390 */
+		pci_read_config_byte(pci_dev, 0x1F4, &aspm_state);
+		cnss_pr_err("Current L1SS status: 0x%x", aspm_state);
+		if (aspm_state & 0xF) {
+			pci_write_config_byte(pci_dev, 0x1F4, aspm_state & ~0xF);
+			pci_read_config_byte(pci_dev, 0x1F4, &aspm_state);
+			cnss_pr_err("L1SS status changed to: 0x%x", aspm_state);
+		}
+	}
+
 	switch (pci_dev->device) {
 	case QCA6174_DEVICE_ID:
 		pci_read_config_word(pci_dev, QCA6174_REV_ID_OFFSET,
@@ -3663,15 +3680,6 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		break;
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-		/* Disable L1SS for QCA6390 */
-		pci_read_config_byte(pci_dev, 0x1F4, &aspm_state);
-		cnss_pr_err("Current L1SS status: 0x%x", aspm_state);
-		if (aspm_state & 0xF) {
-			pci_write_config_byte(pci_dev, 0x1F4, aspm_state & ~0xF);
-			pci_read_config_byte(pci_dev, 0x1F4, &aspm_state);
-			cnss_pr_err("L1SS status changed to: 0x%x", aspm_state);
-		}
-		/* fall-thru */
 	case QCA6290_EMULATION_DEVICE_ID:
 	case QCA6290_DEVICE_ID:
 	case QCN7605_DEVICE_ID:

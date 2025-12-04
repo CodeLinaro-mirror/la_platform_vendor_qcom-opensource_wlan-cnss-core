@@ -2151,7 +2151,7 @@ static void qmi_svc_event_notifier_init(void)
  *
  * Initialize log contexts for QMI request/response/indications.
  */
-void qmi_log_init(void)
+static void qmi_log_init(void)
 {
 #ifdef CONFIG_IPC_LOGGING
 	qmi_req_resp_log_ctx =
@@ -2263,6 +2263,7 @@ int qmi_svc_unregister(struct qmi_handle *handle)
 EXPORT_SYMBOL(qmi_svc_unregister);
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+int qmi_interface_init(void);
 int qmi_interface_init(void)
 #else
 static int __init qmi_interface_init(void)

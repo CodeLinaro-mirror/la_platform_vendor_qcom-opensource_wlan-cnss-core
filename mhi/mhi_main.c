@@ -302,7 +302,7 @@ int get_chan_props(struct mhi_device_ctxt *mhi_dev_ctxt, int chan,
 }
 #endif
 
-int mhi_release_chan_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt,
+static int mhi_release_chan_ctxt(struct mhi_device_ctxt *mhi_dev_ctxt,
 			  struct mhi_chan_ctxt *cc_list,
 			  struct mhi_ring *ring)
 {
@@ -809,7 +809,7 @@ error_completion:
 }
 EXPORT_SYMBOL(mhi_close_channel);
 
-void mhi_update_chan_db(struct mhi_device_ctxt *mhi_dev_ctxt,
+static void mhi_update_chan_db(struct mhi_device_ctxt *mhi_dev_ctxt,
 					  u32 chan)
 {
 	struct mhi_ring *chan_ctxt;
@@ -1246,7 +1246,7 @@ static int parse_outbound(struct mhi_device_ctxt *mhi_dev_ctxt,
 	BUG_ON(ret_val);
 
 	result = &client_config->result;
-	if (NULL != (&client_config->client_info.mhi_client_cb)) {
+	if (NULL != (client_config->client_info.mhi_client_cb)) {
 		client_config->result.user_data =
 			client_config->user_data;
 		cb_info.cb_reason = MHI_CB_XFER;
@@ -2347,7 +2347,7 @@ u32 mhi_reg_read(void __iomem *io_addr, uintptr_t io_offset)
 #ifdef CONFIG_HST_IMX
 /* 4k - 32bytes */
 #define MAPPED_REF_OFF (4096 - 32 -1)
-void mhi_check_assert_wake(struct mhi_device_ctxt *mhi_dev_ctxt,
+static void mhi_check_assert_wake(struct mhi_device_ctxt *mhi_dev_ctxt,
 			   uintptr_t offset)
 {
 	if (offset > MAPPED_REF_OFF) {
@@ -2356,7 +2356,7 @@ void mhi_check_assert_wake(struct mhi_device_ctxt *mhi_dev_ctxt,
 		mutex_unlock(&mhi_dev_ctxt->pm_lock);
 	}
 }
-void mhi_check_deassert_wake(struct mhi_device_ctxt *mhi_dev_ctxt,
+static void mhi_check_deassert_wake(struct mhi_device_ctxt *mhi_dev_ctxt,
 			     uintptr_t offset)
 {
 	if (offset > MAPPED_REF_OFF) {

@@ -655,6 +655,7 @@ static struct platform_driver mhi_plat_driver = {
 };
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+void mhi_exit(void);
 void mhi_exit(void)
 #else
 static void __exit mhi_exit(void)
@@ -680,6 +681,7 @@ static int __exit mhi_plat_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+int mhi_init(void);
 int mhi_init(void)
 #else
 static int __init mhi_init(void)

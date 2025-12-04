@@ -166,7 +166,7 @@ static LIST_HEAD(mhi_xprt_list);
  * ipc_router_mhi_release_pkt() - Release a cloned IPC Router packet
  * @ref: Reference to the kref object in the IPC Router packet.
  */
-void ipc_router_mhi_release_pkt(struct kref *ref)
+static void ipc_router_mhi_release_pkt(struct kref *ref)
 {
 	struct rr_packet *pkt = container_of(ref, struct rr_packet, ref);
 
@@ -181,7 +181,7 @@ void ipc_router_mhi_release_pkt(struct kref *ref)
  *
  * Return: The mapped virtual Address if found, NULL otherwise.
  */
-void *ipc_router_mhi_xprt_find_addr_map(struct list_head *addr_map_list,
+static void *ipc_router_mhi_xprt_find_addr_map(struct list_head *addr_map_list,
 				spinlock_t *addr_map_list_lock, void *addr)
 {
 	struct ipc_router_mhi_addr_map *addr_mapping;
@@ -221,7 +221,7 @@ void *ipc_router_mhi_xprt_find_addr_map(struct list_head *addr_map_list,
  *
  * Return: 0 on success, standard Linux error code otherwise.
  */
-int ipc_router_mhi_xprt_add_addr_map(struct list_head *addr_map_list,
+static int ipc_router_mhi_xprt_add_addr_map(struct list_head *addr_map_list,
 				spinlock_t *addr_map_list_lock,
 				struct rr_packet *pkt, void *virt_addr)
 {
@@ -250,7 +250,7 @@ int ipc_router_mhi_xprt_add_addr_map(struct list_head *addr_map_list,
  *
  * @return: number of buffers queued.
  */
-int mhi_xprt_queue_in_buffers(struct ipc_router_mhi_xprt *mhi_xprtp,
+static int mhi_xprt_queue_in_buffers(struct ipc_router_mhi_xprt *mhi_xprtp,
 			      uint32_t num_trbs)
 {
 	int i;
@@ -1122,6 +1122,7 @@ static struct platform_driver ipc_router_mhi_xprt_driver = {
 #endif
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+int ipc_router_mhi_xprt_init(void);
 int ipc_router_mhi_xprt_init(void)
 #else
 static int __init ipc_router_mhi_xprt_init(void)
@@ -1142,6 +1143,7 @@ static int __init ipc_router_mhi_xprt_init(void)
 }
 
 #ifdef CONFIG_WLAN_CNSS_CORE
+void ipc_router_mhi_xprt_deinit(void);
 void ipc_router_mhi_xprt_deinit(void)
 #else
 static void __exit ipc_router_mhi_xprt_deinit(void)

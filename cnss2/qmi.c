@@ -814,13 +814,15 @@ static void cnss_wlfw_bdf_get_file_name(struct cnss_plat_data *plat_priv,
 {
 	char filename_tmp[MAX_FIRMWARE_NAME_LEN];
 
+	if (bdf_type == CNSS_BDF_ELF)
+		bdf_type = cnss_wlfw_bdf_elf_bin_override(plat_priv);
+
 	switch (bdf_type) {
 	case CNSS_BDF_REGDB:
 		snprintf(filename_tmp, sizeof(filename_tmp),
 			 DEFAULT_REGDB_FILE_NAME);
 		break;
 	case CNSS_BDF_ELF:
-		bdf_type = cnss_wlfw_bdf_elf_bin_override(plat_priv);
 		/*fall-through*/
 	case CNSS_BDF_BIN:
 		if (plat_priv->board_info.board_id == 0xFF) {
@@ -1098,7 +1100,7 @@ int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
 	struct msg_desc req_desc, resp_desc;
 	int ret = 0;
 
-	cnss_pr_dbg("Sending WLAN config message, state: 0x%lx\n",
+	cnss_pr_info("Sending WLAN config message, state: 0x%lx\n",
 		    plat_priv->driver_state);
 
 	if (!plat_priv)
