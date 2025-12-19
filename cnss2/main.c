@@ -1154,11 +1154,19 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_REASON_RDDM:
 		clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
+#ifdef CONFIG_CNSS_RDDM_SHUTDOWN
+		cnss_pr_info("CNSS_REASON_RDDM, shutdown device\n");
+		cnss_pr_info("CNSS state: 0x%lx\n", plat_priv->driver_state);
+		complete(&plat_priv->rddm_complete);
+		cnss_bus_dev_shutdown(plat_priv, ONLY_SHUTDOWN);
+		break;
+#else
 		cnss_bus_collect_dump_info(plat_priv);
 		if (rddm_panic)
 			panic("cnss: RDDM triggers kernel panic");
 		else
 			goto self_recovery;
+#endif
 	case CNSS_REASON_DEFAULT:
 			cnss_pr_info("CNSS_REASON_DEFAULT, shutdown device\n");
 			cnss_pr_info("CNSS state: 0x%lx\n", plat_priv->driver_state);
