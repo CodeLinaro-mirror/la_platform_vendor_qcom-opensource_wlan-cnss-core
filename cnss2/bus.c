@@ -270,8 +270,13 @@ int cnss_bus_force_fw_assert_hdlr(struct cnss_plat_data *plat_priv)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
 void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *t)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+	struct cnss_plat_data *plat_priv =
+		timer_container_of(plat_priv, t, fw_boot_timer);
+#else
 	struct cnss_plat_data *plat_priv =
 		from_timer(plat_priv, t, fw_boot_timer);
+#endif
 
 	if (!plat_priv)
 		return;
@@ -288,8 +293,13 @@ void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *t)
 
 void cnss_cssr_timeout_hdlr(struct timer_list *t)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+	struct cnss_plat_data *plat_priv =
+		timer_container_of(plat_priv, t, cssr_timer);
+#else
 	struct cnss_plat_data *plat_priv =
 		from_timer(plat_priv, t, cssr_timer);
+#endif
 
 	if (!plat_priv)
 		return;
