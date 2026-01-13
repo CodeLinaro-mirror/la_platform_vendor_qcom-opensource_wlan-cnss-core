@@ -696,7 +696,11 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 	if (!plat_priv)
 		return -ENODEV;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0))
+	timer_delete(&plat_priv->fw_boot_timer);
+#else
 	del_timer(&plat_priv->fw_boot_timer);
+#endif
 	set_bit(CNSS_FW_READY, &plat_priv->driver_state);
 
 	if (test_bit(CNSS_FW_BOOT_RECOVERY, &plat_priv->driver_state)) {
@@ -2307,7 +2311,11 @@ static ssize_t cnss_wl_pwr_on(struct device *dev,
 	} else {
 		cnss_power_off_device(plat_priv);
 		cnss_set_card_state(false);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0))
+		timer_delete(&plat_priv->fw_boot_timer);
+#else
 		del_timer(&plat_priv->fw_boot_timer);
+#endif
 	}
 	return count;
 }
@@ -2823,8 +2831,13 @@ static int cnss_remove(struct platform_device *plat_dev)
 	device_init_wakeup(&plat_dev->dev, false);
 #endif
 	unregister_pm_notifier(&cnss_pm_notifier);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0))
+	timer_delete(&plat_priv->fw_boot_timer);
+	timer_delete(&plat_priv->cssr_timer);
+#else
 	del_timer(&plat_priv->fw_boot_timer);
 	del_timer(&plat_priv->cssr_timer);
+#endif
 	cnss_free_caldb_mem(plat_priv);
 	cnss_debugfs_destroy(plat_priv);
 	cnss_qmi_deinit(plat_priv);

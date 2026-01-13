@@ -43,9 +43,9 @@ char hst_fw_img[] = "amss.bin";
 static int mhi_pci_probe(struct pci_dev *pcie_device,
 		const struct pci_device_id *mhi_device_id);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 12)
-static void __exit mhi_plat_remove(struct platform_device *pdev);
+static void mhi_plat_remove(struct platform_device *pdev);
 #else
-static int __exit mhi_plat_remove(struct platform_device *pdev);
+static int mhi_plat_remove(struct platform_device *pdev);
 #endif
 
 static const struct pci_device_id mhi_pcie_device_id[] = {
@@ -666,9 +666,9 @@ static void __exit mhi_exit(void)
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 12)
-static void __exit mhi_plat_remove(struct platform_device *pdev)
+static void mhi_plat_remove(struct platform_device *pdev)
 #else
-static int __exit mhi_plat_remove(struct platform_device *pdev)
+static int mhi_plat_remove(struct platform_device *pdev)
 #endif
 {
 #ifdef CONFIG_IPC_LOGGING

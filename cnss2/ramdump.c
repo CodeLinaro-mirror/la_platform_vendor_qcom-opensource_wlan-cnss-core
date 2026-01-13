@@ -29,6 +29,7 @@
 #include "ramdump.h"
 #include <linux/dma-mapping.h>
 #include <linux/of.h>
+#include <linux/version.h>
 
 
 #define RAMDUMP_NUM_DEVICES	256
@@ -339,8 +340,13 @@ void *create_ramdump_device(const char *dev_name, struct device *parent)
 		return NULL;
 
 	/* get a minor number */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+	minor = ida_alloc_range(&rd_minor_id, 0, RAMDUMP_NUM_DEVICES-1,
+			GFP_KERNEL);
+#else
 	minor = ida_simple_get(&rd_minor_id, 0, RAMDUMP_NUM_DEVICES,
 			GFP_KERNEL);
+#endif
 	if (minor < 0) {
 		pr_err("%s: No more minor numbers left! rc:%d\n", __func__,
 			minor);
@@ -390,7 +396,11 @@ fail_cdev_add:
 	mutex_destroy(&rd_dev->consumer_lock);
 	device_unregister(rd_dev->dev);
 fail_return_minor:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+	ida_free(&rd_minor_id, minor);
+#else
 	ida_simple_remove(&rd_minor_id, minor);
+#endif
 fail_out_of_minors:
 	kfree(rd_dev);
 	return ERR_PTR(ret);
@@ -407,7 +417,11 @@ void destroy_ramdump_device(void *dev)
 
 	cdev_del(&rd_dev->cdev);
 	device_unregister(rd_dev->dev);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+	ida_free(&rd_minor_id, minor);
+#else
 	ida_simple_remove(&rd_minor_id, minor);
+#endif
 	kfree(rd_dev);
 }
 EXPORT_SYMBOL(destroy_ramdump_device);
