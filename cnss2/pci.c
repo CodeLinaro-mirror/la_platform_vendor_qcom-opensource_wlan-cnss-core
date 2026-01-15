@@ -3222,8 +3222,11 @@ static void cnss_mhi_notify_status(enum MHI_CB_REASON reason, void *priv)
 						     CNSS_FW_DOWN);
 
 	set_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0))
+	timer_delete(&plat_priv->fw_boot_timer);
+#else
 	del_timer(&plat_priv->fw_boot_timer);
-
+#endif
 	if (reason == MHI_CB_SYS_ERROR)
 		cnss_reason = CNSS_REASON_TIMEOUT;
 

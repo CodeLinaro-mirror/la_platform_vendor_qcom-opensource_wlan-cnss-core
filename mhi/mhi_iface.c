@@ -47,7 +47,6 @@ static void __exit mhi_plat_remove(struct platform_device *pdev);
 static int __exit mhi_plat_remove(struct platform_device *pdev);
 #endif
 
-
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
 #define DEFINE_PCI_DEVICE_TABLE(_table) \
 	const struct pci_device_id _table[]

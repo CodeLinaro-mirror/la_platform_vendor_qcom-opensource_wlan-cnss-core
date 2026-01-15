@@ -345,7 +345,11 @@ static void cnss_usb_remove(struct usb_interface *interface)
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(NULL);
 	struct cnss_usb_data *usb_priv = plat_priv->bus_priv;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0))
+	timer_delete(&plat_priv->fw_boot_timer);
+#else
 	del_timer(&plat_priv->fw_boot_timer);
+#endif
 
 	clear_bit(CNSS_FW_READY, &plat_priv->driver_state);
 	set_bit(CNSS_DEV_REMOVED, &plat_priv->driver_state);
