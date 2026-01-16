@@ -3613,7 +3613,6 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 #ifdef CONFIG_NAPIER_X86
-		UNUSED(res);
 		if (!mhi_is_device_ready(NULL, MHI_NODE_NAME)) {
 #else
 		if (!mhi_is_device_ready(&plat_priv->plat_dev->dev,
@@ -3740,7 +3739,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 			pci_read_config_byte(pci_dev, 0x80, &aspm_state);
 			cnss_pr_err("ASPM status changed to: %x", aspm_state);
 		}
-		/* fall-thru */
+		fallthrough;
 	case QCN7605_DEVICE_ID:
 		ret = cnss_pci_enable_msi(pci_priv);
 		if (ret)
