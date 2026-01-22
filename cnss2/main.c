@@ -2391,7 +2391,12 @@ out:
 
 static void cnss_remove_sysfs_wl_pwr(struct cnss_plat_data *plat_priv)
 {
+#ifdef CONFIG_NAPIER_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	device_remove_file(&pci_priv->pci_dev->dev, &dev_attr_wl_pwr_on);
+#else
 	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_wl_pwr_on);
+#endif
 }
 
 static int cnss_event_work_init(struct cnss_plat_data *plat_priv)
@@ -2440,7 +2445,12 @@ out:
 
 static void cnss_remove_sysfs_cssr(struct cnss_plat_data *plat_priv)
 {
+#ifdef CONFIG_NAPIER_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	device_remove_file(&pci_priv->pci_dev->dev, &dev_attr_cssr_detected);
+#else
 	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_cssr_detected);
+#endif
 }
 
 static int cnss_create_sysfs_wow_ssr_suppressed(struct cnss_plat_data *plat_priv)
@@ -2471,7 +2481,12 @@ out:
 
 static void cnss_remove_sysfs_wow_ssr_suppressed(struct cnss_plat_data *plat_priv)
 {
+#ifdef CONFIG_NAPIER_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	device_remove_file(&pci_priv->pci_dev->dev, &dev_attr_wow_ssr_suppressed);
+#else
 	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_wow_ssr_suppressed);
+#endif
 }
 
 static void cnss_event_work_deinit(struct cnss_plat_data *plat_priv)
@@ -2507,7 +2522,12 @@ out:
 
 static void cnss_remove_sysfs_serial_id(struct cnss_plat_data *plat_priv)
 {
+#ifdef CONFIG_NAPIER_X86
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	device_remove_file(&pci_priv->pci_dev->dev, &dev_attr_serial_id);
+#else
 	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_serial_id);
+#endif
 }
 
 static int cnss_alloc_caldb_mem(struct cnss_plat_data *plat_priv)
