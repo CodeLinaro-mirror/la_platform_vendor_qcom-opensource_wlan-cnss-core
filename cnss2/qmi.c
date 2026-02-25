@@ -227,6 +227,8 @@ out:
 	return ret;
 }
 
+int dbg_force_exit = 0;
+
 static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_ind_register_req_msg_v01 req;
@@ -271,6 +273,10 @@ static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 	if (ret < 0) {
 		cnss_pr_err("Failed to send indication register request, err = %d\n",
 			    ret);
+		if (ret == -110) {
+			cnss_pr_err("set dbg_force_exit for debug purpose\n");
+			dbg_force_exit = 1;
+		}
 		goto out;
 	}
 
@@ -283,7 +289,7 @@ static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 
 	return 0;
 out:
-	CNSS_ASSERT(0);
+	cnss_pr_err("Going to collect fw dump for qmi error ret %d\n", ret);
 	return ret;
 }
 
@@ -1423,7 +1429,6 @@ out:
 	qmi_handle_destroy(plat_priv->qmi_wlfw_clnt);
 	plat_priv->qmi_wlfw_clnt = NULL;
 err_create_handle:
-	CNSS_ASSERT(0);
 	return ret;
 }
 

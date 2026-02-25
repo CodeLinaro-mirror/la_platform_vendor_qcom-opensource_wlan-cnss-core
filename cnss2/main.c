@@ -1509,7 +1509,7 @@ int cnss_dump_fw_sram_to_file(struct cnss_plat_data *plat_priv)
 			time_buf);
 	scnprintf(fw_sram_dump_path + len,
 		  sizeof(fw_sram_dump_path) - len,
-		  "q6-sram.bin");
+		  "fwsram.bin");
 
 	cnss_pr_info("FW sram dump start %s ...\n", fw_sram_dump_path);
 

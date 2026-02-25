@@ -2063,6 +2063,7 @@ int qmi_svc_event_notifier_unregister(uint32_t service_id,
 }
 EXPORT_SYMBOL(qmi_svc_event_notifier_unregister);
 
+extern int dbg_force_exit;
 /**
  * qmi_svc_event_worker() - Read control messages over service event port
  * @work:	Reference to the work structure queued.
@@ -2083,6 +2084,10 @@ static void qmi_svc_event_worker(struct work_struct *work)
 		if (ret < 0) {
 			pr_err("%s:Error receiving control message\n",
 					__func__);
+			break;
+		}
+		if (dbg_force_exit) {
+			pr_err("%s: force exit\n", __func__);
 			break;
 		}
 		if (ctl_msg->cmd == IPC_ROUTER_CTRL_CMD_NEW_SERVER)
