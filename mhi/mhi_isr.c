@@ -16,6 +16,7 @@
 
 #include "mhi_sys.h"
 #include "mhi_trace.h"
+#include "mhi_bhi.h"
 
 static int mhi_process_event_ring(
 		struct mhi_device_ctxt *mhi_dev_ctxt,
@@ -157,6 +158,10 @@ static int mhi_process_event_ring(
 				break;
 			case STATE_TRANSITION_SYS_ERR:
 			{
+#if defined(CONFIG_CNSS_QCA6490) || defined(CONFIG_CNSS_QCA6390)
+				mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
+					"MHI System Error Detected, skip\n");
+#else
 				enum MHI_PM_STATE new_state;
 				unsigned long flags;
 
@@ -171,6 +176,7 @@ static int mhi_process_event_ring(
 				if (new_state == MHI_PM_SYS_ERR_DETECT)
 					schedule_work(&mhi_dev_ctxt->
 						      process_sys_err_worker);
+#endif
 				break;
 			}
 			default:
@@ -186,6 +192,9 @@ static int mhi_process_event_ring(
 			enum STATE_TRANSITION new_state = 0;
 			enum MHI_EXEC_ENV event =
 				MHI_READ_EXEC_ENV(&event_to_process);
+#if defined(CONFIG_CNSS_QCA6490) || defined(CONFIG_CNSS_QCA6390)
+			u32 cur_exec = mhi_dev_ctxt->dev_exec_env;
+#endif
 
 			mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
 				"MHI EE received ring 0x%x event:0x%x\n",
@@ -199,13 +208,17 @@ static int mhi_process_event_ring(
 			case MHI_EXEC_ENV_AMSS:
 				new_state = STATE_TRANSITION_AMSS;
 				break;
-#ifndef CONFIG_HST_IMX
+#ifndef CONFIG_CNSS_QCA6390
 			case MHI_EXEC_ENV_BHIE:
 				new_state = STATE_TRANSITION_BHIE;
 				break;
 #endif
 			case MHI_EXEC_ENV_RDDM:
 				new_state = STATE_TRANSITION_RDDM;
+#if defined(CONFIG_CNSS_QCA6490) || defined(CONFIG_CNSS_QCA6390)
+				if (cur_exec != MHI_EXEC_ENV_DISABLE_TRANSITION && cur_exec != MHI_EXEC_ENV_RDDM)
+					schedule_work(&mhi_dev_ctxt->process_sys_err_worker);
+#endif
 				break;
 			default:
 				mhi_log(mhi_dev_ctxt, MHI_MSG_INFO,
@@ -403,7 +416,7 @@ void mhi_ev_task(unsigned long data)
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE, "Enter\n");
 
-#ifdef CONFIG_HST_IMX
+#ifdef CONFIG_CNSS_QCA6390
 	/* Patch from MSM as gerrit#2559252 */
 	/*
 	 * we can check pm_state w/o a lock here because there is no way
@@ -426,7 +439,7 @@ void mhi_ev_task(unsigned long data)
 		enum MHI_PM_STATE new_state;
 
 		read_lock_bh(&mhi_dev_ctxt->pm_xfer_lock);
-#ifndef CONFIG_HST_IMX
+#ifndef CONFIG_CNSS_QCA6390
 		/* Patch from MSM as gerrit#2559252 */
 		if (MHI_REG_ACCESS_VALID(mhi_dev_ctxt->mhi_pm_state))
 #endif

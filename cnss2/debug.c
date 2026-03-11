@@ -108,6 +108,9 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_IN_PANIC:
 			seq_puts(s, "IN_PANIC");
 			continue;
+		case CNSS_DEV_SHUTDOWN:
+			seq_puts(s, "DEV_SHUTDOWN");
+			continue;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);
@@ -232,6 +235,7 @@ static int cnss_dev_boot_debug_show(struct seq_file *s, void *data)
 	seq_puts(s, "powerup: full power on sequence to boot device, download FW and do QMI handshake with FW\n");
 	seq_puts(s, "shutdown: full power off sequence to shutdown device\n");
 	seq_puts(s, "assert: trigger firmware assert\n");
+	seq_puts(s, "dump_fw_sram: dump firmware sram to a file\n");
 
 	return 0;
 }

@@ -519,7 +519,12 @@ int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv, int status
 		goto out;
 	}
 
+	kfree(req);
+	kfree(resp);
+	return 0;
+
 out:
+	CNSS_ASSERT(0);
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -821,7 +826,8 @@ static void cnss_wlfw_bdf_get_file_name(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_BDF_ELF:
 		bdf_type = cnss_wlfw_bdf_elf_bin_override(plat_priv);
-		/*fall-through*/
+		fallthrough;
+		/* fall-thru */
 	case CNSS_BDF_BIN:
 		if (plat_priv->board_info.board_id == 0xFF) {
 			if (bdf_type == CNSS_BDF_BIN)
@@ -966,6 +972,8 @@ err_send:
 err_req_fw:
 	kfree(req);
 out:
+	if (ret && bdf_type != CNSS_BDF_REGDB)
+		CNSS_ASSERT(0);
 	return ret;
 }
 
@@ -1046,6 +1054,10 @@ int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 		return 0;
 	}
 
+#ifdef	CONFIG_MSM_MHI
+	if (mode == QMI_WLFW_OFF_V01)
+		mhi_enable_irq();
+#endif
 
 	memset(&req, 0, sizeof(req));
 	memset(&resp, 0, sizeof(resp));

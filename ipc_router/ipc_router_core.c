@@ -51,6 +51,11 @@
 #include "ipc_router_private.h"
 #include "ipc_router_security.h"
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#include "unified_wlan_cnsscore.h"
+#endif
+
+
 enum {
 	SMEM_LOG = 1U << 0,
 	RTR_DBG = 1U << 1,
@@ -237,25 +242,6 @@ static bool is_wakeup_source_allowed;
 void msm_ipc_router_set_ws_allowed(bool flag)
 {
 	is_wakeup_source_allowed = flag;
-}
-
-/**
- * is_sensor_port() - Check if the remote port is sensor service or not
- * @rport: Pointer to the remote port.
- *
- * Return: true if the remote port is sensor service else false.
- */
-static int is_sensor_port(struct msm_ipc_router_remote_port *rport)
-{
-	u32 svcid = 0;
-
-	if (rport && rport->server) {
-		svcid = rport->server->name.service;
-		if (svcid == 400 || (svcid >= 256 && svcid <= 320))
-			return true;
-	}
-
-	return false;
 }
 
 static void init_routing_table(void)
@@ -543,7 +529,7 @@ static struct msm_ipc_routing_table_entry *ipc_router_get_rtentry_ref(
  * This function is called when all references to the routing table entry are
  * released.
  */
-void ipc_router_release_rtentry(struct kref *ref)
+static void ipc_router_release_rtentry(struct kref *ref)
 {
 	struct msm_ipc_routing_table_entry *rt_entry =
 		container_of(ref, struct msm_ipc_routing_table_entry, ref);
@@ -556,7 +542,7 @@ void ipc_router_release_rtentry(struct kref *ref)
 	kfree(rt_entry);
 }
 
-struct rr_packet *rr_read(struct msm_ipc_router_xprt_info *xprt_info)
+static struct rr_packet *rr_read(struct msm_ipc_router_xprt_info *xprt_info)
 {
 	struct rr_packet *temp_pkt;
 
@@ -1314,7 +1300,7 @@ static uint32_t allocate_port_id(void)
 	return port_id;
 }
 
-void msm_ipc_router_add_local_port(struct msm_ipc_port *port_ptr)
+static void msm_ipc_router_add_local_port(struct msm_ipc_port *port_ptr)
 {
 	uint32_t key;
 
@@ -1422,7 +1408,7 @@ static struct msm_ipc_port *ipc_router_get_port_ref(uint32_t port_id)
  *
  * This function is called when all references to the port are released.
  */
-void ipc_router_release_port(struct kref *ref)
+static void ipc_router_release_port(struct kref *ref)
 {
 	struct rr_packet *pkt, *temp_pkt;
 	struct msm_ipc_port *port_ptr =
@@ -2769,6 +2755,7 @@ static void do_read_data(struct work_struct *work)
 	struct rr_packet *pkt = NULL;
 	struct msm_ipc_port *port_ptr;
 	struct msm_ipc_router_remote_port *rport_ptr;
+	int ret;
 
 	struct msm_ipc_router_xprt_info *xprt_info =
 		container_of(work,
@@ -2776,7 +2763,16 @@ static void do_read_data(struct work_struct *work)
 			     read_data);
 
 	while ((pkt = rr_read(xprt_info)) != NULL) {
+		if (pkt->length < calc_rx_header_size(xprt_info) ||
+		    pkt->length > MAX_IPC_PKT_SIZE) {
+			IPC_RTR_ERR("%s: Invalid pkt length %d\n",
+				__func__, pkt->length);
+			goto read_next_pkt1;
+		}
 
+		ret = extract_header(pkt);
+		if (ret < 0)
+			goto read_next_pkt1;
 		hdr = &(pkt->hdr);
 
 		if ((hdr->dst_node_id != IPC_ROUTER_NID_LOCAL) &&
@@ -3800,6 +3796,7 @@ void msm_ipc_unload_default_node(void *pil_vote)
 }
 
 #if defined(CONFIG_DEBUG_FS)
+static struct dentry *dent = NULL;
 static void dump_routing_table(struct seq_file *s)
 {
 	int j;
@@ -3962,8 +3959,6 @@ static void debug_create(const char *name, struct dentry *dent,
 
 static void debugfs_init(void)
 {
-	struct dentry *dent;
-
 	dent = debugfs_create_dir("msm_ipc_router", 0);
 	if (IS_ERR(dent))
 		return;
@@ -3975,9 +3970,14 @@ static void debugfs_init(void)
 	debug_create("dump_xprt_info", dent, dump_xprt_info);
 	debug_create("dump_routing_table", dent, dump_routing_table);
 }
-
+static void debugfs_deinit(void)
+{
+	if(dent)
+		debugfs_remove_recursive(dent);
+}
 #else
 static void debugfs_init(void) {}
+static void debugfs_deinit(void) {}
 #endif
 
 /**
@@ -4024,6 +4024,20 @@ static void ipc_router_log_ctx_init(void)
 	mutex_unlock(&log_ctx_list_lock_lha0);
 }
 
+static void ipc_router_log_ctx_deinit(void)
+{
+	struct ipc_rtr_log_ctx *rtr_log_ctx;
+	mutex_lock(&log_ctx_list_lock_lha0);
+	list_for_each_entry(rtr_log_ctx, &log_ctx_list, list) {
+		if (!strncmp(rtr_log_ctx->log_ctx_name, "local_IPCRTR", strlen("local_IPCRTR"))){
+			list_del(&rtr_log_ctx->list);
+			break;
+		}
+	}
+	kfree(rtr_log_ctx);
+	mutex_unlock(&log_ctx_list_lock_lha0);
+}
+
 /**
  * ipc_router_get_log_ctx() - Retrieves the ipc log context based on subsystem name.
  * @sub_name:	subsystem name
@@ -4037,11 +4051,11 @@ static void *ipc_router_get_log_ctx(char *sub_name)
 
 	mutex_lock(&log_ctx_list_lock_lha0);
 	list_for_each_entry(temp_log_ctx, &log_ctx_list, list)
-		if (!strcmp(temp_log_ctx->log_ctx_name, sub_name)) {
-			log_ctx = temp_log_ctx->log_ctx;
-			mutex_unlock(&log_ctx_list_lock_lha0);
-			return log_ctx;
-		}
+	if (!strcmp(temp_log_ctx->log_ctx_name, sub_name)) {
+		log_ctx = temp_log_ctx->log_ctx;
+		mutex_unlock(&log_ctx_list_lock_lha0);
+		return log_ctx;
+	}
 	log_ctx = ipc_router_create_log_ctx(sub_name);
 	mutex_unlock(&log_ctx_list_lock_lha0);
 
@@ -4241,7 +4255,6 @@ void msm_ipc_router_xprt_notify(struct msm_ipc_router_xprt *xprt,
 {
 	struct msm_ipc_router_xprt_info *xprt_info = xprt->priv;
 	struct msm_ipc_router_xprt_work *xprt_work;
-	struct msm_ipc_router_remote_port *rport_ptr = NULL;
 	struct rr_packet *pkt;
 	int ret;
 
@@ -4293,39 +4306,16 @@ void msm_ipc_router_xprt_notify(struct msm_ipc_router_xprt *xprt,
 	if (!pkt)
 		return;
 
-	if (pkt->length < calc_rx_header_size(xprt_info) ||
-	    pkt->length > MAX_IPC_PKT_SIZE) {
-		IPC_RTR_ERR("%s: Invalid pkt length %d\n",
-			    __func__, pkt->length);
-		release_pkt(pkt);
-		return;
-	}
-
-	ret = extract_header(pkt);
-	if (ret < 0) {
-		release_pkt(pkt);
-		return;
-	}
-
 	pkt->ws_need = false;
-	if (pkt->hdr.type == IPC_ROUTER_CTRL_CMD_DATA)
-		rport_ptr = ipc_router_get_rport_ref(pkt->hdr.src_node_id,
-						     pkt->hdr.src_port_id);
-
 	mutex_lock(&xprt_info->rx_lock_lhb2);
 	list_add_tail(&pkt->list, &xprt_info->pkt_list);
-	/* check every pkt is from SENSOR services or not and
-	 * avoid holding both edge and port specific wake-up sources
-	 */
-	if (!is_sensor_port(rport_ptr)) {
-		if (!xprt_info->dynamic_ws) {
+	if (!xprt_info->dynamic_ws) {
+		__pm_stay_awake(xprt_info->ws);
+		pkt->ws_need = true;
+	} else {
+		if (is_wakeup_source_allowed) {
 			__pm_stay_awake(xprt_info->ws);
 			pkt->ws_need = true;
-		} else {
-			if (is_wakeup_source_allowed) {
-				__pm_stay_awake(xprt_info->ws);
-				pkt->ws_need = true;
-			}
 		}
 	}
 	mutex_unlock(&xprt_info->rx_lock_lhb2);
@@ -4444,6 +4434,35 @@ static int ipc_router_core_init(void)
 	return ret;
 }
 
+static int ipc_router_core_deinit(void)
+{
+	struct msm_ipc_routing_table_entry *rt_entry;
+
+	mutex_lock(&ipc_router_init_lock);
+	if (unlikely(!is_ipc_router_inited)) {
+		mutex_unlock(&ipc_router_init_lock);
+		return -EINVAL;
+	}
+	msm_ipc_remove_default_rule();
+
+	flush_workqueue(msm_ipc_router_workqueue);
+	destroy_workqueue(msm_ipc_router_workqueue);
+
+	rt_entry = ipc_router_get_rtentry_ref(IPC_ROUTER_NID_LOCAL);
+	if (!rt_entry) {
+		IPC_RTR_ERR("%s: Node %d is not up\n", __func__, IPC_ROUTER_NID_LOCAL);
+		return -EFAULT;
+	}
+	list_del(&rt_entry->list);
+	kref_put(&rt_entry->ref, ipc_router_release_rtentry); //remove reference from ipc_router_get_rtentry_ref
+	kref_put(&rt_entry->ref, ipc_router_release_rtentry); // remove rt_entry
+
+	rt_entry = NULL;
+	is_ipc_router_inited = false;
+	debugfs_deinit();
+	return 0;
+}
+
 #ifdef CONFIG_WLAN_CNSS_CORE
 int msm_ipc_router_init(void)
 #else
@@ -4452,7 +4471,6 @@ static int msm_ipc_router_init(void)
 {
 	int ret;
 
-	printk("%s-Enter-\n",__func__);
 	ret = ipc_router_core_init();
 	if (ret < 0)
 		return ret;
@@ -4467,17 +4485,40 @@ static int msm_ipc_router_init(void)
 		IPC_RTR_ERR("%s: Init sockets failed\n", __func__);
 
 	ipc_router_log_ctx_init();
-
-	printk("%s-Exit-\n",__func__);
 	return ret;
+}
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+void msm_ipc_router_deinit(void)
+#else
+static void msm_ipc_router_deinit(void)
+#endif
+{
+	int ret;
+
+	ipc_router_log_ctx_deinit();
+
+	msm_ipc_router_exit_sockets();
+
+	platform_driver_unregister(&ipc_router_driver);
+
+	ret = ipc_router_core_deinit();
+	if (ret)
+		IPC_RTR_ERR(
+		"%s: ipc_router_core_deinit failed %d\n", __func__, ret);
+	else
+		pr_debug(
+		"%s: ipc_router_core_deinited successfully  %d\n", __func__, ret);
+
+	return;
 }
 
 #ifndef CONFIG_WLAN_CNSS_CORE
 module_init(msm_ipc_router_init);
+module_exit(msm_ipc_router_deinit);
 MODULE_DESCRIPTION("MSM IPC Router");
 MODULE_LICENSE("GPL v2");
 #endif
-
 EXPORT_SYMBOL(clone_pkt);
 EXPORT_SYMBOL(ipc_router_peek_pkt_size);
 EXPORT_SYMBOL(release_pkt);

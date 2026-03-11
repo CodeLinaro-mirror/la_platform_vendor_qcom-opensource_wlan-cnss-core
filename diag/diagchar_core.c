@@ -59,6 +59,10 @@
 #include <net/netlink.h>
 #include <net/sock.h>
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#include "unified_wlan_cnsscore.h"
+#endif
+
 MODULE_DESCRIPTION("Diag Char Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION("1.0");
@@ -127,12 +131,17 @@ static void diag_remote_exit(void)
 		kfree(driver->hdlc_buf);
 }
 
+#ifdef CONFIG_DIAG_MHI
 static int diag_mhi_probe(struct platform_device *pdev)
 {
 	int ret;
-
-	printk("diag_mhi_probe start \n");
+        
+    pr_info("diag_mhi_probe start \n");
+#ifdef CONFIG_NAPIER_X86
+	if (!mhi_is_device_ready(NULL, "qcom,mhi"))
+#else
 	if (!mhi_is_device_ready(&pdev->dev, "qcom,mhi"))
+#endif
 		return -EPROBE_DEFER;
 	driver->pdev = pdev;
 	ret = diag_remote_init();
@@ -145,10 +154,11 @@ static int diag_mhi_probe(struct platform_device *pdev)
 		diagfwd_bridge_exit();
 		return ret;
 	}
-	printk("diag: mhi device is ready\n");
+	pr_info("diag: mhi device is ready\n");
 	return 0;
 }
 
+#ifndef CONFIG_NAPIER_X86
 static const struct of_device_id diag_mhi_table[] = {
 	{.compatible = "qcom,diag-mhi"},
 	{},
@@ -162,6 +172,51 @@ static struct platform_driver diag_mhi_driver = {
 		.of_match_table = diag_mhi_table,
 	},
 };
+#endif
+
+#endif
+
+#ifdef CONFIG_DIAG_HSIC
+static int diagfwd_usb_probe(struct platform_device *pdev)
+{
+        int ret;
+
+        driver->pdev = pdev;
+        ret = diag_remote_init();
+        if (ret) {
+                diag_remote_exit();
+                return ret;
+        }
+        ret = diagfwd_bridge_init();
+        if (ret) {
+                diagfwd_bridge_exit();
+                return ret;
+        }
+        pr_debug("diag: usb device is ready\n");
+        return 0;
+}
+#endif
+
+#ifdef CONFIG_DIAG_SDIO
+static int diagfwd_sdio_probe(struct platform_device *pdev)
+{
+        int ret;
+
+        driver->pdev = pdev;
+        ret = diag_remote_init();
+        if (ret) {
+                diag_remote_exit();
+                return ret;
+        }
+        ret = diagfwd_bridge_init();
+        if (ret) {
+                diagfwd_bridge_exit();
+                return ret;
+        }
+        pr_debug("diag: usb device is ready\n");
+        return 0;
+}
+#endif
 
 #ifdef CONFIG_WLAN_CNSS_CORE
 int diagchar_init(void)
@@ -169,14 +224,14 @@ int diagchar_init(void)
 static int __init diagchar_init(void)
 #endif
 {
-	//int ret = 0;
 
-	printk("diagchar initializing ..\n");
+	printk(KERN_INFO "diagchar initializing ..\n");
 	driver = kzalloc(sizeof(struct diagchar_dev) + 5, GFP_KERNEL);
 	if (!driver)
 		return -ENOMEM;
 	kmemleak_not_leak(driver);
 
+	driver->hdlc_disabled = 0;
 	driver->time_sync_enabled = 0;
 	driver->uses_time_api = 0;
 	driver->poolsize = poolsize;
@@ -196,8 +251,20 @@ static int __init diagchar_init(void)
 	mutex_init(&driver->diag_hdlc_mutex);
 	driver->num = 1;
 
-	printk("diagchar initialized now");
+	printk(KERN_INFO "diagchar initialized now..\n");
+#ifdef CONFIG_DIAG_MHI
+#ifdef CONFIG_NAPIER_X86
+        diag_mhi_probe(NULL);
+#else
 	platform_driver_register(&diag_mhi_driver);
+#endif
+#endif
+#ifdef CONFIG_DIAG_HSIC
+	diagfwd_usb_probe(NULL);
+#endif
+#ifdef CONFIG_DIAG_SDIO
+        diagfwd_sdio_probe(NULL);
+#endif
 	return 0;
 }
 
@@ -210,6 +277,8 @@ static void diagchar_exit(void)
 	printk(KERN_INFO "diagchar exiting ..\n");
 	diagfwd_bridge_exit();
 	diag_remote_exit();
+	kfree(driver);
+	driver = NULL;
 	printk(KERN_INFO "done diagchar exit\n");
 }
 

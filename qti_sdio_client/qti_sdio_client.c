@@ -740,7 +740,7 @@ int qti_client_debug_init(int id)
 	}
 #endif
 	return 0;
-#ifndef CONFIG_NAPIER_X86
+#ifdef CONFIG_IPC_LOGGING
 out:
 	return ret;
 #endif

@@ -34,4 +34,22 @@ int cnss_utils_init(void);
 void cnss_utils_exit(void);
 void qti_bridge_exit(void);
 void qcn_sdio_exit(void);
+void qmi_interface_deinit(void);
+void msm_ipc_router_hsic_xprt_deinit(void);
+void ipc_router_mhi_xprt_deinit(void);
+void msm_ipc_router_deinit(void);
+
+#ifdef CONFIG_SINGLE_KO_FEATURE
+int hdd_module_init(void);
+void hdd_module_exit(void);
+#endif
+
+int wcnss_pre_alloc_init(void);
+void wcnss_pre_alloc_exit(void);
+
+#ifdef CONFIG_USE_CUSTOMIZED_DMA_MEM
+void *cnss_get_plat_dev(void);
+void cnss_set_plat_dev(struct platform_device *plat_dev);
+#endif
+
 #endif

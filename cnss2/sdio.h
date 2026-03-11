@@ -14,8 +14,7 @@
 #define _CNSS_SDIO_H
 
 #include "main.h"
-#ifdef CONFIG_SDIO_QCN
-#include <linux/qcn_sdio_al.h>
+#include "qcn_sdio_al.h"
 
 struct cnss_sdio_data {
 	struct cnss_plat_data *plat_priv;
@@ -25,6 +24,14 @@ struct cnss_sdio_data {
 	void *client_priv;
 };
 
+static inline struct cnss_plat_data *cnss_sdio_priv_to_plat_priv(void *bus_priv)
+{
+	struct cnss_sdio_data *sdio_priv = bus_priv;
+
+	return sdio_priv->plat_priv;
+}
+
+#ifdef CONFIG_CNSS2_SDIO
 int cnss_sdio_init(struct cnss_plat_data *plat_priv);
 int cnss_sdio_deinit(struct cnss_plat_data *plat_priv);
 int cnss_sdio_register_driver_hdlr(struct cnss_sdio_data *sdio_info,

@@ -33,6 +33,10 @@
 #include <linux/usb/ipc_bridge.h>
 #endif
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#include "unified_wlan_cnsscore.h"
+#endif
+
 #define DRIVER_DESC	"USB host diag bridge driver"
 #define DRIVER_VERSION	"1.0"
 
@@ -86,31 +90,33 @@ int diag_bridge_open(int id, struct diag_bridge_ops *ops)
 	struct diag_bridge	*dev;
 
 	if (id < 0 || id >= MAX_BRIDGE_DEVS) {
-		pr_err("Invalid device ID");
+		pr_err("%s: Invalid device ID\n", __func__);
 		return -ENODEV;
 	}
 
 	dev = __dev[id];
-	if (!dev) {
-		pr_err("dev is null");
+	mutex_lock(&dev->ifc_mutex);
+	if (!dev->ifc) {
+		pr_err("device is disconnected\n");
+		mutex_unlock(&dev->ifc_mutex);
 		return -ENODEV;
 	}
 
 	if (dev->ops) {
-		pr_err("bridge already opened");
+		pr_err("%s: bridge already opened\n", __func__);
+		mutex_unlock(&dev->ifc_mutex);
 		return -EALREADY;
 	}
 
-	mutex_lock(&dev->ifc_mutex);
 	if (dev->opened) {
 		mutex_unlock(&dev->ifc_mutex);
-		pr_err("Bridge already opened");
+		pr_err("%s: Bridge already opened\n", __func__);
 		return -EBUSY;
 	}
 
 	dev->opened = true;
-	mutex_unlock(&dev->ifc_mutex);
 
+	dev_dbg(&dev->ifc->dev, "%s\n", __func__);
 	dev->ops = ops;
 	dev->err = 0;
 
@@ -122,6 +128,7 @@ int diag_bridge_open(int id, struct diag_bridge_ops *ops)
 			AUTOSUSP_DELAY_WITH_USB);
 
 	kref_get(&dev->kref);
+	mutex_unlock(&dev->ifc_mutex);
 
 	return 0;
 }
@@ -138,11 +145,14 @@ static int ipc_bridge_open(struct platform_device *pdev)
 static void diag_bridge_delete(struct kref *kref)
 {
 	struct diag_bridge *dev = container_of(kref, struct diag_bridge, kref);
-	int id = dev->id;
+	struct usb_interface *ifc = dev->ifc;
 
+	dev_dbg(&dev->ifc->dev, "%s\n", __func__);
+	usb_set_intfdata(ifc, NULL);
+	usb_kill_anchored_urbs(&dev->submitted);
+	usb_put_intf(ifc);
+	dev->ifc = NULL;
 	usb_put_dev(dev->udev);
-	__dev[id] = 0;
-	kfree(dev);
 }
 
 void diag_bridge_close(int id)
@@ -150,47 +160,52 @@ void diag_bridge_close(int id)
 	struct diag_bridge	*dev;
 
 	if (id < 0 || id >= MAX_BRIDGE_DEVS) {
-		pr_err("Invalid device ID");
+		pr_err("%s: Invalid device ID\n", __func__);
 		return;
 	}
 
 	dev = __dev[id];
-	if (!dev) {
-		pr_err("dev is null");
-		return;
+	mutex_lock(&dev->ifc_mutex);
+	if (!dev->ifc) {
+		pr_err("device is disconnected\n");
+		dev->err = -ENODEV;
+		dev->ops = NULL;
+		goto fail;
 	}
 
 	if (id == DIAG_BRIDGE && !dev->ops) {
-		pr_err("can't close bridge that was not open");
-		return;
+		pr_err("%s: can't close bridge that was not open\n", __func__);
+		goto fail;
 	}
 
-	mutex_lock(&dev->ifc_mutex);
 	if (!dev->opened) {
 		mutex_unlock(&dev->ifc_mutex);
-		pr_err("Bridge not opened");
+		pr_err("%s: Bridge not opened\n", __func__);
 		return;
 	}
 
 	dev->opened = false;
-	mutex_unlock(&dev->ifc_mutex);
 
-	dev_dbg(&dev->ifc->dev, "%s:\n", __func__);
-
-	usb_kill_anchored_urbs(&dev->submitted);
-	dev->ops = 0;
+	dev_dbg(&dev->ifc->dev, "%s\n", __func__);
+	dev->err = -ENODEV;
+	dev->ops = NULL;
 
 	pm_runtime_set_autosuspend_delay(&dev->udev->dev,
 		dev->default_autosusp_delay);
 
+fail:
 	kref_put(&dev->kref, diag_bridge_delete);
+	mutex_unlock(&dev->ifc_mutex);
+
+	return;
 }
 EXPORT_SYMBOL(diag_bridge_close);
 
 static void ipc_bridge_close(struct platform_device *pdev)
 {
 	WARN_ON(__dev[IPC_BRIDGE]->pdev != pdev);
-	WARN_ON(__dev[IPC_BRIDGE]->udev->state != USB_STATE_NOTATTACHED);
+	WARN_ON(__dev[IPC_BRIDGE]->udev->state != USB_STATE_NOTATTACHED &&
+		__dev[IPC_BRIDGE]->udev->state != USB_STATE_CONFIGURED);
 	diag_bridge_close(IPC_BRIDGE);
 }
 
@@ -235,17 +250,15 @@ int diag_bridge_read(int id, char *data, int size)
 	int			ret;
 
 	if (id < 0 || id >= MAX_BRIDGE_DEVS) {
-		pr_err("Invalid device ID");
+		pr_err("%s: Invalid device ID\n", __func__);
 		return -ENODEV;
 	}
 
-	pr_debug("reading %d bytes", size);
+	pr_debug("%s: reading %d bytes\n", __func__, size);
 
 	dev = __dev[id];
-	if (!dev) {
-		pr_err("device is disconnected");
-		return -ENODEV;
-	}
+
+	kref_get(&dev->kref);
 
 	mutex_lock(&dev->read_mutex);
 	if (!dev->ifc) {
@@ -254,13 +267,12 @@ int diag_bridge_read(int id, char *data, int size)
 	}
 
 	if (id == DIAG_BRIDGE && !dev->ops) {
-		pr_err("bridge is not open");
 		ret = -ENODEV;
 		goto error;
 	}
 
 	if (!size) {
-		dev_dbg(&dev->ifc->dev, "invalid size:%d\n", size);
+		dev_err(&dev->ifc->dev, "invalid size:%d\n", size);
 		dev->drop_count++;
 		ret = -EINVAL;
 		goto error;
@@ -272,18 +284,15 @@ int diag_bridge_read(int id, char *data, int size)
 		goto error;
 	}
 
-	kref_get(&dev->kref);
-
 	urb = usb_alloc_urb(0, GFP_KERNEL);
 	if (!urb) {
-		dev_dbg(&dev->ifc->dev, "unable to allocate urb\n");
+		dev_err(&dev->ifc->dev, "unable to allocate urb\n");
 		ret = -ENOMEM;
-		goto put_error;
+		goto error;
 	}
 
 	ret = usb_autopm_get_interface(dev->ifc);
 	if (ret < 0 && ret != -EAGAIN && ret != -EACCES) {
-		pr_err_ratelimited("read: autopm_get failed:%d", ret);
 		goto free_error;
 	}
 
@@ -302,24 +311,27 @@ int diag_bridge_read(int id, char *data, int size)
 
 	ret = usb_submit_urb(urb, GFP_KERNEL);
 	if (ret) {
-		pr_err_ratelimited("submitting urb failed err:%d", ret);
 		dev->pending_reads--;
 		usb_unanchor_urb(urb);
+		usb_autopm_put_interface(dev->ifc);
+		goto free_error;
 	}
+
+	usb_autopm_put_interface(dev->ifc);
 
 	if (id == IPC_BRIDGE) {
 		wait_for_completion(&dev->read_done);
 		ret = dev->read_result;
 	}
 
-	usb_autopm_put_interface(dev->ifc);
+	usb_free_urb(urb);
+	mutex_unlock(&dev->read_mutex);
+	return ret;
 
 free_error:
 	usb_free_urb(urb);
-put_error:
-	if (ret < 0) /* otherwise this is done in the completion handler */
-		kref_put(&dev->kref, diag_bridge_delete);
 error:
+	kref_put(&dev->kref, diag_bridge_delete);
 	mutex_unlock(&dev->read_mutex);
 	return ret;
 }
@@ -345,7 +357,7 @@ static void diag_bridge_write_cb(struct urb *urb)
 	struct diag_bridge	*dev = urb->context;
 	struct diag_bridge_ops	*cbs = dev->ops;
 
-	dev_dbg(&dev->ifc->dev, "%s:\n", __func__);
+	dev_dbg(&dev->ifc->dev, "%s\n", __func__);
 
 	usb_autopm_put_interface_async(dev->ifc);
 
@@ -382,17 +394,15 @@ int diag_bridge_write(int id, char *data, int size)
 	int			ret;
 
 	if (id < 0 || id >= MAX_BRIDGE_DEVS) {
-		pr_err("Invalid device ID");
+		pr_err("%s: Invalid device ID\n", __func__);
 		return -ENODEV;
 	}
 
-	pr_debug("writing %d bytes", size);
+	pr_debug("%s: writing %d bytes\n", __func__, size);
 
 	dev = __dev[id];
-	if (!dev) {
-		pr_err("device is disconnected");
-		return -ENODEV;
-	}
+
+	kref_get(&dev->kref);
 
 	mutex_lock(&dev->write_mutex);
 	if (!dev->ifc) {
@@ -401,7 +411,6 @@ int diag_bridge_write(int id, char *data, int size)
 	}
 
 	if (id == DIAG_BRIDGE && !dev->ops) {
-		pr_err("bridge is not open");
 		ret = -ENODEV;
 		goto error;
 	}
@@ -418,18 +427,15 @@ int diag_bridge_write(int id, char *data, int size)
 		goto error;
 	}
 
-	kref_get(&dev->kref);
-
 	urb = usb_alloc_urb(0, GFP_KERNEL);
 	if (!urb) {
 		dev_err(&dev->ifc->dev, "unable to allocate urb\n");
 		ret = -ENOMEM;
-		goto put_error;
+		goto error;
 	}
 
 	ret = usb_autopm_get_interface(dev->ifc);
 	if (ret < 0 && ret != -EAGAIN && ret != -EACCES) {
-		pr_err_ratelimited("write: autopm_get failed:%d", ret);
 		goto free_error;
 	}
 
@@ -442,7 +448,6 @@ int diag_bridge_write(int id, char *data, int size)
 
 	ret = usb_submit_urb(urb, GFP_KERNEL);
 	if (ret) {
-		pr_err_ratelimited("submitting urb failed err:%d", ret);
 		dev->pending_writes--;
 		usb_unanchor_urb(urb);
 		usb_autopm_put_interface(dev->ifc);
@@ -454,12 +459,14 @@ int diag_bridge_write(int id, char *data, int size)
 		ret = dev->write_result;
 	}
 
+	usb_free_urb(urb);
+	mutex_unlock(&dev->write_mutex);
+	return ret;
+
 free_error:
 	usb_free_urb(urb);
-put_error:
-	if (ret < 0) /* otherwise this is done in the completion handler */
-		kref_put(&dev->kref, diag_bridge_delete);
 error:
+	kref_put(&dev->kref, diag_bridge_delete);
 	mutex_unlock(&dev->write_mutex);
 	return ret;
 }
@@ -493,9 +500,6 @@ static ssize_t diag_read_stats(struct file *file, char __user *ubuf,
 	for (i = 0; i < MAX_BRIDGE_DEVS; i++) {
 		struct diag_bridge *dev = __dev[i];
 
-		if (!dev)
-			continue;
-
 		ret += scnprintf(buf, DEBUG_BUF_SIZE,
 				"epin:%d, epout:%d\n"
 				"bytes to host: %lu\n"
@@ -524,11 +528,9 @@ static ssize_t diag_reset_stats(struct file *file, const char __user *buf,
 	for (i = 0; i < MAX_BRIDGE_DEVS; i++) {
 		struct diag_bridge *dev = __dev[i];
 
-		if (dev) {
-			dev->bytes_to_host = dev->bytes_to_mdm = 0;
-			dev->pending_reads = dev->pending_writes = 0;
-			dev->drop_count = 0;
-		}
+		dev->bytes_to_host = dev->bytes_to_mdm = 0;
+		dev->pending_reads = dev->pending_writes = 0;
+		dev->drop_count = 0;
 	}
 
 	return count;
@@ -579,33 +581,35 @@ diag_bridge_probe(struct usb_interface *ifc, const struct usb_device_id *id)
 	struct diag_bridge		*dev;
 	struct usb_host_interface	*ifc_desc;
 	struct usb_endpoint_descriptor	*ep_desc;
+	struct usb_device		*udev;
 	int				i, devid, ret = -ENOMEM;
 
-	pr_debug("id:%lu", id->driver_info);
+	pr_debug("%s: id:%lu\n", __func__, id->driver_info);
+
+	udev = interface_to_usbdev(ifc);
+	if (udev->actconfig->desc.bNumInterfaces == 1) {
+		pr_err("Invalid configuration: Only one interface\n");
+		return -EINVAL;
+	}
 
 	devid = id->driver_info & 0xFF;
-	if (devid < 0 || devid >= MAX_BRIDGE_DEVS)
-		return -ENODEV;
-
-	/* already probed? */
-	if (__dev[devid]) {
-		pr_err("Diag device already probed");
+	if (devid < 0 || devid >= MAX_BRIDGE_DEVS) {
+		pr_err("%s: Invalid device ID\n", __func__);
 		return -ENODEV;
 	}
 
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev)
-		return -ENOMEM;
+	dev = __dev[devid];
+	if (dev->ifc) {
+		pr_err("Port already in use\n");
+		return -ENODEV;
+	}
 
-	__dev[devid] = dev;
+	mutex_lock(&dev->ifc_mutex);
 	dev->id = devid;
 
-	dev->udev = usb_get_dev(interface_to_usbdev(ifc));
-	dev->ifc = ifc;
+	dev->udev = usb_get_dev(udev);
+	dev->ifc = usb_get_intf(ifc);
 	kref_init(&dev->kref);
-	mutex_init(&dev->ifc_mutex);
-	mutex_init(&dev->read_mutex);
-	mutex_init(&dev->write_mutex);
 	init_completion(&dev->read_done);
 	init_completion(&dev->write_done);
 	init_usb_anchor(&dev->submitted);
@@ -625,26 +629,28 @@ diag_bridge_probe(struct usb_interface *ifc, const struct usb_device_id *id)
 			dev->out_epAddr = ep_desc->bEndpointAddress;
 	}
 
+	usb_set_intfdata(ifc, dev);
 	if (!(dev->in_epAddr && dev->out_epAddr)) {
-		pr_err("could not find bulk in and bulk out endpoints");
+		pr_err("%s: could not find bulk in and bulk out endpoints\n",
+								__func__);
 		ret = -ENODEV;
 		goto error;
 	}
 
-	usb_set_intfdata(ifc, dev);
-	diag_bridge_debugfs_init();
 	if (devid == DIAG_BRIDGE) {
 		dev->pdev = platform_device_register_simple("diag_bridge",
 								devid, NULL, 0);
 		if (IS_ERR(dev->pdev)) {
-			pr_err("unable to allocate platform device");
+			pr_err("%s: unable to allocate platform device\n",
+								__func__);
 			ret = PTR_ERR(dev->pdev);
 			goto error;
 		}
 	} else {
 		dev->pdev = platform_device_alloc("ipc_bridge", -1);
 		if (!dev->pdev) {
-			pr_err("unable to allocate platform device");
+			pr_err("%s: unable to allocate platform device\n",
+								__func__);
 			ret = -ENOMEM;
 			goto error;
 		}
@@ -652,30 +658,27 @@ diag_bridge_probe(struct usb_interface *ifc, const struct usb_device_id *id)
 		ret = platform_device_add_data(dev->pdev, &ipc_bridge_pdata,
 				sizeof(struct ipc_bridge_platform_data));
 		if (ret) {
-			pr_err("fail to add pdata");
+			pr_err("%s: fail to add pdata\n", __func__);
 			goto put_pdev;
 		}
 
 		ret = platform_device_add(dev->pdev);
 		if (ret) {
-			pr_err("fail to add pdev");
+			pr_err("%s: fail to add pdev\n", __func__);
 			goto put_pdev;
 		}
 	}
 
 	dev_dbg(&dev->ifc->dev, "%s: complete\n", __func__);
+	mutex_unlock(&dev->ifc_mutex);
 
 	return 0;
 
 put_pdev:
 	platform_device_put(dev->pdev);
 error:
-	diag_bridge_debugfs_cleanup();
-	mutex_destroy(&dev->write_mutex);
-	mutex_destroy(&dev->read_mutex);
-	mutex_destroy(&dev->ifc_mutex);
-	if (dev)
-		kref_put(&dev->kref, diag_bridge_delete);
+	kref_put(&dev->kref, diag_bridge_delete);
+	mutex_unlock(&dev->ifc_mutex);
 
 	return ret;
 }
@@ -684,18 +687,12 @@ static void diag_bridge_disconnect(struct usb_interface *ifc)
 {
 	struct diag_bridge	*dev = usb_get_intfdata(ifc);
 
-	dev_dbg(&dev->ifc->dev, "%s:\n", __func__);
+	dev_dbg(&dev->ifc->dev, "%s\n", __func__);
 
 	platform_device_unregister(dev->pdev);
-	diag_bridge_debugfs_cleanup();
 	mutex_lock(&dev->ifc_mutex);
-	dev->ifc = NULL;
-	mutex_unlock(&dev->ifc_mutex);
-	usb_set_intfdata(ifc, NULL);
-	mutex_destroy(&dev->write_mutex);
-	mutex_destroy(&dev->read_mutex);
-	mutex_destroy(&dev->ifc_mutex);
 	kref_put(&dev->kref, diag_bridge_delete);
+	mutex_unlock(&dev->ifc_mutex);
 }
 
 static int diag_bridge_suspend(struct usb_interface *ifc, pm_message_t message)
@@ -737,6 +734,8 @@ static const struct usb_device_id diag_bridge_ids[] = {
 	.driver_info =  DEV_ID(0), },
 	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x901D, 0),
 	.driver_info =  DEV_ID(0), },
+	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x901F, 0),
+	.driver_info =  DEV_ID(0), },
 	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x9034, 0),
 	.driver_info =  DEV_ID(0), },
 	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x9048, 0),
@@ -772,6 +771,10 @@ static const struct usb_device_id diag_bridge_ids[] = {
 	/* 909E, ifc#1 refers to diag client interface */
 	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x90A4, 1),
 	.driver_info =	DEV_ID(1), },
+	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x90EF, 4),
+	.driver_info =  DEV_ID(0), },
+	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x90F0, 4),
+	.driver_info =  DEV_ID(0), },
 	/* 9900, ifc#2 refers to diag client interface */
 	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x9900, 2),
 	.driver_info =	DEV_ID(0), },
@@ -818,15 +821,45 @@ int diag_bridge_init(void)
 static int __init diag_bridge_init(void)
 #endif
 {
-	int ret;
+	struct diag_bridge *dev;
+	int ret, i;
+	int num_instances = 0;
+
+	for (i = 0; i < MAX_BRIDGE_DEVS; i++) {
+		dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+		if (!dev) {
+			ret = -ENOMEM;
+			goto dev_free;
+		}
+
+		mutex_init(&dev->ifc_mutex);
+		mutex_init(&dev->read_mutex);
+		mutex_init(&dev->write_mutex);
+		num_instances++;
+		__dev[i] = dev;
+	}
 
 	ret = usb_register(&diag_bridge_driver);
 	if (ret) {
-		pr_err("unable to register diag driver");
+		pr_err("%s: unable to register diag driver\n", __func__);
 		return ret;
 	}
 
+	diag_bridge_debugfs_init();
+
 	return 0;
+
+dev_free:
+	for (i = 0; i < num_instances; i++) {
+		dev = __dev[i];
+		mutex_destroy(&dev->write_mutex);
+		mutex_destroy(&dev->read_mutex);
+		mutex_destroy(&dev->ifc_mutex);
+		kfree(dev);
+		__dev[i] = NULL;
+	}
+
+	return ret;
 }
 
 #ifdef CONFIG_WLAN_CNSS_CORE
@@ -835,7 +868,19 @@ void diag_bridge_exit(void)
 static void __exit diag_bridge_exit(void)
 #endif
 {
+	struct diag_bridge *dev;
+	int i;
+
+	diag_bridge_debugfs_cleanup();
 	usb_deregister(&diag_bridge_driver);
+	for (i = 0; i < MAX_BRIDGE_DEVS; i++) {
+		dev = __dev[i];
+		mutex_destroy(&dev->write_mutex);
+		mutex_destroy(&dev->read_mutex);
+		mutex_destroy(&dev->ifc_mutex);
+		kfree(dev);
+		__dev[i] = NULL;
+	}
 }
 
 #ifndef CONFIG_WLAN_CNSS_CORE
