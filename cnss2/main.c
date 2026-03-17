@@ -104,7 +104,7 @@ module_param(wow_wake_gpionum, uint, 0600);
 MODULE_PARM_DESC(wow_wake_gpionum, "configure gpio number for wow wake");
 #endif
 
-static bool rddm_panic = 0; 
+static bool rddm_panic = 0;
 module_param(rddm_panic, bool, 0600);
 MODULE_PARM_DESC(rddm_panic, "Trigger kernel panic when RDDM happens");
 
@@ -1392,7 +1392,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			cnss_pr_info("CNSS_REASON_DEFAULT, shutdown device\n");
 			cnss_pr_info("CNSS state: 0x%lx\n", plat_priv->driver_state);
 			complete(&plat_priv->rddm_complete);
-			cnss_bus_dev_shutdown(plat_priv, ONLY_SHUTDOWN);
+			cnss_bus_dev_shutdown(plat_priv);
 		break;
 	case CNSS_REASON_TIMEOUT:
 #ifdef DUMP_TO_FS
@@ -1641,28 +1641,28 @@ int cnss_force_collect_rddm(struct device *dev)
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	int ret = 0;
 
-	if (!plat_priv) { 
+	if (!plat_priv) {
 		cnss_pr_err("plat_priv is NULL\n");
 		return -ENODEV;
 		}
 
-	if (plat_priv->device_id == QCA6174_DEVICE_ID) { 
+	if (plat_priv->device_id == QCA6174_DEVICE_ID) {
 		cnss_pr_info("Force collect rddm is not supported\n");
 		return -EOPNOTSUPP;
 		}
-	
+
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
 		cnss_pr_info("Recovery is already in progress, ignore forced collect rddm\n");
 		return 0;
 		}
 
-	cnss_driver_event_post(plat_priv, 
+	cnss_driver_event_post(plat_priv,
 			       CNSS_DRIVER_EVENT_FORCE_FW_ASSERT, 0, NULL);
 
 	reinit_completion(&plat_priv->rddm_complete);
 	ret = wait_for_completion_timeout(&plat_priv->rddm_complete,
 					  msecs_to_jiffies(CNSS_RDDM_TIMEOUT_MS));
-	if (!ret) 
+	if (!ret)
 		ret = -ETIMEDOUT;
 	return 0;
 }
@@ -2480,7 +2480,7 @@ static int cnss_create_sysfs_wl_pwr(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("PCI device not probed yet\n");
 		goto out;
 	}
-	ret = device_create_file(&pci_priv->pci_dev->dev, 
+	ret = device_create_file(&pci_priv->pci_dev->dev,
 				 &dev_attr_wl_pwr_on);
 #else
 	ret = device_create_file(&plat_priv->plat_dev->dev,
@@ -2532,7 +2532,7 @@ static int cnss_create_sysfs_cssr(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("PCI device not probed yet\n");
 		goto out;
 	}
-	ret = device_create_file(&pci_priv->pci_dev->dev, 
+	ret = device_create_file(&pci_priv->pci_dev->dev,
 				 &dev_attr_cssr_detected);
 #else
 	ret = device_create_file(&plat_priv->plat_dev->dev,

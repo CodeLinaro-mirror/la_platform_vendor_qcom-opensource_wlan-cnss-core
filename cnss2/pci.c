@@ -187,7 +187,7 @@ void cnss_pci_dump_qdss_reg(struct cnss_pci_data *pci_priv)
 		plat_priv->qdss_reg = devm_kzalloc(&pci_priv->pci_dev->dev,
 						   sizeof(*plat_priv->qdss_reg)
 						   * array_size, gfp);
-	
+
 	if (!plat_priv->qdss_reg) {
 		return;
 	}
@@ -608,7 +608,7 @@ int cnss_get_curr_therm_cdev_state(struct device *dev,
 				   int tcdev_id)
 {
 	return 0;
-}		   
+}
 EXPORT_SYMBOL(cnss_get_curr_therm_cdev_state);
 
 bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap)
@@ -901,7 +901,7 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 	return 0;
 
 stop_mhi:
-	cnss_pci_stop_mhi(pci_priv, FULL_RECOVERY);
+	cnss_pci_stop_mhi(pci_priv);
 	cnss_suspend_pci_link(pci_priv);
 power_off:
 	cnss_power_off_device(plat_priv);
@@ -929,7 +929,7 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
 	cnss_pci_set_auto_suspended(pci_priv, 0);
 
-	cnss_pci_stop_mhi(pci_priv, type);
+	cnss_pci_stop_mhi(pci_priv);
 
 	ret = cnss_suspend_pci_link(pci_priv);
 	if (ret)
@@ -1331,7 +1331,7 @@ static int cnss_pci_resume(struct device *dev)
 
 	if (cnss_pci_check_link_status(pci_priv))
 		goto out;
-	
+
 	if (pci_priv->pci_link_state) {
 		ret = pci_enable_device(pci_dev);
 		if (ret)
@@ -2269,7 +2269,7 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
 
         return 0;
 }
-#endif 
+#endif
 
 static void cnss_pci_dump_internal_register(struct cnss_pci_data *pci_priv)
 {
@@ -2408,7 +2408,7 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 
 	mhi_dump_irq(mhi_dev_ctxt);
 	mhi_dump_event_ring(mhi_dev_ctxt);
-	
+
 	cnss_pci_dump_bl_sram_mem(pci_priv);
 	cnss_pr_err("Timeout waiting for FW ready indication\n");
 
@@ -2690,7 +2690,7 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 	int idx;
 	struct msi_desc *msi_desc;
 	struct pci_dev *pci_dev;
-	
+
 	if (!pci_priv)
 	{
 		cnss_pr_err("pci_priv is NULL");
@@ -3250,11 +3250,11 @@ static void cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 
 	if (pci_priv->device_id == QCN7605_DEVICE_ID) {
 		if (plat_priv->driver_mode == CNSS_FTM) {
-		scnprintf(plat_priv->firmware_name, 
+		scnprintf(plat_priv->firmware_name,
 				  sizeof(plat_priv->firmware_name),
 			  	  QCN7605_PATH_PREFIX "%s", DEFAULT_GENOA_FW_FTM_NAME);
 		} else {
-			scnprintf(plat_priv->firmware_name, 
+			scnprintf(plat_priv->firmware_name,
 					  sizeof(plat_priv->firmware_name),
 					  QCN7605_PATH_PREFIX "%s", DEFAULT_FW_FILE_NAME);
 
@@ -3512,7 +3512,7 @@ out:
 	return ret;
 }
 
-void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv, int type)
+void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv;
 
@@ -3527,22 +3527,17 @@ void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv, int type)
 	plat_priv = pci_priv->plat_priv;
 
 	cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_RESUME);
-	cnss_pr_info("cnss_pci_stop_mhi: CNSS state - 0x%lx, type - %d\n", plat_priv->driver_state, type);
+	cnss_pr_info("cnss_pci_stop_mhi: CNSS state - 0x%lx\n", plat_priv->driver_state);
 	if (!test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state))
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_POWER_OFF);
 
 	cnss_pr_info("cnss_pci_stop_mhi: ramdump_info_v2 - %d\n", plat_priv->ramdump_info_v2.dump_data_valid);
-	if(!type){
-		if (plat_priv->ramdump_info_v2.dump_data_valid ||
-		    test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state))
-			return;
-		cnss_pr_info("cnss_pci_stop_mhi: checking MHI deinit condition\n");
-		if (!test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state))
-			cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_DEINIT);
-	} else {
-		cnss_pr_info("cnss_pci_stop_mhi: deinit MHI\n");
+	if (plat_priv->ramdump_info_v2.dump_data_valid ||
+	    test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state))
+		return;
+
+	if (!test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state))
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_DEINIT);
-	}
 }
 
 static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
