@@ -211,7 +211,7 @@ void mhi_force_wake_request(struct mhi_device *mhi_dev);
 
 void mhi_set_fw_remote_mem(struct mhi_device *mhi_device, void *vaddr,
 			   size_t size);
-
+void mhi_clear_fw_remote_mem(struct mhi_device *mhi_device);
 /**
  * mhi_pcie_sw_soc_reset - take a soft reset for wlan chip when there isn't
  * wlan enable/disbale GPIO on third platform

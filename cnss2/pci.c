@@ -2207,6 +2207,8 @@ static void cnss_pci_free_fw_mem(struct cnss_pci_data *pci_priv)
 		}
 	}
 
+	mhi_clear_fw_remote_mem(&(pci_priv->mhi_dev));
+
 	plat_priv->fw_mem_seg_len = 0;
 }
 
@@ -3047,6 +3049,9 @@ static void cnss_pci_send_hang_event(struct cnss_pci_data *pci_priv)
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		if (fw_mem[i].type == QMI_WLFW_MEM_TYPE_DDR_V01 &&
 		    fw_mem[i].va) {
+			/*big and small chunk sanity*/
+			offset = ((offset + HANG_DATA_LENGTH) < fw_mem[i].size)?
+				  offset : 0;
 			hang_data_va = fw_mem[i].va + offset;
 			hang_event.hang_event_data = kmemdup(hang_data_va,
 							     HANG_DATA_LENGTH,
