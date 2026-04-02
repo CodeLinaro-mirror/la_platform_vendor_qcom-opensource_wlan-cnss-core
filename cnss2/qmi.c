@@ -26,6 +26,7 @@
 #include "main.h"
 #include "qmi.h"
 #include "msm_mhi.h"
+#include "pci.h"
 
 #define WLFW_SERVICE_INS_ID_V01		1
 #define WLFW_CLIENT_ID			0x4b4e454c
@@ -375,6 +376,10 @@ static int cnss_wlfw_request_mem_ind_hdlr(struct cnss_plat_data *plat_priv,
 {
 	struct msg_desc ind_desc;
 	struct wlfw_request_mem_ind_msg_v01 *ind_msg;
+	struct cnss_pci_data *pci_priv;
+	bool mem_request_changed = false;
+	u32 new_ddr_seg_count = 0;
+	u64 new_ddr_total_size = 0;
 	int ret = 0, i;
 
 	ind_msg = kzalloc(sizeof(*ind_msg), GFP_KERNEL);
@@ -400,12 +405,72 @@ static int cnss_wlfw_request_mem_ind_hdlr(struct cnss_plat_data *plat_priv,
 		goto out;
 	}
 
-	cnss_pr_dbg("FW memory segment count is %u\n", ind_msg->mem_seg_len);
+	cnss_pr_info("FW memory segment count is %u\n", ind_msg->mem_seg_len);
+
+	/* Count DDR segments and total size in NEW request */
+	for (i = 0; i < ind_msg->mem_seg_len; i++) {
+		if (ind_msg->mem_seg[i].type == QMI_WLFW_MEM_TYPE_DDR_V01) {
+			new_ddr_seg_count++;
+			new_ddr_total_size += ind_msg->mem_seg[i].size;
+		}
+	}
+
+	/* Compare with cached DDR info (fast comparison, no iteration!) */
+	if (plat_priv->fw_mem_seg_len > 0) {
+		if (plat_priv->prev_ddr_seg_count != new_ddr_seg_count) {
+			mem_request_changed = true;
+			cnss_pr_info("DDR segment count changed: %u -> %u\n",
+				    plat_priv->prev_ddr_seg_count, new_ddr_seg_count);
+		} else if (plat_priv->prev_ddr_total_size != new_ddr_total_size) {
+			mem_request_changed = true;
+			cnss_pr_info("DDR total size changed: 0x%llx -> 0x%llx\n",
+				    plat_priv->prev_ddr_total_size, new_ddr_total_size);
+		}
+
+		/* If DDR request changed, free ALL old allocations */
+		if (mem_request_changed) {
+			cnss_pr_info("FW DDR memory request changed, freeing all old allocations\n");
+
+			pci_priv = plat_priv->bus_priv;
+			if (pci_priv) {
+				for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+					if (plat_priv->fw_mem[i].va && plat_priv->fw_mem[i].size) {
+						cnss_pr_info("Freeing old FW mem[%d]: type=%u, size=0x%zx\n",
+							   i, plat_priv->fw_mem[i].type,
+							   plat_priv->fw_mem[i].size);
+
+						dma_free_coherent(&pci_priv->pci_dev->dev,
+								plat_priv->fw_mem[i].size,
+								plat_priv->fw_mem[i].va,
+								plat_priv->fw_mem[i].pa);
+
+						plat_priv->fw_mem[i].va = NULL;
+						plat_priv->fw_mem[i].pa = 0;
+					}
+				}
+			}
+			mhi_clear_fw_remote_mem(&(pci_priv->mhi_dev));
+			/* Clear old allocation info */
+			memset(plat_priv->fw_mem, 0, sizeof(plat_priv->fw_mem));
+			plat_priv->fw_mem_seg_len = 0;
+		}
+	}
+
+	/* Now copy the new request */
 	plat_priv->fw_mem_seg_len = ind_msg->mem_seg_len;
+
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		plat_priv->fw_mem[i].type = ind_msg->mem_seg[i].type;
 		plat_priv->fw_mem[i].size = ind_msg->mem_seg[i].size;
+		/* va and pa will be set during allocation */
 	}
+
+	/* Cache DDR info for next comparison */
+	plat_priv->prev_ddr_seg_count = new_ddr_seg_count;
+	plat_priv->prev_ddr_total_size = new_ddr_total_size;
+
+	cnss_pr_info("FW memory request: total_segs=%u, ddr_segs=%u, ddr_size=0x%llx\n",
+		    plat_priv->fw_mem_seg_len, new_ddr_seg_count, new_ddr_total_size);
 
 	cnss_driver_event_post(plat_priv, CNSS_DRIVER_EVENT_REQUEST_MEM,
 			       0, NULL);

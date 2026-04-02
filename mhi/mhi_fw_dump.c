@@ -502,3 +502,31 @@ void mhi_set_fw_remote_mem(struct mhi_device *mhi_device,
 	bhi_ctxt->mem_seg_id++;
 }
 EXPORT_SYMBOL(mhi_set_fw_remote_mem);
+
+void mhi_clear_fw_remote_mem(struct mhi_device *mhi_device)
+{
+	struct mhi_device_ctxt *mhi_dev_ctxt;
+	struct bhi_ctxt_t *bhi_ctxt;
+	u32 i;
+	
+	if (!mhi_device)
+		return;
+	
+	mhi_dev_ctxt = mhi_device->mhi_dev_ctxt;
+	if (!mhi_dev_ctxt)
+		return;
+
+	bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+	if (!bhi_ctxt)
+		return;
+
+	for (i = 0; i < bhi_ctxt->mem_seg_id; i++) {
+		mhi_log(mhi_dev_ctxt, MHI_MSG_VERBOSE,
+			"Clear fw remote mem seg %d\n", i);
+		bhi_ctxt->fw_mem[i].vaddr = NULL;
+		bhi_ctxt->fw_mem[i].size = 0;
+	}
+
+	bhi_ctxt->mem_seg_id = 0;
+}
+EXPORT_SYMBOL(mhi_clear_fw_remote_mem);
