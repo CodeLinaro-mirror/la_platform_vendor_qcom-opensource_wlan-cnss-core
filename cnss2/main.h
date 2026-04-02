@@ -283,6 +283,9 @@ struct cnss_plat_data {
 	u32 wow_ssr_count;
 	u8 wow_ssr_suppressed;
 	struct wlchip_serial_id_v01 serial_id;
+	/* Cached DDR memory info for fast comparison on subsequent boots */
+	u32 prev_ddr_seg_count;
+	u64 prev_ddr_total_size;
 };
 
 /* Context structure for directory iteration */
