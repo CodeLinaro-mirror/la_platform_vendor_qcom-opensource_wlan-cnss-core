@@ -285,6 +285,15 @@ struct cnss_plat_data {
 	struct wlchip_serial_id_v01 serial_id;
 };
 
+/* Context structure for directory iteration */
+struct delete_ctx {
+	struct dir_context ctx;
+	const char **patterns;
+	int pattern_count;
+	struct path *parent_path;
+	int deleted_count;
+};
+
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
 unsigned long *cnss_get_debug_quirks(void);
 int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
@@ -316,4 +325,5 @@ u32 cnss_get_wake_msi(struct cnss_plat_data *plat_priv);
 bool *cnss_get_qmi_bypass(void);
 bool is_qcn7605_device(u16 device_id);
 void cnss_set_wlan_chip_to_host_wakeup(unsigned int wakeup_gpio_num);
+void cnss_delete_old_fw_dump_files(void);
 #endif /* _CNSS_MAIN_H */
