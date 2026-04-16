@@ -2002,6 +2002,7 @@ int mhi_register_device(struct mhi_device *mhi_device,
 	u32 dev_id = pci_dev->device;
 	u32 slot = PCI_SLOT(pci_dev->devfn);
 	int ret, i;
+	char node[32];
 	struct pcie_core_info *core;
 
 #ifdef CONFIG_ARCH_QCOM

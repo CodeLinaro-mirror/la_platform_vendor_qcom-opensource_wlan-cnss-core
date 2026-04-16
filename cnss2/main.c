@@ -1343,8 +1343,11 @@ self_recovery:
 
 	policy = cnss_determine_recovery_policy(plat_priv);
 	cnss_bus_dev_shutdown(plat_priv, policy);
-	if (policy == FULL_RECOVERY)
-		cnss_bus_dev_powerup(plat_priv);
+	switch (policy) {
+		case FULL_RECOVERY:
+			cnss_bus_dev_powerup(plat_priv);
+			break;
+	}
 
 	return 0;
 }
@@ -2114,18 +2117,13 @@ void cnss_unregister_subsys(struct cnss_plat_data *plat_priv) {
  */
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 {
+#ifndef CONFIG_NAPIER_X86
 	int ret = 0;
 	const char *dev_name = "wlan";
+#endif
 	struct cnss_ramdump_info_v2 *info_v2;
 	struct cnss_dump_data *dump_data;
 
-#ifdef CONFIG_NAPIER_X86
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-	if (!pci_priv || !pci_priv->pci_dev) {
-		cnss_pr_err("PCI device not probed yet\n");
-		return -ENODEV;
-	}
-#endif
 
 	info_v2 = &plat_priv->ramdump_info_v2;
 	dump_data = &info_v2->dump_data;
@@ -2140,22 +2138,21 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 	dump_data->seg_version = CNSS_DUMP_SEG_VER;
 	strlcpy(dump_data->name, CNSS_DUMP_NAME,
 		sizeof(dump_data->name));
-#ifdef CONFIG_NAPIER_X86
-	info_v2->ramdump_dev = create_ramdump_device(dev_name, &pci_priv->pci_dev->dev);
-#else
+#ifndef CONFIG_NAPIER_X86
 	info_v2->ramdump_dev = create_ramdump_device(dev_name, &plat_priv->plat_dev->dev);
-#endif
 	if (!info_v2->ramdump_dev) {
 		cnss_pr_err("Failed to create ramdump device!\n");
 		ret = -ENOMEM;
 		goto free_ramdump;
 	}
+#endif
 	return 0;
-
+#ifndef CONFIG_NAPIER_X86
 free_ramdump:
 	kfree(info_v2->dump_data_vaddr);
 	info_v2->dump_data_vaddr = NULL;
 	return ret;
+#endif
 }
 
 void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
@@ -2164,8 +2161,10 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
 
 	info_v2 = &plat_priv->ramdump_info_v2;
 
+#ifndef CONFIG_NAPIER_X86
 	if (info_v2->ramdump_dev)
 		destroy_ramdump_device(info_v2->ramdump_dev);
+#endif
 
 	kfree(info_v2->dump_data_vaddr);
 	info_v2->dump_data_vaddr = NULL;
@@ -2291,6 +2290,7 @@ static int cnss_create_sysfs(struct cnss_plat_data *plat_priv)
 
 #ifdef CONFIG_NAPIER_X86
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+
 	if (!pci_priv || !pci_priv->pci_dev) {
 		cnss_pr_err("PCI device not probed yet\n");
 		goto out;
@@ -2334,7 +2334,9 @@ static ssize_t cnss_serial_id_show(struct device *dev,
 
 	msb &= 0xFFFF;
 	serial_id = ((u64)msb << 32) | lsb;
-	return scnprintf(buf, PAGE_SIZE, "\n%llx\n", serial_id);
+	int ret = scnprintf(buf, PAGE_SIZE, "\n%lx\n", serial_id);
+
+	return ret;
 }
 
 static DEVICE_ATTR(serial_id, 0444, cnss_serial_id_show, NULL);
@@ -2376,12 +2378,7 @@ out:
 
 static void cnss_remove_sysfs_wl_pwr(struct cnss_plat_data *plat_priv)
 {
-#ifdef CONFIG_NAPIER_X86
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-	device_remove_file(&pci_priv->pci_dev->dev, &dev_attr_wl_pwr_on);
-#else
 	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_wl_pwr_on);
-#endif
 }
 
 static int cnss_event_work_init(struct cnss_plat_data *plat_priv)
@@ -2430,29 +2427,15 @@ out:
 
 static void cnss_remove_sysfs_cssr(struct cnss_plat_data *plat_priv)
 {
-#ifdef CONFIG_NAPIER_X86
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-	device_remove_file(&pci_priv->pci_dev->dev, &dev_attr_cssr_detected);
-#else
 	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_cssr_detected);
-#endif
 }
 
 static int cnss_create_sysfs_wow_ssr_suppressed(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-#ifdef CONFIG_NAPIER_X86
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-	if (!pci_priv || !pci_priv->pci_dev) {
-		cnss_pr_err("PCI device not probed yet\n");
-			goto out;
-	}
-	ret = device_create_file(&pci_priv->pci_dev->dev,
-                                 &dev_attr_wow_ssr_suppressed);
-#else
+
 	ret = device_create_file(&plat_priv->plat_dev->dev,
                                  &dev_attr_wow_ssr_suppressed);
-#endif
 	if (ret) {
 		cnss_pr_err("Failed to create device file, err = %d\n", ret);
 		goto out;
@@ -2466,12 +2449,7 @@ out:
 
 static void cnss_remove_sysfs_wow_ssr_suppressed(struct cnss_plat_data *plat_priv)
 {
-#ifdef CONFIG_NAPIER_X86
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-	device_remove_file(&pci_priv->pci_dev->dev, &dev_attr_wow_ssr_suppressed);
-#else
 	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_wow_ssr_suppressed);
-#endif
 }
 
 static void cnss_event_work_deinit(struct cnss_plat_data *plat_priv)
@@ -2482,18 +2460,9 @@ static void cnss_event_work_deinit(struct cnss_plat_data *plat_priv)
 static int cnss_create_sysfs_serial_id(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-#ifdef CONFIG_NAPIER_X86
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-		if (!pci_priv || !pci_priv->pci_dev) {
-			cnss_pr_err("PCI device not probed yet\n");
-			goto out;
-		}
-	ret = device_create_file(&pci_priv->pci_dev->dev,
-                                 &dev_attr_serial_id);
-#else
+
 	ret = device_create_file(&plat_priv->plat_dev->dev,
                                  &dev_attr_serial_id);
-#endif
 	if (ret) {
 		cnss_pr_err("Failed to create device file, err = %d\n", ret);
 		goto out;
@@ -2507,12 +2476,7 @@ out:
 
 static void cnss_remove_sysfs_serial_id(struct cnss_plat_data *plat_priv)
 {
-#ifdef CONFIG_NAPIER_X86
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-	device_remove_file(&pci_priv->pci_dev->dev, &dev_attr_serial_id);
-#else
 	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_serial_id);
-#endif
 }
 
 static int cnss_alloc_caldb_mem(struct cnss_plat_data *plat_priv)

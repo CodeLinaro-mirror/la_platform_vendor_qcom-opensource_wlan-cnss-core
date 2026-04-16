@@ -166,12 +166,12 @@ void mhi_ctxt_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 		   mhi_dev_ctxt->dev_space.dev_mem_start,
 		   mhi_dev_ctxt->dev_space.dma_dev_mem_start);
 
+	kfree(mhi_dev_ctxt->ev_ring_props);
+
 	for (i = 0; i < mhi_dev_ctxt->core.max_nr_msis; i++)
 		free_irq(mhi_dev_ctxt->core.irq_base +
 			mhi_dev_ctxt->ev_ring_props[i].msi_vec,
 			(void *)&mhi_dev_ctxt->mhi_local_event_ctxt[i]);
-
-	kfree(mhi_dev_ctxt->ev_ring_props);
 }
 
 static const struct dev_pm_ops pm_ops = {
