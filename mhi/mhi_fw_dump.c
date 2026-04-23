@@ -16,7 +16,7 @@
 #include "mhi.h"
 #include "mhi_bhi.h"
 #include "mhi_sys.h"
-
+#include "main.h"
 
 #ifdef DUMP_TO_FS
 
@@ -385,6 +385,8 @@ void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt)
 	ramdump_header_t *head;
 	ramdump_entry *entry;
 	unsigned int offset = 0;
+
+	cnss_delete_old_fw_dump_files();
 
 	len = get_time_of_the_day_in_hr_min_sec(time_buf, sizeof(time_buf));
 	len = scnprintf(file_full_path,

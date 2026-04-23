@@ -1473,6 +1473,122 @@ int cnss_force_fw_assert(struct device *dev)
 EXPORT_SYMBOL(cnss_force_fw_assert);
 
 #ifdef DUMP_TO_FS
+#include <linux/namei.h>
+#include <linux/fs.h>
+/* Callback function called for each file in directory */
+static bool delete_file_actor(struct dir_context *ctx, const char *name,
+			     int namlen, loff_t offset, u64 ino,
+			     unsigned int d_type)
+{
+	struct delete_ctx *del_ctx = container_of(ctx, struct delete_ctx, ctx);
+	struct path file_path;
+	char full_path[256];
+	int ret, i;
+	bool match = false;
+
+	/* Skip . and .. */
+	if (name[0] == '.' && (namlen == 1 || (namlen == 2 && name[1] == '.')))
+		return true;
+
+	cnss_pr_dbg("Found file: %s\n", name);
+
+	/* Check if filename matches any pattern */
+	for (i = 0; i < del_ctx->pattern_count; i++) {
+		cnss_pr_dbg("pattern: %s\n", del_ctx->patterns[i]);
+		if (strstr(name, del_ctx->patterns[i])) {
+			match = true;
+			cnss_pr_info("Matched pattern '%s': %s\n",
+				     del_ctx->patterns[i], name);
+			break;
+		}
+	}
+
+	if (!match)
+		return true;
+
+	/* Build full path and get file path structure */
+	snprintf(full_path, sizeof(full_path), "/var/crash/%s", name);
+	ret = kern_path(full_path, 0, &file_path);
+	if (ret) {
+		cnss_pr_err("Cannot get path for %s, err = %d\n", name, ret);
+		return true;
+	}
+
+	/* Delete the file */
+	ret = vfs_unlink(&nop_mnt_idmap,
+			 d_inode(del_ctx->parent_path->dentry),
+			 file_path.dentry, NULL);
+	if (ret)
+		cnss_pr_err("Failed to delete %s, err = %d\n", name, ret);
+	else {
+		cnss_pr_info("Successfully deleted: %s\n", name);
+		del_ctx->deleted_count++;
+	}
+
+	path_put(&file_path);
+	return true;
+}
+
+/**
+ * cnss_delete_old_fw_dump_files() - Delete old firmware dump files
+ *
+ * This function deletes old firmware dump files (fwsram.bin, paging.bin,
+ * remote.bin) from /var/crash directory.
+ *
+ * Return: None
+ */
+void cnss_delete_old_fw_dump_files(void)
+{
+	int ret;
+	struct path parent_path;
+	struct file *dir_file;
+	struct delete_ctx del_ctx;
+	const char *patterns[] = {"fwsram.bin", "paging.bin", "remote.bin",
+                                  "ETB_SOC.bin", "ETB_WCSS.bin",
+                                  "PHYA-M3.3.bin", "PHYB-M3.3.bin",
+                                  "Q6-SFR.bin", "Q6-SRAM.bin"};
+
+	cnss_pr_info("Starting deletion of old FW dump files\n");
+
+	/* Step 1: Get the directory path */
+	ret = kern_path("/var/crash", LOOKUP_DIRECTORY, &parent_path);
+	if (ret) {
+		cnss_pr_err("Cannot access /var/crash, err = %d\n", ret);
+		return;
+	}
+
+	/* Step 2: Open directory as a file for reading */
+	dir_file = dentry_open(&parent_path, O_RDONLY | O_DIRECTORY, current_cred());
+	if (IS_ERR(dir_file)) {
+		cnss_pr_err("Cannot open /var/crash, err = %ld\n",
+			    PTR_ERR(dir_file));
+		path_put(&parent_path);
+		return;
+	}
+
+	/* Step 3: Setup iteration context */
+	del_ctx.ctx.actor = delete_file_actor;
+	del_ctx.ctx.pos = 0;
+	del_ctx.patterns = patterns;
+	del_ctx.pattern_count = ARRAY_SIZE(patterns);
+	del_ctx.parent_path = &parent_path;
+	del_ctx.deleted_count = 0;
+
+	cnss_pr_info("Scanning /var/crash directory...\n");
+
+	/* Step 4: Iterate through all files in directory */
+	ret = iterate_dir(dir_file, &del_ctx.ctx);
+	if (ret < 0)
+		cnss_pr_err("Directory iteration failed, err = %d\n", ret);
+
+	cnss_pr_info("Scan complete: deleted %d files\n",
+		     del_ctx.deleted_count);
+
+	/* Step 5: Cleanup */
+	filp_close(dir_file, NULL);
+	path_put(&parent_path);
+}
+
 int cnss_dump_fw_sram_to_file(struct cnss_plat_data *plat_priv)
 {
 	uint32_t fw_sram_start;
@@ -1501,6 +1617,8 @@ int cnss_dump_fw_sram_to_file(struct cnss_plat_data *plat_priv)
 				plat_priv->device_id);
 			return -ENOTSUPP;
 	}
+
+	cnss_delete_old_fw_dump_files();
 
 	len = get_time_of_the_day_in_hr_min_sec(time_buf, sizeof(time_buf));
 	len = scnprintf(fw_sram_dump_path,
