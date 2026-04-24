@@ -275,7 +275,13 @@ enum cnss_recovery_reason {
 
 enum cnss_fw_caps {
 	CNSS_FW_CAP_DIRECT_LINK_SUPPORT,
+	CNSS_FW_CAP_AUX_UC_SUPPORT,
+	CNSS_FW_CAP_CALDB_SEG_DDR_SUPPORT,
+	CNSS_FW_CAP_WLAN_DUMP_OVER_BT_SUPPORT,
+	CNSS_FW_CAP_BT_DUMP_OVER_WLAN_SUPPORT,
+	CNSS_FW_CAP_DIRECT_REFILL_SUPPORT,
 };
+
 
 extern int cnss_wlan_register_driver(struct cnss_wlan_driver *driver);
 extern void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver);
@@ -388,6 +394,8 @@ extern int cnss_pci_force_wake_request_sync(struct device *dev, int timeout);
 extern int cnss_update_time_sync_period(struct device *dev,
 					 uint32_t time_sync_period);
 extern int cnss_reset_time_sync_period(struct device *dev);
+extern bool cnss_smmu_s1_enabled(struct device *dev);
+extern int cnss_set_vendor_wonder_priv_data(const void *priv_data);
 extern bool cnss_audio_is_direct_link_supported(struct device *dev);
 extern bool cnss_get_audio_shared_iommu_group_cap(struct device *dev);
 extern int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,

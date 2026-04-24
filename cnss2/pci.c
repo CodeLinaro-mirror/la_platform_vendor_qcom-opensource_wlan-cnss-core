@@ -2086,6 +2086,18 @@ bool cnss_audio_is_direct_link_supported(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_audio_is_direct_link_supported);
 
+bool cnss_smmu_s1_enabled(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_smmu_s1_enabled);
+
+int cnss_set_vendor_wonder_priv_data(const void *priv_data)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_set_vendor_wonder_priv_data);
+
 bool cnss_get_audio_shared_iommu_group_cap(struct device *dev)
 {
 	return 0;
