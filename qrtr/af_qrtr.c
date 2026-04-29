@@ -2,7 +2,6 @@
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/netlink.h>
@@ -13,13 +12,8 @@
 
 #include <net/sock.h>
 
+#include "unified_wlan_cnsscore.h"
 #include "qrtr.h"
-#include <linux/version.h>
-
-#ifdef CONFIG_WLAN_CNSS_CORE
-#undef EXPORT_SYMBOL_GPL
-#define EXPORT_SYMBOL_GPL(x)
-#endif
 
 #define QRTR_PROTO_VER_1 1
 #define QRTR_PROTO_VER_2 3
@@ -763,17 +757,6 @@ static int qrtr_port_assign(struct qrtr_sock *ipc, int *port)
 	return 0;
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
-void static ipc_sk_error_report(struct qrtr_sock *ipc)
-{
-	sk_error_report(&ipc->sk);
-}
-#else
-void static ipc_sk_error_report(struct qrtr_sock *ipc)
-{
-	ipc->sk.sk_error_report(&ipc->sk);
-}
-#endif
 /* Reset all non-control ports */
 static void qrtr_reset_ports(void)
 {
@@ -784,7 +767,7 @@ static void qrtr_reset_ports(void)
 	xa_for_each_start(&qrtr_ports, index, ipc, 1) {
 		sock_hold(&ipc->sk);
 		ipc->sk.sk_err = ENETRESET;
-		ipc_sk_error_report(ipc);
+		sk_error_report(&ipc->sk);
 		sock_put(&ipc->sk);
 	}
 	rcu_read_unlock();
@@ -902,7 +885,7 @@ static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 
 	mutex_lock(&qrtr_node_lock);
 	list_for_each_entry(node, &qrtr_all_nodes, item) {
-		skbn = skb_clone(skb, GFP_KERNEL);
+		skbn = pskb_copy(skb, GFP_KERNEL);
 		if (!skbn)
 			break;
 		skb_set_owner_w(skbn, skb->sk);
@@ -1061,12 +1044,8 @@ static int qrtr_recvmsg(struct socket *sock, struct msghdr *msg,
 		release_sock(sk);
 		return -EADDRNOTAVAIL;
 	}
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 6))
+
 	skb = skb_recv_datagram(sk, flags, &rc);
-#else
-	skb = skb_recv_datagram(sk, flags & ~MSG_DONTWAIT,
-				flags & MSG_DONTWAIT, &rc);
-#endif
 	if (!skb) {
 		release_sock(sk);
 		return rc;
@@ -1191,22 +1170,14 @@ static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		rc = put_user(len, (int __user *)argp);
 		break;
 	case SIOCGIFADDR:
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 		if (get_user_ifreq(&ifr, NULL, argp)) {
-#else
-		if (copy_from_user(&ifr, argp, sizeof(ifr))) {
-#endif
 			rc = -EFAULT;
 			break;
 		}
 
 		sq = (struct sockaddr_qrtr *)&ifr.ifr_addr;
 		*sq = ipc->us;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 		if (put_user_ifreq(&ifr, argp)) {
-#else
-		if (copy_to_user(argp, &ifr, sizeof(ifr))) {
-#endif
 			rc = -EFAULT;
 			break;
 		}
@@ -1279,9 +1250,6 @@ static const struct proto_ops qrtr_proto_ops = {
 	.shutdown	= sock_no_shutdown,
 	.release	= qrtr_release,
 	.mmap		= sock_no_mmap,
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(6, 4, 16))	
-	.sendpage	= sock_no_sendpage,
-#endif
 };
 
 static struct proto qrtr_proto = {

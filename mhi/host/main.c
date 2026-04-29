@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  */
 
@@ -16,69 +16,6 @@
 #include <linux/skbuff.h>
 #include <linux/slab.h>
 #include "internal.h"
-
-#ifdef CONFIG_WLAN_CNSS_CORE
-#undef EXPORT_SYMBOL_GPL
-#define EXPORT_SYMBOL_GPL(x)
-#endif
-
-void mhi_debug_reg_dump(struct mhi_controller *mhi_cntrl)
-{
-	struct device *dev = &mhi_cntrl->mhi_dev->dev;
-	enum mhi_state state;
-	enum mhi_ee_type ee;
-	int i, ret;
-	u32 val;
-	void __iomem *mhi_base = mhi_cntrl->regs;
-	void __iomem *bhi_base = mhi_cntrl->bhi;
-	void __iomem *bhie_base = mhi_cntrl->bhie;
-	void __iomem *wake_db = mhi_cntrl->wake_db;
-	struct {
-		const char *name;
-		int offset;
-		void __iomem *base;
-	} debug_reg[] = {
-		{ "BHI_ERRDBG2", BHI_ERRDBG2, bhi_base},
-		{ "BHI_ERRDBG3", BHI_ERRDBG3, bhi_base},
-		{ "BHI_ERRDBG1", BHI_ERRDBG1, bhi_base},
-		{ "BHI_ERRCODE", BHI_ERRCODE, bhi_base},
-		{ "BHI_EXECENV", BHI_EXECENV, bhi_base},
-		{ "BHI_STATUS", BHI_STATUS, bhi_base},
-		{ "MHI_CNTRL", MHICTRL, mhi_base},
-		{ "MHI_STATUS", MHISTATUS, mhi_base},
-		{ "MHI_WAKE_DB", 0, wake_db},
-		{ "BHIE_TXVEC_DB", BHIE_TXVECDB_OFFS, bhie_base},
-		{ "BHIE_TXVEC_STATUS", BHIE_TXVECSTATUS_OFFS, bhie_base},
-		{ "BHIE_RXVEC_DB", BHIE_RXVECDB_OFFS, bhie_base},
-		{ "BHIE_RXVEC_STATUS", BHIE_RXVECSTATUS_OFFS, bhie_base},
-		{ NULL },
-	};
-
-	if (!mhi_cntrl->regs || !mhi_cntrl->bhi || !mhi_cntrl->bhie) {
-		dev_err(dev, "Cannot dump MHI/BHI registers\n");
-		return;
-	}
-
-	dev_err(dev, "host pm_state:%s dev_state:%s ee:%s\n",
-			to_mhi_pm_state_str(mhi_cntrl->pm_state),
-			TO_MHI_STATE_STR(mhi_cntrl->dev_state),
-			TO_MHI_EXEC_STR(mhi_cntrl->ee));
-
-	state = mhi_get_mhi_state(mhi_cntrl);
-	ee = mhi_get_exec_env(mhi_cntrl);
-
-	dev_err(dev, "device ee: %s dev_state: %s\n", TO_MHI_EXEC_STR(ee),
-			TO_MHI_STATE_STR(state));
-
-	for (i = 0; debug_reg[i].name; i++) {
-		if (!debug_reg[i].base)
-			continue;
-		ret = mhi_read_reg(mhi_cntrl, debug_reg[i].base,
-				debug_reg[i].offset, &val);
-		dev_err(dev, "reg: %s val: 0x%x, ret: %d\n", debug_reg[i].name,
-				val, ret);
-	}
-}
 
 int __must_check mhi_read_reg(struct mhi_controller *mhi_cntrl,
 			      void __iomem *base, u32 offset, u32 *out)
@@ -104,10 +41,11 @@ int __must_check mhi_read_reg_field(struct mhi_controller *mhi_cntrl,
 
 int __must_check mhi_poll_reg_field(struct mhi_controller *mhi_cntrl,
 				    void __iomem *base, u32 offset,
-				    u32 mask, u32 val, u32 delayus)
+				    u32 mask, u32 val, u32 delayus,
+				    u32 timeout_ms)
 {
 	int ret;
-	u32 out, retry = (mhi_cntrl->timeout_ms * 1000) / delayus;
+	u32 out, retry = (timeout_ms * 1000) / delayus;
 
 	while (retry--) {
 		ret = mhi_read_reg_field(mhi_cntrl, base, offset, mask, &out);
@@ -330,6 +268,11 @@ static void mhi_del_ring_element(struct mhi_controller *mhi_cntrl,
 	smp_wmb();
 }
 
+static bool is_valid_ring_ptr(struct mhi_ring *ring, dma_addr_t addr)
+{
+	return addr >= ring->iommu_base && addr < ring->iommu_base + ring->len &&
+			!(addr & (sizeof(struct mhi_ring_element) - 1));
+}
 
 int mhi_destroy_device(struct device *dev, void *data)
 {
@@ -535,7 +478,6 @@ irqreturn_t mhi_irq_handler(int irq_number, void *dev)
 	return IRQ_HANDLED;
 }
 
-extern bool cnss_is_one_msi(struct device *dev);
 irqreturn_t mhi_intvec_threaded_handler(int irq_number, void *priv)
 {
 	struct mhi_controller *mhi_cntrl = priv;
@@ -552,11 +494,10 @@ irqreturn_t mhi_intvec_threaded_handler(int irq_number, void *priv)
 
 	state = mhi_get_mhi_state(mhi_cntrl);
 	ee = mhi_get_exec_env(mhi_cntrl);
-	if (!cnss_is_one_msi(dev))
-			dev_dbg(dev, "local ee: %s state: %s device ee: %s state: %s\n",
-				TO_MHI_EXEC_STR(mhi_cntrl->ee),
-				TO_MHI_STATE_STR(mhi_cntrl->dev_state),
-				TO_MHI_EXEC_STR(ee), TO_MHI_STATE_STR(state));
+	dev_dbg(dev, "local ee: %s state: %s device ee: %s state: %s\n",
+		TO_MHI_EXEC_STR(mhi_cntrl->ee),
+		mhi_state_str(mhi_cntrl->dev_state),
+		TO_MHI_EXEC_STR(ee), mhi_state_str(state));
 
 	if (state == MHI_STATE_SYS_ERR) {
 		dev_dbg(dev, "System error detected\n");
@@ -921,7 +862,7 @@ int mhi_process_ctrl_ev_ring(struct mhi_controller *mhi_cntrl,
 			new_state = MHI_TRE_GET_EV_STATE(local_rp);
 
 			dev_dbg(dev, "State change event to state: %s\n",
-				TO_MHI_STATE_STR(new_state));
+				mhi_state_str(new_state));
 
 			switch (new_state) {
 			case MHI_STATE_M0:
@@ -948,7 +889,7 @@ int mhi_process_ctrl_ev_ring(struct mhi_controller *mhi_cntrl,
 			}
 			default:
 				dev_err(dev, "Invalid state: %s\n",
-					TO_MHI_STATE_STR(new_state));
+					mhi_state_str(new_state));
 			}
 
 			break;
@@ -1029,134 +970,6 @@ int mhi_process_ctrl_ev_ring(struct mhi_controller *mhi_cntrl,
 
 	/* Ring EV DB only if there is any pending element to process */
 	if (likely(MHI_DB_ACCESS_VALID(mhi_cntrl)) && count)
-		mhi_ring_er_db(mhi_event);
-	read_unlock_bh(&mhi_cntrl->pm_lock);
-
-	return count;
-}
-
-int mhi_dump_event_ring(struct mhi_controller *mhi_cntrl)
-{
-	struct mhi_ring_element  *dev_rp, *local_rp;
-	struct mhi_event *mhi_event = mhi_cntrl->mhi_event;
-	struct mhi_ring *ev_ring = &mhi_event->ring;
-	struct mhi_event_ctxt *er_ctxt =
-		&mhi_cntrl->mhi_ctxt->er_ctxt[mhi_event->er_index];
-	struct device *dev = &mhi_cntrl->mhi_dev->dev;
-	u32 chan, ev_index=mhi_event->er_index;
-	int count = 0;
-	dma_addr_t ptr = le64_to_cpu(er_ctxt->rp);
-
-	/*
-	 * This is a quick check to avoid unnecessary event processing
-	 * in case MHI is already in error state, but it's still possible
-	 * to transition to error state while processing events
-	 */
-	if (unlikely(MHI_EVENT_ACCESS_INVALID(mhi_cntrl->pm_state))) {
-		dev_err(&mhi_cntrl->mhi_dev->dev,
-			"mhi event access invalid\n");
-		return -EIO;
-	}
-
-	if (!is_valid_ring_ptr(ev_ring, ptr)) {
-		dev_err(&mhi_cntrl->mhi_dev->dev,
-			"Event ring rp points outside of the event ring\n");
-		return -EIO;
-	}
-
-	dev_rp = mhi_to_virtual(ev_ring, ptr);
-	local_rp = ev_ring->rp;
-	dev_err(&mhi_cntrl->mhi_dev->dev,
-		"mhi ring dev_rp=0x%p, local=0x%p, ev_ring=0x%p\n", dev_rp, local_rp, ev_ring);
-
-	while (dev_rp != local_rp) {
-		enum mhi_pkt_type type = MHI_TRE_GET_EV_TYPE(local_rp);
-
-		switch (type) {
-		case MHI_PKT_TYPE_BW_REQ_EVENT:
-		{
-			dev_err(dev, "Received BW_REQ event\n");
-			dev_err(dev, "link_speed=%d, link_width=%d\n",
-				MHI_TRE_GET_EV_LINKSPEED(local_rp),
-				MHI_TRE_GET_EV_LINKWIDTH(local_rp));
-			break;
-		}
-		case MHI_PKT_TYPE_STATE_CHANGE_EVENT:
-		{
-			enum mhi_state new_state;
-
-			new_state = MHI_TRE_GET_EV_STATE(local_rp);
-
-			dev_err(dev, "State change event to state: %s\n",
-				TO_MHI_STATE_STR(new_state));
-
-			break;
-		}
-		case MHI_PKT_TYPE_CMD_COMPLETION_EVENT:
-			mhi_process_cmd_completion(mhi_cntrl, local_rp);
-			break;
-		case MHI_PKT_TYPE_EE_EVENT:
-		{
-			enum dev_st_transition st = DEV_ST_TRANSITION_MAX;
-			enum mhi_ee_type event = MHI_TRE_GET_EV_EXECENV(local_rp);
-
-			dev_err(dev, "Received EE event: %s\n",
-				TO_MHI_EXEC_STR(event));
-			switch (event) {
-			case MHI_EE_SBL:
-				st = DEV_ST_TRANSITION_SBL;
-				break;
-			case MHI_EE_WFW:
-			case MHI_EE_AMSS:
-				st = DEV_ST_TRANSITION_MISSION_MODE;
-				break;
-			case MHI_EE_FP:
-				st = DEV_ST_TRANSITION_FP;
-				break;
-			case MHI_EE_RDDM:
-				mhi_cntrl->status_cb(mhi_cntrl, MHI_CB_EE_RDDM);
-				write_lock_irq(&mhi_cntrl->pm_lock);
-				mhi_cntrl->ee = event;
-				write_unlock_irq(&mhi_cntrl->pm_lock);
-				wake_up_all(&mhi_cntrl->state_event);
-				break;
-			default:
-				dev_err(dev,
-					"Unhandled EE event: 0x%x\n", type);
-			}
-			if (st != DEV_ST_TRANSITION_MAX)
-				mhi_queue_state_transition(mhi_cntrl, st);
-
-			break;
-		}
-		case MHI_PKT_TYPE_TX_EVENT:
-			chan = MHI_TRE_GET_EV_CHID(local_rp);
-
-			WARN_ON(chan >= mhi_cntrl->max_chan);
-			dev_err(dev, "MHI TX received ring 0x%x chan:%u\n", ev_index, chan);
-
-			break;
-		default:
-			dev_err(dev, "Unhandled event type: %d\n", type);
-			break;
-		}
-
-		mhi_recycle_ev_ring_element(mhi_cntrl, ev_ring);
-		local_rp = ev_ring->rp;
-
-		ptr = le64_to_cpu(er_ctxt->rp);
-		if (!is_valid_ring_ptr(ev_ring, ptr)) {
-			dev_err(&mhi_cntrl->mhi_dev->dev,
-				"Event ring rp points outside of the event ring\n");
-			return -EIO;
-		}
-
-		dev_rp = mhi_to_virtual(ev_ring, ptr);
-		count++;
-	}
-
-	read_lock_bh(&mhi_cntrl->pm_lock);
-	if (likely(MHI_DB_ACCESS_VALID(mhi_cntrl)))
 		mhi_ring_er_db(mhi_event);
 	read_unlock_bh(&mhi_cntrl->pm_lock);
 

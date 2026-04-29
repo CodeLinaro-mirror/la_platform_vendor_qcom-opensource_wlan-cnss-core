@@ -1,5 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved. */
+/*
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
 
 #ifndef _CNSS_QMI_H
 #define _CNSS_QMI_H
@@ -40,7 +44,11 @@ int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 				 u32 bdf_type);
+int cnss_wlfw_tme_patch_dnld_send_sync(struct cnss_plat_data *plat_priv,
+				       enum wlfw_tme_lite_file_type_v01 file);
+int cnss_wlfw_soft_sku_dnld_send_sync(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv);
+int cnss_wlfw_aux_dnld_send_sync(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 				  enum cnss_driver_mode mode);
 int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
@@ -80,12 +88,19 @@ void cnss_dms_deinit(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv, char *file_name,
 				  u32 total_size);
+int cnss_wlfw_tme_opt_file_dnld_send_sync(struct cnss_plat_data *plat_priv,
+				       enum wlfw_tme_lite_file_type_v01 file);
 int wlfw_qdss_trace_start(struct cnss_plat_data *plat_priv);
 int wlfw_qdss_trace_stop(struct cnss_plat_data *plat_priv, unsigned long long option);
 int cnss_wlfw_cal_report_req_send_sync(struct cnss_plat_data *plat_priv,
 				       u32 cal_file_download_size);
+int cnss_send_subsys_restart_level_msg(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_send_host_wfc_call_status(struct cnss_plat_data *plat_priv,
 					struct cnss_wfc_cfg cfg);
+void cnss_cancel_dms_work(struct cnss_plat_data *plat_priv);
+int cnss_wlfw_req_bt_dump_send_sync(struct cnss_plat_data *plat_priv);
+int cnss_wlfw_xo_trim_result_send_sync(struct cnss_plat_data *plat_priv,
+				       int result);
 #else
 #define QMI_WLFW_TIMEOUT_MS		10000
 
@@ -132,7 +147,18 @@ static inline int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	return 0;
 }
 
+static inline int cnss_wlfw_tme_patch_dnld_send_sync(
+	struct cnss_plat_data *plat_priv, enum wlfw_tme_lite_file_type_v01 file)
+{
+	return 0;
+}
+
 static inline int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+static inline int cnss_wlfw_aux_dnld_send_sync(struct cnss_plat_data *plat_priv)
 {
 	return 0;
 }
@@ -255,14 +281,14 @@ int cnss_wlfw_send_pcie_gen_speed_sync(struct cnss_plat_data *plat_priv)
 {
 	return 0;
 }
-void cnss_ignore_qmi_failure(bool ignore) {};
+static inline void cnss_ignore_qmi_failure(bool ignore) {};
 static inline int cnss_qmi_get_dms_mac(struct cnss_plat_data *plat_priv)
 {
 	return 0;
 }
 
-int cnss_wlfw_wlan_mac_req_send_sync(struct cnss_plat_data *plat_priv,
-				     u8 *mac, u32 mac_len)
+static inline int cnss_wlfw_wlan_mac_req_send_sync(
+	struct cnss_plat_data *plat_priv, u8 *mac, u32 mac_len)
 {
 	return 0;
 }
@@ -272,25 +298,39 @@ static inline int cnss_dms_init(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
-int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv)
+static inline int cnss_wlfw_qdss_dnld_send_sync(
+	struct cnss_plat_data *plat_priv)
 {
 	return 0;
 }
 
-int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv, char *file_name,
-				  u32 total_size)
+static inline int cnss_wlfw_qdss_data_send_sync(
+	struct cnss_plat_data *plat_priv, char *file_name, u32 total_size)
+{
+	return 0;
+}
+
+static inline int cnss_wlfw_soft_sku_dnld_send_sync(
+	struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+static inline int cnss_wlfw_tme_opt_file_dnld_send_sync(
+	struct cnss_plat_data *plat_priv, enum wlfw_tme_lite_file_type_v01 file)
 {
 	return 0;
 }
 
 static inline void cnss_dms_deinit(struct cnss_plat_data *plat_priv) {}
 
-int wlfw_qdss_trace_start(struct cnss_plat_data *plat_priv)
+static inline int wlfw_qdss_trace_start(struct cnss_plat_data *plat_priv)
 {
 	return 0;
 }
 
-int wlfw_qdss_trace_stop(struct cnss_plat_data *plat_priv, unsigned long long option)
+static inline int wlfw_qdss_trace_stop(struct cnss_plat_data *plat_priv,
+				       unsigned long long option)
 {
 	return 0;
 }
@@ -301,8 +341,32 @@ int cnss_wlfw_cal_report_req_send_sync(struct cnss_plat_data *plat_priv,
 {
 	return 0;
 }
-int cnss_wlfw_send_host_wfc_call_status(struct cnss_plat_data *plat_priv,
-					struct cnss_wfc_cfg cfg)
+
+static inline
+int cnss_send_subsys_restart_level_msg(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+static inline void cnss_cancel_dms_work(struct cnss_plat_data *plat_priv)
+{
+}
+
+static inline int cnss_wlfw_send_host_wfc_call_status(
+	struct cnss_plat_data *plat_priv, struct cnss_wfc_cfg cfg)
+{
+	return 0;
+}
+
+static inline int cnss_wlfw_req_bt_dump_send_sync(
+	struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+static inline int
+cnss_wlfw_xo_trim_result_send_sync(struct cnss_plat_data *plat_priv,
+				   int result)
 {
 	return 0;
 }

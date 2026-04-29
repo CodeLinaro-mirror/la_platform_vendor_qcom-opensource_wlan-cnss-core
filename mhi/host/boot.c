@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  */
 
@@ -18,11 +18,6 @@
 #include <linux/slab.h>
 #include <linux/wait.h>
 #include "internal.h"
-
-#ifdef CONFIG_WLAN_CNSS_CORE
-#undef EXPORT_SYMBOL_GPL
-#define EXPORT_SYMBOL_GPL(x)
-#endif
 
 /* Setup RDDM vector table for RDDM transfer and program RXVEC */
 int mhi_rddm_prepare(struct mhi_controller *mhi_cntrl,
@@ -80,7 +75,7 @@ static int __mhi_download_rddm_in_panic(struct mhi_controller *mhi_cntrl)
 
 	dev_dbg(dev, "Entered with pm_state:%s dev_state:%s ee:%s\n",
 		to_mhi_pm_state_str(mhi_cntrl->pm_state),
-		TO_MHI_STATE_STR(mhi_cntrl->dev_state),
+		mhi_state_str(mhi_cntrl->dev_state),
 		TO_MHI_EXEC_STR(mhi_cntrl->ee));
 
 	/*
@@ -251,7 +246,6 @@ static int mhi_fw_load_bhi(struct mhi_controller *mhi_cntrl,
 		{ NULL },
 	};
 
-	dev_dbg(dev, "enter mhi_fw_load_bhi\n");
 	read_lock_bh(pm_lock);
 	if (!MHI_REG_ACCESS_VALID(mhi_cntrl->pm_state)) {
 		read_unlock_bh(pm_lock);
@@ -270,14 +264,12 @@ static int mhi_fw_load_bhi(struct mhi_controller *mhi_cntrl,
 	mhi_write_reg(mhi_cntrl, base, BHI_IMGTXDB, session_id);
 	read_unlock_bh(pm_lock);
 
-	dev_dbg(dev, "start waiting for the image download to complete %d s\n", mhi_cntrl->timeout_ms/1000);
 	/* Wait for the image download to complete */
 	ret = wait_event_timeout(mhi_cntrl->state_event,
 			   MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state) ||
 			   mhi_read_reg_field(mhi_cntrl, base, BHI_STATUS,
 					      BHI_STATUS_MASK, &tx_status) || tx_status,
 			   msecs_to_jiffies(mhi_cntrl->timeout_ms));
-	dev_info(dev, "image download complete\n");
 	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state))
 		goto invalid_pm_state;
 
@@ -301,7 +293,7 @@ static int mhi_fw_load_bhi(struct mhi_controller *mhi_cntrl,
 	return (!ret) ? -ETIMEDOUT : 0;
 
 invalid_pm_state:
-	dev_err(dev, "invalid_pm_state\n");
+
 	return -EIO;
 }
 
@@ -328,9 +320,6 @@ int mhi_alloc_bhie_table(struct mhi_controller *mhi_cntrl,
 	int i;
 	struct image_info *img_info;
 	struct mhi_buf *mhi_buf;
-	struct device *dev = &mhi_cntrl->mhi_dev->dev;
-	dev_info(dev, "Allocating bytes:%zu seg_size:%zu total_seg:%u\n",
-			alloc_size, seg_size, segments);
 
 	img_info = kzalloc(sizeof(*img_info), GFP_KERNEL);
 	if (!img_info)
@@ -357,14 +346,11 @@ int mhi_alloc_bhie_table(struct mhi_controller *mhi_cntrl,
 						  GFP_KERNEL);
 		if (!mhi_buf->buf)
 			goto error_alloc_segment;
-		dev_info(dev, "Entry:%d Address:0x%llx size:%lu\n", i,
-			mhi_buf->dma_addr, mhi_buf->len);
 	}
 
 	img_info->bhi_vec = img_info->mhi_buf[segments - 1].buf;
 	img_info->entries = segments;
 	*image_info = img_info;
-	dev_info(dev, "Successfully allocated bhi vec table\n");
 
 	return 0;
 
@@ -412,7 +398,6 @@ void mhi_fw_load_handler(struct mhi_controller *mhi_cntrl)
 	size_t size, fw_sz;
 	int i, ret;
 
-	dev_dbg(dev, "enter mhi_fw_load_handler\n");
 	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state)) {
 		dev_err(dev, "Device MHI is not in valid state\n");
 		return;
@@ -433,7 +418,6 @@ void mhi_fw_load_handler(struct mhi_controller *mhi_cntrl)
 		}
 	}
 
-	dev_dbg(dev, "mhi_cntrl->ee = %u\n", mhi_cntrl->ee);
 	/* wait for ready on pass through or any other execution environment */
 	if (!MHI_FW_LOAD_CAPABLE(mhi_cntrl->ee))
 		goto fw_load_ready_state;
@@ -462,7 +446,6 @@ void mhi_fw_load_handler(struct mhi_controller *mhi_cntrl)
 		goto error_fw_load;
 	}
 
-	dev_dbg(dev, "start request_firmware\n");
 	ret = request_firmware(&firmware, fw_name, dev);
 	if (ret) {
 		dev_err(dev, "Error loading firmware: %d\n", ret);
@@ -482,7 +465,6 @@ skip_req_fw:
 	buf = dma_alloc_coherent(mhi_cntrl->cntrl_dev, size, &dma_addr,
 				 GFP_KERNEL);
 	if (!buf) {
-		dev_err(dev, "error: dma_alloc_coherent fail, buf is null!\n");
 		release_firmware(firmware);
 		goto error_fw_load;
 	}
@@ -499,7 +481,6 @@ skip_req_fw:
 		goto error_fw_load;
 	}
 
-	dev_info(dev, "fw_name=%s", fw_name);
 	/* Wait for ready since EDL image was loaded */
 	if (fw_name && fw_name == mhi_cntrl->edl_image) {
 		release_firmware(firmware);
@@ -514,8 +495,14 @@ skip_req_fw:
 	 * If we're doing fbc, populate vector tables while
 	 * device transitioning into MHI READY state
 	 */
-	dev_dbg(dev, "mhi_cntrl->fbc_download = %d\n", mhi_cntrl->fbc_download);
 	if (mhi_cntrl->fbc_download) {
+		dev_dbg(dev, "standard_elf_image:%s\n",
+			(mhi_cntrl->standard_elf_image ? "True" : "False"));
+		if (mhi_cntrl->standard_elf_image) {
+			fw_data += mhi_cntrl->sbl_size;
+			fw_sz -= mhi_cntrl->sbl_size;
+		}
+
 		ret = mhi_alloc_bhie_table(mhi_cntrl, &mhi_cntrl->fbc_image, fw_sz);
 		if (ret) {
 			release_firmware(firmware);
@@ -536,11 +523,10 @@ fw_load_ready_state:
 		goto error_ready_state;
 	}
 
-	dev_dbg(dev, "Wait for device to enter SBL or Mission mode\n");
+	dev_info(dev, "Wait for device to enter SBL or Mission mode\n");
 	return;
 
 error_ready_state:
-	dev_err(dev, "error_ready_state\n");
 	if (mhi_cntrl->fbc_download) {
 		mhi_free_bhie_table(mhi_cntrl, mhi_cntrl->fbc_image);
 		mhi_cntrl->fbc_image = NULL;
@@ -552,7 +538,6 @@ error_fw_load:
 	write_unlock_irq(&mhi_cntrl->pm_lock);
 	if (new_state == MHI_PM_FW_DL_ERR)
 		wake_up_all(&mhi_cntrl->state_event);
-	dev_err(dev, "error_fw_load\n");
 }
 
 int mhi_download_amss_image(struct mhi_controller *mhi_cntrl)

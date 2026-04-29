@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved. */
+/*
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. 
+ */
 
 #include <net/genetlink.h>
 #ifdef CONFIG_CNSS_OUT_OF_TREE
@@ -20,6 +23,7 @@
 #define CLD80211_MULTICAST_GROUP_DIAG_EVENTS    "diag_events"
 #define CLD80211_MULTICAST_GROUP_FATAL_EVENTS   "fatal_events"
 #define CLD80211_MULTICAST_GROUP_OEM_MSGS       "oem_msgs"
+#define CLD80211_MULTICAST_GROUP_OPT_DP_LOGS    "opt_dp_logs"
 
 static const struct genl_multicast_group nl_mcgrps[] = {
 	[CLD80211_MCGRP_SVC_MSGS] = { .name =
@@ -36,6 +40,8 @@ static const struct genl_multicast_group nl_mcgrps[] = {
 			CLD80211_MULTICAST_GROUP_FATAL_EVENTS},
 	[CLD80211_MCGRP_OEM_MSGS] = { .name =
 			CLD80211_MULTICAST_GROUP_OEM_MSGS},
+	[CLD80211_MCGRP_OPT_DP_LOGS] = { .name =
+			CLD80211_MULTICAST_GROUP_OPT_DP_LOGS},
 };
 
 struct cld_ops {
@@ -68,12 +74,9 @@ static const struct nla_policy cld80211_policy[CLD80211_ATTR_MAX + 1] = {
 };
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
-static int cld80211_pre_doit(const struct genl_split_ops *ops, struct sk_buff *skb,
+static int cld80211_pre_doit(const struct genl_split_ops *ops,
+			     struct sk_buff *skb,
 			     struct genl_info *info)
-#else
-static int cld80211_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
-			     struct genl_info *info)
-#endif
 {
 	u8 cmd_id = ops->cmd;
 	struct cld80211_nl_data *nl = get_local_ctx();
@@ -87,7 +90,23 @@ static int cld80211_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 
 	return 0;
 }
+#else
+static int cld80211_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
+			     struct genl_info *info)
+{
+	u8 cmd_id = ops->cmd;
+	struct cld80211_nl_data *nl = get_local_ctx();
 
+	if (cmd_id < 1 || cmd_id > CLD80211_MAX_COMMANDS) {
+		pr_err("CLD80211: Command Not supported: %u\n", cmd_id);
+		return -EOPNOTSUPP;
+	}
+	info->user_ptr[0] = nl->cld_ops[cmd_id - 1].cb;
+	info->user_ptr[1] = nl->cld_ops[cmd_id - 1].cb_ctx;
+
+	return 0;
+}
+#endif
 /* The netlink family */
 static struct genl_family cld80211_fam __ro_after_init = {
 	.name = CLD80211_GENL_NAME,
@@ -196,9 +215,6 @@ static void __cld80211_exit(void)
 	genl_unregister_family(&cld80211_fam);
 }
 
-
-#ifndef CONFIG_CNSS2_X86
-
 /**
  * cld80211_is_valid_dt_node_found - Check if valid device tree node present
  *
@@ -221,8 +237,6 @@ static bool cld80211_is_valid_dt_node_found(void)
 
 	return false;
 }
-#endif
-
 
 #ifdef CONFIG_WLAN_CNSS_CORE
 int cld80211_init(void)
@@ -230,10 +244,8 @@ int cld80211_init(void)
 static int __init cld80211_init(void)
 #endif
 {
-#ifndef CONFIG_CNSS2_X86
 	if (!cld80211_is_valid_dt_node_found())
 		return -ENODEV;
-#endif
 
 	return __cld80211_init();
 }

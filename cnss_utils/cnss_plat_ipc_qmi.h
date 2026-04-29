@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2020-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
 
 #ifndef _CNSS_PLAT_IPC_QMI_H
 #define _CNSS_PLAT_IPC_QMI_H
@@ -15,11 +17,13 @@
 
 /**
  * cnss_plat_ipc_daemon_config: Config options provided by cnss-daemon
+ * @initialized: Set when daemon configs are initialized
  * @dms_mac_addr_supported: DMS MAC address provisioning support
  * @qdss_hw_trace_override: QDSS config for HW trace enable
  * @cal_file_available_bitmask: Calibration file available
  */
 struct cnss_plat_ipc_daemon_config {
+	u8 initialized;
 	u8 dms_mac_addr_supported;
 	u8 qdss_hw_trace_override;
 	u32 cal_file_available_bitmask;
@@ -40,10 +44,12 @@ void cnss_plat_ipc_unregister(enum cnss_plat_ipc_qmi_client_id_v01 client_id,
 			      void *cb_ctx);
 int cnss_plat_ipc_qmi_file_download(enum cnss_plat_ipc_qmi_client_id_v01
 				    client_id, char *file_name, char *buf,
-				    u32 *size);
+				    u32 *size, u8 **rddm_seg,
+				    u32 rddm_entries, u32 rddm_seg_len);
 int cnss_plat_ipc_qmi_file_upload(enum cnss_plat_ipc_qmi_client_id_v01
 				  client_id, char *file_name, u8 *file_buf,
-				  u32 file_size);
+				  u32 file_size, u8 **rddm_seg,
+				  u32 rddm_entries, u32 rddm_seg_len);
 struct cnss_plat_ipc_daemon_config *cnss_plat_ipc_qmi_daemon_config(void);
 #else
 static inline
@@ -63,7 +69,8 @@ void cnss_plat_ipc_unregister(enum cnss_plat_ipc_qmi_client_id_v01 client_id,
 static inline
 int cnss_plat_ipc_qmi_file_download(enum cnss_plat_ipc_qmi_client_id_v01
 				    client_id, char *file_name, char *buf,
-				    u32 *size)
+				    u32 *size, u8 **rddm_seg,
+				    u32 rddm_entries, u32 rddm_seg_len)
 {
 	return -EOPNOTSUPP;
 }
@@ -71,7 +78,8 @@ int cnss_plat_ipc_qmi_file_download(enum cnss_plat_ipc_qmi_client_id_v01
 static inline
 int cnss_plat_ipc_qmi_file_upload(enum cnss_plat_ipc_qmi_client_id_v01
 				  client_id, char *file_name, u8 *file_buf,
-				  u32 file_size)
+				  u32 file_size, u8 **rddm_seg,
+				  u32 rddm_entries, u32 rddm_seg_len)
 {
 	return -EOPNOTSUPP;
 }

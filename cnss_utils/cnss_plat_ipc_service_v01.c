@@ -398,5 +398,7 @@ struct qmi_elem_info cnss_plat_ipc_qmi_reg_client_resp_msg_v01_ei[] = {
 };
 EXPORT_SYMBOL(cnss_plat_ipc_qmi_reg_client_resp_msg_v01_ei);
 
+#ifndef CONFIG_WLAN_CNSS_CORE
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("WLAN FW QMI service");
+#endif

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #ifndef _NET_CNSS_GENETLINK_H_
 #define _NET_CNSS_GENETLINK_H_
@@ -23,6 +24,7 @@
  * @CLD80211_ATTR_CMD_TAG_DATA: cld80211 vendor subcommand data is present in
  * this attribute. It is a nested attribute with sub attributes of specified
  * vendor sub command.
+ * @CLD80211_ATTR_IFINDEX: Embed Intrerface indx in this attribute
  *
  * Any new message in future can be added as another attribute
  */
@@ -32,6 +34,7 @@ enum cld80211_attr {
 	CLD80211_ATTR_META_DATA,
 	CLD80211_ATTR_CMD,
 	CLD80211_ATTR_CMD_TAG_DATA,
+	CLD80211_ATTR_IFINDEX,
 	/* add new attributes above here */
 
 	__CLD80211_ATTR_AFTER_LAST,
@@ -54,6 +57,8 @@ enum cld80211_attr {
  *	will be sent to this group
  * @CLD80211_MCGRP_OEM_MSGS: All OEM message will be sent to this group
  *	Ex: LOWI messages
+ * @CLD80211_MCGRP_OPT_DP_LOGS: All Driver/Firmware logs related to optional
+ *	datapath will be sent to this multicast group
  */
 enum cld80211_multicast_groups {
 	CLD80211_MCGRP_SVC_MSGS,
@@ -63,6 +68,7 @@ enum cld80211_multicast_groups {
 	CLD80211_MCGRP_DIAG_EVENTS,
 	CLD80211_MCGRP_FATAL_EVENTS,
 	CLD80211_MCGRP_OEM_MSGS,
+	CLD80211_MCGRP_OPT_DP_LOGS,
 };
 
 /**

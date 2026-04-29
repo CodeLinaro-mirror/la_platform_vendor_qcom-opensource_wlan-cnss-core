@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -48,6 +48,14 @@ static int unified_pdrv_init(void)
 	}
 #endif
 
+#ifdef CONFIG_CNSS_PLAT_IPC_QMI_SVC
+		ret = cnss_plat_ipc_qmi_svc_init();
+		if (ret) {
+			printk("%s: updrv: failed to ipc_qmi_svc_init\n", __func__);
+			goto fail35;
+		}
+#endif
+
 #ifdef CONFIG_CNSS_UTILS
 	/* cnss utils Registration */
 	ret = cnss_utils_init();
@@ -82,6 +90,10 @@ fail5:
 	cnss_utils_exit();
 fail4:
 #endif
+#ifdef CONFIG_CNSS_PLAT_IPC_QMI_SVC
+	cnss_plat_ipc_qmi_svc_exit();
+fail35:
+#endif
 #ifdef CONFIG_CNSS_QMI_SVC
 	wlfw_deinit();
 fail3:
@@ -109,6 +121,9 @@ static void unified_pdrv_deinit(void)
 	cnss_exit();
 #ifdef CONFIG_CNSS_UTILS
 	cnss_utils_exit();
+#endif
+#ifdef CONFIG_CNSS_PLAT_IPC_QMI_SVC
+	cnss_plat_ipc_qmi_svc_exit();
 #endif
 #ifdef CONFIG_CNSS_QMI_SVC
 	wlfw_deinit();

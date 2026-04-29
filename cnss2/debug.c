@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
+
 
 #include <linux/err.h>
 #include <linux/seq_file.h>
@@ -11,10 +13,33 @@
 
 #define MMIO_REG_ACCESS_MEM_TYPE		0xFF
 #define MMIO_REG_RAW_ACCESS_MEM_TYPE		0xFE
+#define DEFAULT_KERNEL_LOG_LEVEL		INFO_LOG
+#define DEFAULT_IPC_LOG_LEVEL			DEBUG_LOG
+
+enum log_level cnss_kernel_log_level = DEFAULT_KERNEL_LOG_LEVEL;
 
 #if IS_ENABLED(CONFIG_IPC_LOGGING)
 void *cnss_ipc_log_context;
 void *cnss_ipc_log_long_context;
+enum log_level cnss_ipc_log_level = DEFAULT_IPC_LOG_LEVEL;
+
+static int cnss_set_ipc_log_level(u32 val)
+{
+	if (val < MAX_LOG) {
+		cnss_ipc_log_level = val;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+static u32 cnss_get_ipc_log_level(void)
+{
+	return cnss_ipc_log_level;
+}
+#else
+static int cnss_set_ipc_log_level(int val) { return -EINVAL; }
+static u32 cnss_get_ipc_log_level(void) { return MAX_LOG; }
 #endif
 
 static int cnss_pin_connect_show(struct seq_file *s, void *data)
@@ -48,6 +73,15 @@ static const struct file_operations cnss_pin_connect_fops = {
 	.llseek		= seq_lseek,
 };
 
+static u64 cnss_get_serial_id(struct cnss_plat_data *plat_priv)
+{
+	u32 msb = plat_priv->serial_id.serial_id_msb;
+	u32 lsb = plat_priv->serial_id.serial_id_lsb;
+
+	msb &= 0xFFFF;
+	return (((u64)msb << 32) | lsb);
+}
+
 static int cnss_stats_show_state(struct seq_file *s,
 				 struct cnss_plat_data *plat_priv)
 {
@@ -55,6 +89,8 @@ static int cnss_stats_show_state(struct seq_file *s,
 	int skip = 0;
 	unsigned long state;
 
+	seq_printf(s, "\nSerial Number: 0x%llx",
+		   cnss_get_serial_id(plat_priv));
 	seq_printf(s, "\nState: 0x%lx(", plat_priv->driver_state);
 	for (i = 0, state = plat_priv->driver_state; state != 0;
 	     state >>= 1, i++) {
@@ -128,11 +164,41 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_QMI_DMS_CONNECTED:
 			seq_puts(s, "DMS_CONNECTED");
 			continue;
+		case CNSS_DMS_DEL_SERVER:
+			seq_puts(s, "DMS_DEL_SERVER");
+			continue;
 		case CNSS_DAEMON_CONNECTED:
 			seq_puts(s, "DAEMON_CONNECTED");
 			continue;
 		case CNSS_PCI_PROBE_DONE:
 			seq_puts(s, "PCI PROBE DONE");
+			continue;
+		case CNSS_DRIVER_REGISTER:
+			seq_puts(s, "DRIVER REGISTERED");
+			continue;
+		case CNSS_WLAN_HW_DISABLED:
+			seq_puts(s, "WLAN HW DISABLED");
+			continue;
+		case CNSS_FS_READY:
+			seq_puts(s, "FS READY");
+			continue;
+		case CNSS_DRIVER_REGISTERED:
+			seq_puts(s, "DRIVER REGISTERED");
+			continue;
+		case CNSS_POWER_OFF:
+			seq_puts(s, "POWER OFF");
+			continue;
+		case CNSS_SHUTDOWN_DEVICE:
+			seq_puts(s, "SHUTDOWN DEVICE");
+			continue;
+		case CNSS_POWERING_ON:
+			seq_puts(s, "POWERING ON");
+			continue;
+		case CNSS_SEC_DOWNLOAD:
+			seq_puts(s, "DOWNLOAD SEC_IN_BOOTUP");
+			continue;
+		case CNSS_RADIO_OFF:
+			seq_puts(s, "RADIO OFF");
 			continue;
 		}
 
@@ -143,11 +209,23 @@ static int cnss_stats_show_state(struct seq_file *s,
 	return 0;
 }
 
+static int cnss_stats_show_gpio_state(struct seq_file *s,
+				      struct cnss_plat_data *plat_priv)
+{
+	seq_printf(s, "\nHost SOL: %d", cnss_get_host_sol_value(plat_priv));
+	seq_printf(s, "\nDev SOL: %d", cnss_get_dev_sol_value(plat_priv));
+	seq_printf(s, "\nDirect CX Host SOL: %d",
+		   cnss_get_direct_cx_host_sol_value(plat_priv));
+
+	return 0;
+}
+
 static int cnss_stats_show(struct seq_file *s, void *data)
 {
 	struct cnss_plat_data *plat_priv = s->private;
 
 	cnss_stats_show_state(s, plat_priv);
+	cnss_stats_show_gpio_state(s, plat_priv);
 
 	return 0;
 }
@@ -175,7 +253,10 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 	char buf[64];
 	char *cmd;
 	unsigned int len = 0;
+	char *sptr, *token;
+	const char *delim = " ";
 	int ret = 0;
+	struct cnss_xdump_cap *xdump_bt_cap;
 
 	if (!plat_priv)
 		return -ENODEV;
@@ -185,11 +266,16 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 		return -EFAULT;
 
 	buf[len] = '\0';
-	cmd = buf;
+	sptr = buf;
+
+	token = strsep(&sptr, delim);
+	if (!token)
+		return -EINVAL;
+	cmd = token;
 	cnss_pr_dbg("Received dev_boot debug command: %s\n", cmd);
 
 	if (sysfs_streq(cmd, "on")) {
-		ret = cnss_power_on_device(plat_priv);
+		ret = cnss_power_on_device(plat_priv, false);
 	} else if (sysfs_streq(cmd, "off")) {
 		cnss_power_off_device(plat_priv);
 	} else if (sysfs_streq(cmd, "enumerate")) {
@@ -204,6 +290,37 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 					     CNSS_DRIVER_EVENT_POWER_DOWN,
 					     0, NULL);
 		clear_bit(CNSS_DRIVER_DEBUG, &plat_priv->driver_state);
+	} else if (sysfs_streq(cmd, "assert_host_sol")) {
+		pci_priv = plat_priv->bus_priv;
+		cnss_auto_resume(&pci_priv->pci_dev->dev);
+		ret = cnss_set_host_sol_value(plat_priv, 1);
+	} else if (sysfs_streq(cmd, "deassert_host_sol")) {
+		ret = cnss_set_host_sol_value(plat_priv, 0);
+	} else if (sysfs_streq(cmd, "pdc_update")) {
+		if (!sptr)
+			return -EINVAL;
+		ret = cnss_aop_send_msg(plat_priv, sptr);
+	} else if (sysfs_streq(cmd, "dev_check")) {
+		cnss_wlan_hw_disable_check(plat_priv);
+	} else if (sysfs_streq(cmd, "dev_enable")) {
+		cnss_wlan_hw_enable();
+	} else if (sysfs_streq(cmd, "xdump_bt_over_wl")) {
+		xdump_bt_cap = kzalloc(sizeof(*xdump_bt_cap), GFP_KERNEL);
+		if (!xdump_bt_cap)
+			return -ENOMEM;
+
+		xdump_bt_cap->wl_over_bt = 1;
+		xdump_bt_cap->bt_over_wl = 1;
+		cnss_driver_event_post(plat_priv,
+				       CNSS_DRIVER_EVENT_XDUMP_BT_ARRIVAL,
+				       0, xdump_bt_cap);
+		cnss_driver_event_post(plat_priv,
+				       CNSS_DRIVER_EVENT_XDUMP_BT_OVER_WL_REQ,
+				       0, NULL);
+	} else if (sysfs_streq(cmd, "caldb_reuse_save")) {
+		cnss_caldb_rddm_reuse(plat_priv, true);
+	} else if (sysfs_streq(cmd, "caldb_reuse_restore")) {
+		cnss_caldb_rddm_reuse(plat_priv, false);
 	} else {
 		pci_priv = plat_priv->bus_priv;
 		if (!pci_priv)
@@ -223,15 +340,6 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 			cnss_pr_dbg("Force set cold boot cal done status\n");
 			set_bit(CNSS_COLD_BOOT_CAL_DONE,
 				&plat_priv->driver_state);
-		} else if (sysfs_streq(cmd, "dump_fw_sram")) {
-			cnss_dump_fw_sram(&pci_priv->pci_dev->dev);
-		} else if (sysfs_streq(cmd, "dump_fw_fullram")) {
-			cnss_dump_fw_fullram(&pci_priv->pci_dev->dev);
-		} else if (sysfs_streq(cmd, "dump_msi")) {
-			cnss_pr_info("Dump irq/mhi/msi debug info\n");
-			mhi_dump_irq(pci_priv);
-			cnss_pci_dump_msi_data(pci_priv);
-			mhi_dump_event_ring(pci_priv->mhi_ctrl);
 		} else {
 			cnss_pr_err("Device boot debugfs command is invalid\n");
 			ret = -EINVAL;
@@ -258,7 +366,10 @@ static int cnss_dev_boot_debug_show(struct seq_file *s, void *data)
 	seq_puts(s, "shutdown: full power off sequence to shutdown device\n");
 	seq_puts(s, "assert: trigger firmware assert\n");
 	seq_puts(s, "set_cbc_done: Set cold boot calibration done status\n");
-	seq_puts(s, "dump_fw_sram: dump fw sram via IO\n");
+	seq_puts(s, "xdump_bt_over_wl: request to collect BT dump over WLAN\n");
+	seq_puts(s, "\npdc_update usage:");
+	seq_puts(s, "1. echo pdc_update {class: wlan_pdc ss: <pdc_ss>, res: <vreg>.<mode>, <seq>: <val>} > <debugfs_path>/cnss/dev_boot\n");
+	seq_puts(s, "2. echo pdc_update {class: wlan_pdc ss: <pdc_ss>, res: pdc, enable: <val>} > <debugfs_path>/cnss/dev_boot\n");
 
 	return 0;
 }
@@ -537,6 +648,8 @@ static ssize_t cnss_runtime_pm_debug_write(struct file *fp,
 	buf[len] = '\0';
 	cmd = buf;
 
+	cnss_pr_dbg("Received runtime_pm debug command: %s\n", cmd);
+
 	if (sysfs_streq(cmd, "usage_count")) {
 		cnss_pci_pm_runtime_show_usage_count(pci_priv);
 	} else if (sysfs_streq(cmd, "request_resume")) {
@@ -630,6 +743,44 @@ static const struct file_operations cnss_runtime_pm_debug_fops = {
 	.llseek		= seq_lseek,
 };
 
+static int process_drv(struct cnss_plat_data *plat_priv, bool enabled)
+{
+	if (test_bit(CNSS_QMI_WLFW_CONNECTED, &plat_priv->driver_state)) {
+		cnss_pr_err("DRV cmd must be used before QMI ready\n");
+		return -EINVAL;
+	}
+
+	enabled ? cnss_set_feature_list(plat_priv, CNSS_DRV_SUPPORT_V01) :
+		  cnss_clear_feature_list(plat_priv, CNSS_DRV_SUPPORT_V01);
+
+	cnss_pr_info("%s DRV suspend\n", enabled ? "enable" : "disable");
+	return 0;
+}
+
+static int process_quirks(struct cnss_plat_data *plat_priv, u32 val)
+{
+	enum cnss_debug_quirks i;
+	int ret = 0;
+	unsigned long state;
+	unsigned long quirks = 0;
+
+	for (i = 0, state = val; i < QUIRK_MAX_VALUE; state >>= 1, i++) {
+		switch (i) {
+		case DISABLE_DRV:
+			ret = process_drv(plat_priv, !(state & 0x1));
+			if (!ret)
+				quirks |= (state & 0x1) << i;
+			continue;
+		default:
+			quirks |= (state & 0x1) << i;
+			continue;
+		}
+	}
+
+	plat_priv->ctrl_params.quirks = quirks;
+	return 0;
+}
+
 static ssize_t cnss_control_params_debug_write(struct file *fp,
 					       const char __user *user_buf,
 					       size_t count, loff_t *off)
@@ -667,7 +818,7 @@ static ssize_t cnss_control_params_debug_write(struct file *fp,
 		return -EINVAL;
 
 	if (strcmp(cmd, "quirks") == 0)
-		plat_priv->ctrl_params.quirks = val;
+		process_quirks(plat_priv, val);
 	else if (strcmp(cmd, "mhi_timeout") == 0)
 		plat_priv->ctrl_params.mhi_timeout = val;
 	else if (strcmp(cmd, "mhi_m2_timeout") == 0)
@@ -678,7 +829,12 @@ static ssize_t cnss_control_params_debug_write(struct file *fp,
 		plat_priv->ctrl_params.bdf_type = val;
 	else if (strcmp(cmd, "time_sync_period") == 0)
 		plat_priv->ctrl_params.time_sync_period = val;
-	else
+	else if (strcmp(cmd, "kern_log_level") == 0) {
+		if (val < MAX_LOG)
+			cnss_kernel_log_level = val;
+	} else if (strcmp(cmd, "ipc_log_level") == 0) {
+		return cnss_set_ipc_log_level(val) ? -EINVAL : count;
+	} else
 		return -EINVAL;
 
 	return count;
@@ -742,18 +898,12 @@ static int cnss_show_quirks_state(struct seq_file *s,
 		case FORCE_ONE_MSI:
 			seq_puts(s, "FORCE_ONE_MSI");
 			continue;
-		case DISABLE_SSR:
-			seq_puts(s, "DISABLE_SSR");
+		case PREVENT_PCI_LINK_RESUME:
+			seq_puts(s, "PREVENT_PCI_LINK_RESUME");
 			continue;
-		case ENABLE_PCI_LINK_PS:
-			seq_puts(s, "ENABLE_PCI_LINK_PS");
-			continue;
-		case ENABLE_CBC:
-			seq_puts(s, "ENABLE_CBC");
+		default:
 			continue;
 		}
-
-		seq_printf(s, "UNKNOWN-%d", i);
 	}
 	seq_puts(s, ")\n");
 	return 0;
@@ -762,6 +912,7 @@ static int cnss_show_quirks_state(struct seq_file *s,
 static int cnss_control_params_debug_show(struct seq_file *s, void *data)
 {
 	struct cnss_plat_data *cnss_priv = s->private;
+	u32 ipc_log_level;
 
 	seq_puts(s, "\nUsage: echo <params_name> <value> > <debugfs_path>/cnss/control_params\n");
 	seq_puts(s, "<params_name> can be one of below:\n");
@@ -780,6 +931,11 @@ static int cnss_control_params_debug_show(struct seq_file *s, void *data)
 	seq_printf(s, "bdf_type: %u\n", cnss_priv->ctrl_params.bdf_type);
 	seq_printf(s, "time_sync_period: %u\n",
 		   cnss_priv->ctrl_params.time_sync_period);
+	seq_printf(s, "kern_log_level: %u\n", cnss_kernel_log_level);
+
+	ipc_log_level = cnss_get_ipc_log_level();
+	if (ipc_log_level != MAX_LOG)
+		seq_printf(s, "ipc_log_level: %u\n", ipc_log_level);
 
 	return 0;
 }
@@ -820,6 +976,89 @@ static ssize_t cnss_dynamic_feature_write(struct file *fp,
 	return count;
 }
 
+static ssize_t direct_cx_sdam_debug_write(struct file *fp,
+					  const char __user *user_buf,
+					  size_t count, loff_t *off)
+{
+	struct cnss_plat_data *plat_priv =
+		((struct seq_file *)fp->private_data)->private;
+	char buf[64];
+	char *sptr, *token;
+	u32 val;
+	unsigned int len = 0;
+	const char *delim = " ";
+	u8 *reg_buf;
+	u8 cx_debug_val;
+
+	cnss_pr_info("Entering direct_cx_sdam_debug_write\n");
+
+	reg_buf = cnss_debug_direct_cx(plat_priv);
+	if (!reg_buf) {
+		cnss_pr_err("reg_buf is null\n");
+		goto out;
+	}
+
+	if (IS_ERR(reg_buf)) {
+		cnss_pr_err("Failed to read wlan_seq_debug: %d\n",
+			    PTR_ERR(reg_buf));
+		goto out;
+	}
+
+	cx_debug_val = *reg_buf;
+
+	len = min(count, sizeof(buf) - 1);
+	if (copy_from_user(buf, user_buf, len))
+		goto out;
+
+	buf[len] = '\0';
+	sptr = buf;
+
+	token = strsep(&sptr, delim);
+	if (!token)
+		goto out;
+	if (kstrtou32(token, 0, &val))
+		goto out;
+
+	cnss_pr_info("wlan_seq_debug register val: 0x%x\n", cx_debug_val);
+	cnss_pr_info("wlan_seq_debug register val: %d\n", cx_debug_val);
+
+	switch (cx_debug_val) {
+	case 0:
+		cx_debug_val = cx_debug_val << 7;
+		cx_debug_val = cx_debug_val >> 7;
+		break;
+	case 1:
+		cx_debug_val = cx_debug_val << 4;
+		cx_debug_val = cx_debug_val >> 5;
+		break;
+	case 2:
+		cx_debug_val = cx_debug_val << 3;
+		cx_debug_val = cx_debug_val >> 7;
+		break;
+	case 3:
+		cx_debug_val = cx_debug_val << 1;
+		cx_debug_val = cx_debug_val >> 6;
+		break;
+	case 4:
+		cx_debug_val = cx_debug_val >> 7;
+		break;
+	default:
+		break;
+	}
+
+	cnss_pr_info("wlan_seq_debug register val: 0x%x\n", cx_debug_val);
+	cnss_pr_info("wlan_seq_debug register val: %d\n", cx_debug_val);
+
+	kfree(reg_buf);
+
+	return count;
+
+out:
+	kfree(reg_buf);
+
+	return -EINVAL;
+}
+
 static int cnss_dynamic_feature_show(struct seq_file *s, void *data)
 {
 	struct cnss_plat_data *cnss_priv = s->private;
@@ -844,6 +1083,65 @@ static const struct file_operations cnss_dynamic_feature_fops = {
 	.llseek = seq_lseek,
 };
 
+static int cnss_smmu_fault_timestamp_show(struct seq_file *s, void *data)
+{
+	struct cnss_plat_data *plat_priv = s->private;
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+
+	if (!pci_priv)
+		return -ENODEV;
+
+	seq_printf(s, "smmu irq cb entry timestamp : %llu ns\n",
+		   pci_priv->smmu_fault_timestamp[SMMU_CB_ENTRY]);
+	seq_printf(s, "smmu irq cb before doorbell ring timestamp : %llu ns\n",
+		   pci_priv->smmu_fault_timestamp[SMMU_CB_DOORBELL_RING]);
+	seq_printf(s, "smmu irq cb after doorbell ring timestamp : %llu ns\n",
+		   pci_priv->smmu_fault_timestamp[SMMU_CB_EXIT]);
+
+	return 0;
+}
+
+static int cnss_smmu_fault_timestamp_open(struct inode *inode,
+					  struct file *file)
+{
+	return single_open(file, cnss_smmu_fault_timestamp_show,
+			   inode->i_private);
+}
+
+static const struct file_operations cnss_smmu_fault_timestamp_fops = {
+	.read = seq_read,
+	.release = single_release,
+	.open = cnss_smmu_fault_timestamp_open,
+	.owner = THIS_MODULE,
+	.llseek = seq_lseek,
+};
+
+static int direct_cx_sdam_debug_show(struct seq_file *s, void *data)
+{
+	struct cnss_plat_data *plat_priv = s->private;
+
+	if (!plat_priv)
+		cnss_pr_info("plat_priv is null\n");
+
+	return 0;
+}
+
+static int direct_cx_sdam_debug_open(struct inode *inode, struct file *file)
+{
+	cnss_pr_info("Entering direct_cx_sdam_debug_open\n");
+	return single_open(file, direct_cx_sdam_debug_show,
+			   inode->i_private);
+}
+
+static const struct file_operations direct_cx_gpio_test_fops = {
+	.read = seq_read,
+	.release = single_release,
+	.write = direct_cx_sdam_debug_write,
+	.open = direct_cx_sdam_debug_open,
+	.owner = THIS_MODULE,
+	.llseek = seq_lseek,
+};
+
 #ifdef CONFIG_DEBUG_FS
 #ifdef CONFIG_CNSS2_DEBUG
 static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
@@ -862,6 +1160,10 @@ static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 			    &cnss_control_params_debug_fops);
 	debugfs_create_file("dynamic_feature", 0600, root_dentry, plat_priv,
 			    &cnss_dynamic_feature_fops);
+	debugfs_create_file("cnss_smmu_fault_timestamp", 0600, root_dentry,
+			    plat_priv, &cnss_smmu_fault_timestamp_fops);
+	debugfs_create_file("direct_cx_gpio_test", 0600, root_dentry, plat_priv,
+			    &direct_cx_gpio_test_fops);
 
 	return 0;
 }
@@ -876,8 +1178,15 @@ int cnss_debugfs_create(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
 	struct dentry *root_dentry;
+	char name[CNSS_FS_NAME_SIZE];
 
-	root_dentry = debugfs_create_dir("cnss", 0);
+	if (cnss_is_dual_wlan_enabled())
+		snprintf(name, CNSS_FS_NAME_SIZE, CNSS_FS_NAME "_%d",
+			 plat_priv->plat_idx);
+	else
+		snprintf(name, CNSS_FS_NAME_SIZE, CNSS_FS_NAME);
+
+	root_dentry = debugfs_create_dir(name, 0);
 	if (IS_ERR(root_dentry)) {
 		ret = PTR_ERR(root_dentry);
 		cnss_pr_err("Unable to create debugfs %d\n", ret);
@@ -915,7 +1224,8 @@ void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv)
 
 #if IS_ENABLED(CONFIG_IPC_LOGGING)
 void cnss_debug_ipc_log_print(void *log_ctx, char *process, const char *fn,
-			      const char *log_level, char *fmt, ...)
+			      enum log_level kern_log_level,
+			      enum log_level ipc_log_level, char *fmt, ...)
 {
 	struct va_format vaf;
 	va_list va_args;
@@ -924,8 +1234,40 @@ void cnss_debug_ipc_log_print(void *log_ctx, char *process, const char *fn,
 	vaf.fmt = fmt;
 	vaf.va = &va_args;
 
+	if (kern_log_level <= cnss_kernel_log_level) {
+		switch (kern_log_level) {
+		case EMERG_LOG:
+			pr_emerg("cnss: %pV", &vaf);
+			break;
+		case ALERT_LOG:
+			pr_alert("cnss: %pV", &vaf);
+			break;
+		case CRIT_LOG:
+			pr_crit("cnss: %pV", &vaf);
+			break;
+		case ERR_LOG:
+			pr_err("cnss: %pV", &vaf);
+			break;
+		case WARNING_LOG:
+			pr_warn("cnss: %pV", &vaf);
+			break;
+		case NOTICE_LOG:
+			pr_notice("cnss: %pV", &vaf);
+			break;
+		case INFO_LOG:
+			pr_info("cnss: %pV", &vaf);
+			break;
+		case DEBUG_LOG:
+		case DEBUG_HI_LOG:
+			pr_debug("cnss: %pV", &vaf);
+			break;
+		default:
+			break;
+		}
+	}
 
-	ipc_log_string(log_ctx, "[%s] %s: %pV", process, fn, &vaf);
+	if (ipc_log_level <= cnss_ipc_log_level)
+		ipc_log_string(log_ctx, "[%s] %s: %pV", process, fn, &vaf);
 
 	va_end(va_args);
 }
@@ -966,7 +1308,8 @@ static void cnss_ipc_logging_deinit(void)
 static int cnss_ipc_logging_init(void) { return 0; }
 static void cnss_ipc_logging_deinit(void) {}
 void cnss_debug_ipc_log_print(void *log_ctx, char *process, const char *fn,
-			      const char *log_level, char *fmt, ...)
+			      enum log_level kern_log_level,
+			      enum log_level ipc_log_level, char *fmt, ...)
 {
 	struct va_format vaf;
 	va_list va_args;
@@ -975,8 +1318,37 @@ void cnss_debug_ipc_log_print(void *log_ctx, char *process, const char *fn,
 	vaf.fmt = fmt;
 	vaf.va = &va_args;
 
-	if (log_level)
-		printk("%scnss: %pV", log_level, &vaf);
+	if (kern_log_level <= cnss_kernel_log_level) {
+		switch (kern_log_level) {
+		case EMERG_LOG:
+			pr_emerg("cnss: %pV", &vaf);
+			break;
+		case ALERT_LOG:
+			pr_alert("cnss: %pV", &vaf);
+			break;
+		case CRIT_LOG:
+			pr_crit("cnss: %pV", &vaf);
+			break;
+		case ERR_LOG:
+			pr_err("cnss: %pV", &vaf);
+			break;
+		case WARNING_LOG:
+			pr_warn("cnss: %pV", &vaf);
+			break;
+		case NOTICE_LOG:
+			pr_notice("cnss: %pV", &vaf);
+			break;
+		case INFO_LOG:
+			pr_info("cnss: %pV", &vaf);
+			break;
+		case DEBUG_LOG:
+		case DEBUG_HI_LOG:
+			pr_debug("cnss: %pV", &vaf);
+			break;
+		default:
+			break;
+		}
+	}
 
 	va_end(va_args);
 }

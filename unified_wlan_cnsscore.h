@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __UNIFIED_PLATFORM_DRIVER__
@@ -15,6 +15,8 @@ int qrtr_mhi_init(void);
 void qrtr_mhi_deinit(void);
 int wlfw_init(void);
 void wlfw_deinit(void);
+int cnss_plat_ipc_qmi_svc_init(void);
+void cnss_plat_ipc_qmi_svc_exit(void);
 int cnss_utils_init(void);
 void cnss_utils_exit(void);
 int cnss_prealloc_init(void);
