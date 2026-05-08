@@ -5,7 +5,7 @@
 #ifndef _IPC_LOGGING_PRIVATE_H
 #define _IPC_LOGGING_PRIVATE_H
 
-#include "ipc_logging.h"
+#include <linux/ipc_logging.h>
 
 #define IPC_LOG_VERSION 0x0003
 #define IPC_LOG_MAX_CONTEXT_NAME_LEN 32
