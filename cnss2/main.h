@@ -533,6 +533,34 @@ struct cnss_dms_data {
 	u8 mac[QMI_WLFW_MAC_ADDR_SIZE_V01];
 };
 
+struct fw_remote_mem {
+	size_t size;
+	void *vaddr;
+};
+
+struct fw_remote_crash_data {
+	u8 *remote_buf;
+	size_t remote_buf_len;
+};
+
+struct mhi_fw_crash_data {
+	u8 *paging_dump_buf;
+	size_t paging_dump_buf_len;
+	u8 *ramdump_buf;
+	size_t ramdump_buf_len;
+	u8 *sram_dump_buf;
+	size_t sram_dump_buf_len;
+	enum cnss_recovery_reason reason;
+};
+
+struct mhi_vec_entry {
+	u64 dma_addr;
+	u64 size;
+};
+
+/*same with QMI_WLFW_MAX_NUM_MEM_SEG_V01*/
+#define BHI_WLFW_MAX_NUM_MEM_SEG_V01 52
+
 enum cnss_timeout_type {
 	CNSS_TIMEOUT_QMI,
 	CNSS_TIMEOUT_POWER_UP,
@@ -775,6 +803,11 @@ struct cnss_plat_data {
 	/* bitmap to detect FEM combination */
 	u8 hwid_bitmap;
 	uint32_t num_shadow_regs_v3;
+
+	struct fw_remote_mem remote_mem[BHI_WLFW_MAX_NUM_MEM_SEG_V01];
+	struct fw_remote_crash_data remote_crash_data;
+	struct mhi_fw_crash_data fw_crash_data;
+
 	bool sec_peri_feature_disable;
 	struct device_node *dev_node;
 	char device_name[CNSS_DEVICE_NAME_SIZE];
@@ -995,4 +1028,10 @@ static inline int cnss_timer_delete_sync(struct timer_list *timer)
 #endif
 
 void cnss_power_ctrl_mode_init(struct cnss_plat_data *plat_priv);
+
+#define QCA_DUMP_BIN_PATH "/usr/sbin/ram-dump"
+#define HOST_RDDM_DUMP "host_rddm"
+#define FW_RDDM_DUMP "fw_rddm"
+#define FW_SRAM_DUMP "fw_sram"
+int cnss_invoke_qca_dump_app(char *type);
 #endif /* _CNSS_MAIN_H */

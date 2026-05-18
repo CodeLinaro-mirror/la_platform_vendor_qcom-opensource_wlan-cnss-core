@@ -25,6 +25,7 @@
 #include "reg.h"
 #include "genl.h"
 #include "cnss2.h"
+#include "coredump.h"
 
 #define PCI_LINK_UP			1
 #define PCI_LINK_DOWN			0
@@ -5882,6 +5883,14 @@ err:
 }
 EXPORT_SYMBOL(cnss_reset_afcmem);
 
+static void cnss_qmi_set_remote_mem(struct fw_remote_mem *fw_mem,
+				      void *vaddr, size_t size,
+				      uint32_t segnum)
+{
+	fw_mem[segnum].vaddr = vaddr;
+	fw_mem[segnum].size = size;
+}
+
 int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -5912,6 +5921,16 @@ retry:
 				CNSS_ASSERT(0);
 				return -ENOMEM;
 			}
+			if (plat_priv->fw_mem[i].type == CNSS_MEM_TYPE_DDR) {
+				cnss_qmi_set_remote_mem(plat_priv->remote_mem,
+							fw_mem[i].va,
+							fw_mem[i].size,
+							i);
+				cnss_pr_err("remote mem vaddr=0x%p size=%lx\n",
+							 fw_mem[i].va,
+						 fw_mem[i].size);
+			}
+
 		}
 	}
 
@@ -7864,7 +7883,9 @@ int cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	if (dump_data->nentries > 0)
 		plat_priv->ramdump_info_v2.dump_data_valid = true;
-
+#ifdef CONFIG_DUMP_FW_TO_FILE
+	cnss_rddm_collect(pci_priv);
+#endif
 	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RDDM_DONE);
 
 skip_dump:
@@ -9280,6 +9301,83 @@ static const struct dev_pm_ops cnss_pm_ops = {
 			   cnss_pci_runtime_idle)
 };
 
+static inline void mhi_reg_select_window(void __iomem *io_addr, u32 offset)
+{
+	u32 window = (offset >> WINDOW_SHIFT) & WINDOW_VALUE_MASK;
+
+	iowrite32(WINDOW_ENABLE_BIT | window,
+		  io_addr + PCIE_REMAP_1M_BAR_CTRL);
+	wmb();
+}
+
+u32 mhi_reg_read_remap(struct cnss_pci_data *pci_priv,
+		       void __iomem *io_addr,
+		       uintptr_t io_offset)
+{
+	u32 val = 0;
+//	mhi_device_get_sync(pci_priv->mhi_ctrl->mhi_dev);
+
+	if (io_offset < MAX_UNWINDOWED_ADDRESS) {
+		val = ioread32(io_addr + io_offset);
+	} else {
+		mhi_reg_select_window(io_addr, io_offset);
+		val = ioread32(io_addr + WINDOW_START +
+			       (io_offset & WINDOW_RANGE_MASK));
+	}
+
+//	mhi_device_put(pci_priv->mhi_ctrl->mhi_dev);
+	cnss_pr_dbg("%s ioaddr %p iooffset %lu val %x\n", __func__,
+		    io_addr, io_offset, val);
+	return	val;
+}
+
+int cnss_pci_dump_fw_sram(struct cnss_pci_data *pci_priv)
+{
+	u32 fw_sram_io_start;
+	u32 fw_sram_io_end;
+	u32 fw_sram_size;
+	char *buf;
+	u32 io_offset;
+	u32 val;
+	struct mhi_fw_crash_data *crash_data = &pci_priv->plat_priv->fw_crash_data;
+
+	switch(pci_priv->pci_dev->device) {
+		/*meet failure when downloading fw sram, will check it later*/
+#ifdef CONFIG_ENABLE_CNSS_SRAM_DUMP
+		case KIWI_DEVICE_ID:
+			fw_sram_io_start = KIWI_PCIE_FW_SRAM_IO_START;
+			fw_sram_io_end = KIWI_PCIE_FW_SRAM_IO_END;
+			break;
+#endif
+		default:
+			cnss_pr_err("fw sram is not supported, device id 0x%x\n",
+				    pci_priv->pci_dev->device);
+			return -ENOTSUPP;
+	}
+
+	fw_sram_size = fw_sram_io_end - fw_sram_io_start + 1;
+	buf = vzalloc(fw_sram_size);
+	if (!buf) {
+		cnss_pr_err("failed to alloc fw sram buf, size: %d\n", fw_sram_size);
+		return -ENOMEM;
+	}
+	crash_data->sram_dump_buf = buf;
+	crash_data->sram_dump_buf_len = fw_sram_size;
+
+	for(io_offset = fw_sram_io_start;
+		io_offset < fw_sram_io_end; io_offset += sizeof(val)) {
+	        val = mhi_reg_read_remap(pci_priv, pci_priv->bar, io_offset);
+	        memcpy(buf, &val, sizeof(val));
+	        buf += sizeof(val);
+	}
+#ifdef CONFIG_DUMP_FW_TO_FILE_AT_KERNEL
+	cnss_save_buf_to_file(crash_data->sram_dump_buf, fw_sram_size, "/var/crash/fwsram%s.bin");
+#endif
+	cnss_qcom_devcd_dump(pci_priv->mhi_ctrl->cntrl_dev, crash_data->sram_dump_buf, fw_sram_size, GFP_KERNEL, FW_RDDM_DUMP);
+	cnss_pr_info("fw sram devcoredump\n");
+
+	return 0;
+}
 static struct pci_driver cnss_pci_driver = {
 	.name     = "cnss_pci",
 	.id_table = cnss_pci_id_table,

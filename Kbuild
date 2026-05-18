@@ -226,7 +226,8 @@ ifeq ($(CONFIG_CNSS2), y)
 	             $(CNSS_DIR)/bus.o                                      \
 	             $(CNSS_DIR)/debug.o                                    \
 	             $(CNSS_DIR)/power.o                                    \
-	             $(CNSS_DIR)/genl.o
+	             $(CNSS_DIR)/genl.o                                    \
+	             $(CNSS_DIR)/coredump.o
 ifeq ($(CONFIG_CNSS2_PCIE),y)
 	CNSS_OBJS += $(CNSS_DIR)/pci.o
 ifeq ($(CONFIG_PCIE_QCOM_ECAM),y)

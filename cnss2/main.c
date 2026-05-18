@@ -39,6 +39,9 @@
 #include "debug.h"
 #include "genl.h"
 #include "reg.h"
+#include "pci.h"
+#include "coredump.h"
+
 
 #ifdef CONFIG_CNSS_HW_SECURE_DISABLE
 #ifdef CONFIG_CNSS_HW_SECURE_SMEM
@@ -3945,6 +3948,61 @@ int cnss_force_fw_assert(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_force_fw_assert);
 
+int cnss_dump_fw_fullram(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_pci_data *pci_priv;
+	enum cnss_recovery_reason reason_back;
+	struct mhi_fw_crash_data *crash_data;
+	struct fw_remote_crash_data *fw_crash_data;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+
+	pci_priv = plat_priv->bus_priv;
+	reason_back = plat_priv->fw_crash_data.reason;
+	plat_priv->fw_crash_data.reason = CNSS_REASON_DEFAULT;
+
+	// build dump info, only save in buffer
+	cnss_bus_dump_fw_sram(plat_priv);
+	cnss_coredump_fw_paging_dump(pci_priv);
+	cnss_coredump_remote_dump(plat_priv);
+
+	// submit dump to file
+	cnss_coredump_submit(pci_priv);
+
+
+	// free the full ram mem
+	crash_data = &pci_priv->plat_priv->fw_crash_data;
+	fw_crash_data = &plat_priv->remote_crash_data;
+	vfree(crash_data->paging_dump_buf);
+	vfree(crash_data->sram_dump_buf);
+	vfree(fw_crash_data->remote_buf);
+	crash_data->paging_dump_buf_len = 0;
+	crash_data->sram_dump_buf_len = 0;
+	fw_crash_data->remote_buf_len = 0;
+	plat_priv->fw_crash_data.reason = reason_back;
+
+	return 0;
+}
+
+int cnss_dump_fw_sram(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	cnss_bus_dump_fw_sram(plat_priv);
+
+	return 0;
+}
+
 int cnss_force_collect_rddm(struct device *dev)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
@@ -5045,6 +5103,7 @@ do {									\
  */
 #define qcom_dump_segment cnss_qcom_dump_segment
 #define qcom_elf_dump cnss_qcom_elf_dump
+#define dump_enabled cnss_dump_enabled
 
 struct cnss_qcom_dump_segment {
 	struct list_head node;
@@ -5053,9 +5112,9 @@ struct cnss_qcom_dump_segment {
 	size_t size;
 };
 
+#ifdef CONFIG_CNSS_QCOM_DEVCD_SUPPORT
 struct cnss_qcom_ramdump_desc {
 	void *data;
-	struct completion dump_done;
 };
 
 static ssize_t cnss_qcom_devcd_readv(char *buffer, loff_t offset, size_t count,
@@ -5073,36 +5132,53 @@ static void cnss_qcom_devcd_freev(void *data)
 
 	cnss_pr_dbg("Free dump data for dev coredump\n");
 
-	complete(&dump_done);
 	vfree(desc->data);
 	kfree(desc);
 }
 
-static int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
-				gfp_t gfp)
+int cnss_invoke_qca_dump_app(char *type)
+{
+	int ret;
+
+	char *cmd_argv[] = {QCA_DUMP_BIN_PATH, type, NULL};
+	char *cmd_envp[] = {NULL};
+
+	ret = call_usermodehelper(cmd_argv[0], cmd_argv, cmd_envp, UMH_WAIT_PROC);
+	if (!ret)
+		cnss_pr_info("%s succeed", QCA_DUMP_BIN_PATH);
+	else
+		cnss_pr_err("failed to call usermodehelper: %d\n", ret);
+
+	return ret;
+}
+
+int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
+				gfp_t gfp, char *type)
 {
 	struct cnss_qcom_ramdump_desc *desc;
-	unsigned int timeout = TIMEOUT_SAVE_DUMP_MS;
-	int ret;
+	int ret = 0;
 
 	desc = kmalloc(sizeof(*desc), GFP_KERNEL);
 	if (!desc)
 		return -ENOMEM;
 
 	desc->data = data;
-	reinit_completion(&dump_done);
 
 	dev_coredumpm(dev, NULL, desc, datalen, gfp,
 		      cnss_qcom_devcd_readv, cnss_qcom_devcd_freev);
-
-	ret = wait_for_completion_timeout(&dump_done,
-					  msecs_to_jiffies(timeout));
-	if (!ret)
-		cnss_pr_err("Timeout waiting (%dms) for saving dump to file system\n",
-			    timeout);
-
-	return ret ? 0 : -ETIMEDOUT;
+#ifdef CALL_USER_MODE_HELPER
+		cnss_invoke_qca_dump_app(type);
+#endif
+	return ret;
 }
+#else
+int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
+				gfp_t gfp)
+{
+	return 0;
+}
+#endif
+
 
 /* Since the elf32 and elf64 identification is identical apart from
  * the class, use elf32 by default.
@@ -5116,8 +5192,8 @@ static void init_elf_identification(struct elf32_hdr *ehdr, unsigned char class)
 	ehdr->e_ident[EI_OSABI] = ELFOSABI_NONE;
 }
 
-static int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
-			      unsigned char class)
+int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
+		       unsigned char class, char *type)
 {
 	struct cnss_qcom_dump_segment *segment;
 	void *phdr, *ehdr;
@@ -5183,12 +5259,21 @@ static int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
 		phdr += sizeof_elf_phdr(class);
 	}
 
-	return cnss_qcom_devcd_dump(dev, data, data_size, GFP_KERNEL);
+	return cnss_qcom_devcd_dump(dev, data, data_size, GFP_KERNEL, type);
 }
 #endif /* CONFIG_QCOM_RAMDUMP */
 
 int cnss_do_elf_ramdump(struct cnss_plat_data *plat_priv)
 {
+#ifdef CONFIG_DUMP_FW_TO_FILE
+	if (!dump_enabled()) {
+		cnss_pr_info("Dump collection is not enabled\n");
+		return 0;
+	}
+
+	cnss_rddm_submit(plat_priv->bus_priv);
+	return 0;
+#else
 	struct cnss_ramdump_info_v2 *info_v2 = &plat_priv->ramdump_info_v2;
 	struct cnss_dump_data *dump_data = &info_v2->dump_data;
 	struct cnss_dump_seg *dump_seg = info_v2->dump_data_vaddr;
@@ -5254,6 +5339,7 @@ skip_elf_dump:
 	}
 
 	return ret;
+#endif
 }
 
 #ifdef CONFIG_CNSS2_SSR_DRIVER_DUMP
