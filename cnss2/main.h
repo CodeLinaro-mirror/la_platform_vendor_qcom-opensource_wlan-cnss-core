@@ -321,6 +321,16 @@ enum cnss_driver_state {
 	CNSS_QMI_DMS_CONNECTED = 20,
 	CNSS_DAEMON_CONNECTED,
 	CNSS_PCI_PROBE_DONE,
+	CNSS_DRIVER_REGISTER,
+	CNSS_WLAN_HW_DISABLED,
+	CNSS_FS_READY = 25,
+	CNSS_DRIVER_REGISTERED,
+	CNSS_DMS_DEL_SERVER,
+	CNSS_POWER_OFF,
+	CNSS_SHUTDOWN_DEVICE,
+	CNSS_POWERING_ON,
+	CNSS_SEC_DOWNLOAD,
+	CNSS_RADIO_OFF,
 };
 
 struct cnss_recovery_data {
@@ -410,6 +420,12 @@ struct cnss_tcs_info {
 	void __iomem *cmd_base_addr_io;
 };
 
+struct cnss_irq_ts_info {
+	bool is_valid_addr;
+	resource_size_t cmd_ts_addr;
+	void __iomem *cmd_ts_addr_io;
+};
+
 struct cnss_cpr_info {
 	resource_size_t tcs_cmd_data_addr;
 	void __iomem *tcs_cmd_data_addr_io;
@@ -486,6 +502,14 @@ struct cnss_thermal_cdev {
 	struct thermal_cooling_device *tcdev;
 };
 
+struct cnss_wlan_tsf_info {
+	int wlan_tsf_gpio;
+	int irq_num;
+	void *context;
+	uint64_t host_time_us;
+	wlan_tsf_handler_t wlan_tsf_handler;
+	struct cnss_irq_ts_info irq_ts_info;
+};
 struct cnss_plat_data {
 	struct platform_device *plat_dev;
 	void *bus_priv;
@@ -551,6 +575,7 @@ struct cnss_plat_data {
 	struct completion cal_complete;
 	struct mutex dev_lock; /* mutex for register access through debugfs */
 	struct mutex driver_ops_lock; /* mutex for external driver ops */
+	struct cnss_wlan_driver *driver_ops;
 	u32 device_freq_hz;
 	u32 diag_reg_read_addr;
 	u32 diag_reg_read_mem_type;
@@ -579,6 +604,8 @@ struct cnss_plat_data {
 	u64 dynamic_feature;
 	void *get_info_cb_ctx;
 	int (*get_info_cb)(void *ctx, void *event, int event_len);
+	void *get_driver_async_data_ctx;
+	int (*get_driver_async_data_cb)(void *ctx, uint16_t type, void *event, int event_len);
 	bool cbc_enabled;
 	u8 use_pm_domain;
 	u8 use_nv_mac;
@@ -609,7 +636,11 @@ struct cnss_plat_data {
 	struct mhi_fw_crash_data fw_crash_data;
 
 	enum cnss_driver_mode driver_mode;
+	u32 cpumask_for_rx_intrs;
+	u32 cpumask_for_tx_comp_intrs;
 	bool ipa_shared_cb_enable;
+	struct cnss_wlan_host_param *host_param;
+	struct cnss_wlan_tsf_info tsf_info;
 };
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0))

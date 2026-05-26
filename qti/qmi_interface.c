@@ -234,7 +234,7 @@ int qmi_add_lookup(struct qmi_handle *qmi, unsigned int service,
 
 	return 0;
 }
-EXPORT_SYMBOL(qmi_add_lookup);
+EXPORT_SYMBOL_GPL(qmi_add_lookup);
 
 static void qmi_send_new_server(struct qmi_handle *qmi, struct qmi_service *svc)
 {
@@ -298,7 +298,7 @@ int qmi_add_server(struct qmi_handle *qmi, unsigned int service,
 
 	return 0;
 }
-EXPORT_SYMBOL(qmi_add_server);
+EXPORT_SYMBOL_GPL(qmi_add_server);
 
 /**
  * qmi_txn_init() - allocate transaction id within the given QMI handle
@@ -339,7 +339,7 @@ int qmi_txn_init(struct qmi_handle *qmi, struct qmi_txn *txn,
 
 	return ret;
 }
-EXPORT_SYMBOL(qmi_txn_init);
+EXPORT_SYMBOL_GPL(qmi_txn_init);
 
 /**
  * qmi_txn_wait() - wait for a response on a transaction
@@ -370,7 +370,7 @@ int qmi_txn_wait(struct qmi_txn *txn, unsigned long timeout)
 	else
 		return txn->result;
 }
-EXPORT_SYMBOL(qmi_txn_wait);
+EXPORT_SYMBOL_GPL(qmi_txn_wait);
 
 /**
  * qmi_txn_cancel() - cancel an ongoing transaction
@@ -386,7 +386,7 @@ void qmi_txn_cancel(struct qmi_txn *txn)
 	mutex_unlock(&txn->lock);
 	mutex_unlock(&qmi->txn_lock);
 }
-EXPORT_SYMBOL(qmi_txn_cancel);
+EXPORT_SYMBOL_GPL(qmi_txn_cancel);
 
 /**
  * qmi_invoke_handler() - find and invoke a handler for a message
@@ -685,7 +685,7 @@ err_free_recv_buf:
 
 	return ret;
 }
-EXPORT_SYMBOL(qmi_handle_init);
+EXPORT_SYMBOL_GPL(qmi_handle_init);
 
 /**
  * qmi_handle_release() - release the QMI client handle
@@ -726,7 +726,7 @@ void qmi_handle_release(struct qmi_handle *qmi)
 		kfree(svc);
 	}
 }
-EXPORT_SYMBOL(qmi_handle_release);
+EXPORT_SYMBOL_GPL(qmi_handle_release);
 
 /**
  * qmi_send_message() - send a QMI message
@@ -805,7 +805,7 @@ ssize_t qmi_send_request(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 	return qmi_send_message(qmi, sq, txn, QMI_REQUEST, msg_id, len, ei,
 				c_struct);
 }
-EXPORT_SYMBOL(qmi_send_request);
+EXPORT_SYMBOL_GPL(qmi_send_request);
 
 /**
  * qmi_send_response() - send a response QMI message
@@ -826,7 +826,7 @@ ssize_t qmi_send_response(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 	return qmi_send_message(qmi, sq, txn, QMI_RESPONSE, msg_id, len, ei,
 				c_struct);
 }
-EXPORT_SYMBOL(qmi_send_response);
+EXPORT_SYMBOL_GPL(qmi_send_response);
 
 /**
  * qmi_send_indication() - send an indication QMI message
@@ -860,4 +860,4 @@ ssize_t qmi_send_indication(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 
 	return rval;
 }
-EXPORT_SYMBOL(qmi_send_indication);
+EXPORT_SYMBOL_GPL(qmi_send_indication);

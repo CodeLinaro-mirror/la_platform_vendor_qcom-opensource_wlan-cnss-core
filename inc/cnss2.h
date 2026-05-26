@@ -316,6 +316,10 @@ struct cnss_shadow_reg_v3_cfg {
 	u32 addr;
 };
 
+struct cnss_wlan_host_param {
+	const char *chip_name;
+};
+
 struct cnss_wlan_enable_cfg {
 	u32 num_ce_tgt_cfg;
 	struct cnss_ce_tgt_pipe_cfg *ce_tgt_cfg;
@@ -353,6 +357,11 @@ enum cnss_recovery_reason {
 
 enum cnss_fw_caps {
 	CNSS_FW_CAP_DIRECT_LINK_SUPPORT,
+	CNSS_FW_CAP_AUX_UC_SUPPORT,
+	CNSS_FW_CAP_CALDB_SEG_DDR_SUPPORT,
+	CNSS_FW_CAP_WLAN_DUMP_OVER_BT_SUPPORT,
+	CNSS_FW_CAP_BT_DUMP_OVER_WLAN_SUPPORT,
+	CNSS_FW_CAP_DIRECT_REFILL_SUPPORT,
 };
 
 enum cnss_remote_mem_type {
@@ -427,6 +436,9 @@ extern int cnss_get_msi_irq(struct device *dev, unsigned int vector);
 extern bool cnss_is_one_msi(struct device *dev);
 extern void cnss_get_msi_address(struct device *dev, uint32_t *msi_addr_low,
 				 uint32_t *msi_addr_high);
+extern int cnss_wlan_hw_enable(void);
+extern int cnss_set_host_param(struct device *dev,
+			       struct cnss_wlan_host_param *param);
 extern int cnss_wlan_enable(struct device *dev,
 			    struct cnss_wlan_enable_cfg *config,
 			    enum cnss_driver_mode mode,
@@ -460,6 +472,9 @@ extern int cnss_register_tsf_captured_handler(struct device *dev,
 extern int cnss_unregister_tsf_captured_handler(struct device *dev, void *context);
 extern int cnss_pci_get_iova_info(struct device *dev, uint64_t *addr, uint64_t *size);
 extern struct kobject *cnss_get_wifi_kobj(struct device *dev);
+extern int cnss_send_buffer_to_afcmem(struct device *dev, const uint8_t *afcdb,
+				      uint32_t len, uint8_t slotid);
+extern int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
 extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);
 extern bool cnss_audio_is_direct_link_supported(struct device *dev);
 extern bool cnss_ipa_wlan_shared_smmu_supported(struct device *dev);
@@ -474,4 +489,15 @@ extern int cnss_get_curr_therm_cdev_state(struct device *dev,
 extern int cnss_update_time_sync_period(struct device *dev,
 					 uint32_t time_sync_period);
 extern int cnss_reset_time_sync_period(struct device *dev);
+extern int cnss_register_driver_async_data_cb(struct device *dev, void *cb_ctx,
+					      int (*cb)(void *ctx,
+					      uint16_t type, void *event,
+					      int event_len));
+extern void cnss_get_cpumask_for_wlan_rx_interrupts(struct device *dev,
+						    unsigned int *cpumask);
+extern void cnss_get_cpumask_for_wlan_tx_comp_interrupts(struct device *dev,
+							 unsigned int *cpumask);						  
+extern bool cnss_smmu_s1_enabled(struct device *dev);
+extern int cnss_set_vendor_wonder_priv_data(const void *priv_data);
+
 #endif /* _NET_CNSS2_H */

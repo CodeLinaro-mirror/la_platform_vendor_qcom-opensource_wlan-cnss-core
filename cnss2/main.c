@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/of_device.h>
+#include <linux/of_gpio.h>
 #include <linux/pm_wakeup.h>
 #include <linux/reboot.h>
 #include <linux/rwsem.h>
@@ -26,6 +27,7 @@
 #if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
 #include <soc/qcom/minidump.h>
 #endif
+#include <linux/component.h>
 
 #ifdef CONFIG_DUMP_FW_TO_FILE_AT_KERNEL
 #include <linux/export.h>
@@ -75,6 +77,16 @@
 #define CNSS_CAL_START_PROBE_WAIT_RETRY_MAX 100
 #define CNSS_CAL_START_PROBE_WAIT_MS	500
 #define CNSS_TIME_SYNC_PERIOD_INVALID	0xFFFFFFFF
+
+#define TSF_SYNC_GPIO		"qcom,wlan-tsf-gpio"
+#define TSF_IRQ_TS		"tsf_irq_ts"
+
+#define TSF_IRQ_TS_OP_VALID	BIT(0)
+#define TSF_IRQ_TS_OP_OVERFLOW	BIT(8)
+
+#define TSF_IRQ_TS_OP_OFFSET	0x0
+#define TSF_IRQ_TS_LO_OFFSET	0x4
+#define TSF_IRQ_TS_HI_OFFSET	0x8
 
 enum cnss_cal_db_op {
 	CNSS_CAL_DB_UPLOAD,
@@ -148,6 +160,11 @@ struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev)
 	return plat_env;
 }
 
+struct cnss_plat_data *cnss_get_first_plat_priv(void)
+{
+	return plat_env;
+}
+
 /**
  * cnss_get_mem_seg_count - Get segment count of memory
  * @type: memory type
@@ -184,13 +201,13 @@ EXPORT_SYMBOL(cnss_get_mem_seg_count);
  */
 struct kobject *cnss_get_wifi_kobj(struct device *dev)
 {
-        struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv;
 
-        plat_priv = cnss_get_plat_priv(NULL);
-        if (!plat_priv)
-                return NULL;
+	plat_priv = cnss_get_plat_priv(NULL);
+	if (!plat_priv)
+		return NULL;
 
-        return plat_priv->wifi_kobj;
+	return plat_priv->wifi_kobj;
 }
 EXPORT_SYMBOL(cnss_get_wifi_kobj);
 
@@ -273,28 +290,31 @@ static int cnss_get_audio_iommu_domain(struct cnss_plat_data *plat_priv)
 bool cnss_get_audio_shared_iommu_group_cap(struct device *dev)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
-	struct device_node *audio_ion_node;
+	struct device_node *direct_link_node;
 	struct device_node *cnss_iommu_group_node;
-	struct device_node *audio_iommu_group_node;
+	struct device_node *direct_link_iommu_group_node;
 
-	if (!plat_priv)
-		return false;
-
-	audio_ion_node = of_find_compatible_node(NULL, NULL,
-						 "qcom,msm-audio-ion");
-	if (!audio_ion_node) {
-		cnss_pr_err("Unable to get Audio ion node");
+	if (!plat_priv) {
+		cnss_pr_err("plat priv is not available");
 		return false;
 	}
 
-	audio_iommu_group_node = of_parse_phandle(audio_ion_node,
-						  "qcom,iommu-group", 0);
-	of_node_put(audio_ion_node);
-	if (!audio_iommu_group_node) {
-		cnss_pr_err("Unable to get audio iommu group phandle");
+	direct_link_node = of_find_compatible_node(NULL, NULL,
+						 "qcom,cnss-direct-link");
+	if (!direct_link_node) {
+		cnss_pr_err("Unable to get direct link node");
 		return false;
 	}
-	of_node_put(audio_iommu_group_node);
+
+	direct_link_iommu_group_node = of_parse_phandle(direct_link_node,
+							"qcom,iommu-group", 0);
+
+	of_node_put(direct_link_node);
+	if (!direct_link_iommu_group_node) {
+		cnss_pr_err("Unable to get direct link iommu group phandle");
+		return false;
+	}
+	of_node_put(direct_link_iommu_group_node);
 
 	cnss_iommu_group_node = of_parse_phandle(dev->of_node,
 						 "qcom,iommu-group", 0);
@@ -304,16 +324,49 @@ bool cnss_get_audio_shared_iommu_group_cap(struct device *dev)
 	}
 	of_node_put(cnss_iommu_group_node);
 
-	if (cnss_iommu_group_node == audio_iommu_group_node) {
+	if (cnss_iommu_group_node == direct_link_iommu_group_node) {
 		plat_priv->is_audio_shared_iommu_group = true;
-		cnss_pr_info("CNSS and Audio share IOMMU group");
+		cnss_pr_info("CNSS and direct link share IOMMU group");
 	} else {
-		cnss_pr_info("CNSS and Audio do not share IOMMU group");
+		cnss_pr_info("CNSS and direct link do not share IOMMU group");
 	}
 
 	return plat_priv->is_audio_shared_iommu_group;
 }
 EXPORT_SYMBOL(cnss_get_audio_shared_iommu_group_cap);
+
+int cnss_get_direct_link_sid(struct device *dev, uint16_t *sid)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct device_node *direct_link_node;
+	struct of_phandle_args iommu_spec = { .args_count = 1 };
+
+	if (!plat_priv) {
+		cnss_pr_err("plat priv is not available");
+		return -ENODEV;
+	}
+
+	direct_link_node = of_find_compatible_node(NULL, NULL,
+						   "qcom,cnss-direct-link");
+	if (!direct_link_node) {
+		cnss_pr_err("Unable to get direct link node");
+		return -ENODEV;
+	}
+
+	if (of_parse_phandle_with_args(direct_link_node, "iommus", "#iommu-cells",
+				       0, &iommu_spec)) {
+		of_node_put(direct_link_node);
+		cnss_pr_err("Unable to parse iommus property");
+		return -ENODEV;
+	}
+	of_node_put(direct_link_node);
+
+	of_node_put(iommu_spec.np);
+	*sid = (iommu_spec.args[0] & 0x1f);
+	cnss_pr_dbg("Direct link SID value:%u", *sid);
+	return 0;
+}
+EXPORT_SYMBOL(cnss_get_direct_link_sid);
 
 int cnss_set_feature_list(struct cnss_plat_data *plat_priv,
 			  enum cnss_feature_v01 feature)
@@ -588,6 +641,51 @@ void cnss_remove_pm_qos(struct device *dev)
 EXPORT_SYMBOL(cnss_remove_pm_qos);
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)) */
 
+
+int cnss_set_host_param(struct device *dev,
+			struct cnss_wlan_host_param *param)
+{
+	struct cnss_plat_data *plat_priv;
+	struct cnss_wlan_host_param *data;
+
+	if (!dev) {
+		cnss_pr_err("Invalid dev pointer\n");
+		return -EINVAL;
+	}
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (!param) {
+		cnss_pr_err("Invalid host_param pointer\n");
+		return -EINVAL;
+	}
+
+	data = kmalloc(sizeof(*data), GFP_KERNEL);
+	if (!data) {
+		cnss_pr_err("Failed to allocate memory for host_param\n");
+		return -ENOMEM;
+	}
+
+	data->chip_name = kstrdup(param->chip_name, GFP_KERNEL);
+	if (!data->chip_name) {
+		kfree(data);
+		cnss_pr_err("Failed to allocate memory for chip_name\n");
+		return -ENOMEM;
+	}
+
+	if (plat_priv->host_param) {
+		kfree(plat_priv->host_param->chip_name);
+		kfree(plat_priv->host_param);
+	}
+
+	plat_priv->host_param = data;
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_set_host_param);
+
 int cnss_wlan_enable(struct device *dev,
 		     struct cnss_wlan_enable_cfg *config,
 		     enum cnss_driver_mode mode,
@@ -689,10 +787,8 @@ void cnss_audio_smmu_unmap(struct device *dev, dma_addr_t iova, size_t size)
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	uint32_t page_offset;
 
-	if (!plat_priv)
-		return;
-
-	if (!plat_priv->audio_iommu_domain)
+	if (!plat_priv || !plat_priv->audio_iommu_domain ||
+	    plat_priv->is_audio_shared_iommu_group)
 		return;
 
 	page_offset = iova & (PAGE_SIZE - 1);
@@ -727,32 +823,6 @@ int cnss_get_fw_lpass_shared_mem(struct device *dev, dma_addr_t *iova,
 	return -EINVAL;
 }
 EXPORT_SYMBOL(cnss_get_fw_lpass_shared_mem);
-
-int cnss_get_direct_link_sid(struct device *dev, uint16_t *sid)
-{
-	return -EINVAL;
-}
-EXPORT_SYMBOL(cnss_get_direct_link_sid);
-
-int cnss_register_tsf_captured_handler(struct device *dev,
-				    wlan_tsf_handler_t handler,
-				    void *context)
-{
-	return -EINVAL;
-}
-EXPORT_SYMBOL(cnss_register_tsf_captured_handler);
-
-int cnss_unregister_tsf_captured_handler(struct device *dev, void *context)
-{
-	return -EINVAL;
-}
-EXPORT_SYMBOL(cnss_unregister_tsf_captured_handler);
-
-int cnss_pci_get_iova_info(struct device *dev, uint64_t *addr, uint64_t *size)
-{
-	return -EINVAL;
-}
-EXPORT_SYMBOL(cnss_pci_get_iova_info);
 
 int cnss_athdiag_read(struct device *dev, u32 offset, u32 mem_type,
 		      u32 data_len, u8 *output)
@@ -814,7 +884,16 @@ EXPORT_SYMBOL(cnss_athdiag_write);
 
 int cnss_set_fw_log_mode(struct device *dev, u8 fw_log_mode)
 {
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_plat_data *plat_priv;
+
+	if (!dev) {
+		cnss_pr_err("Invalid dev pointer\n");
+		return -EINVAL;
+	}
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	if (!plat_priv)
+		return -ENODEV;
 
 	if (plat_priv->device_id == QCA6174_DEVICE_ID)
 		return 0;
@@ -830,9 +909,10 @@ int cnss_set_pcie_gen_speed(struct device *dev, u8 pcie_gen_speed)
 	if (!plat_priv)
 		return -EINVAL;
 
-	if (plat_priv->device_id != QCA6490_DEVICE_ID ||
-	    !plat_priv->fw_pcie_gen_switch)
+	if (!plat_priv->fw_pcie_gen_switch) {
+		cnss_pr_err("Firmware does not support PCIe gen switch\n");
 		return -EOPNOTSUPP;
+	}
 
 	if (pcie_gen_speed < QMI_PCIE_GEN_SPEED_1_V01 ||
 	    pcie_gen_speed > QMI_PCIE_GEN_SPEED_3_V01)
@@ -2163,6 +2243,25 @@ int cnss_qmi_send(struct device *dev, int type, void *cmd,
 	return ret;
 }
 EXPORT_SYMBOL(cnss_qmi_send);
+
+int cnss_register_driver_async_data_cb(struct device *dev, void *cb_ctx,
+				       int (*cb)(void *ctx, uint16_t type,
+						 void *event, int event_len))
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (!test_bit(CNSS_QMI_WLFW_CONNECTED, &plat_priv->driver_state))
+		return -EINVAL;
+
+	plat_priv->get_driver_async_data_cb = cb;
+	plat_priv->get_driver_async_data_ctx = cb_ctx;
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_register_driver_async_data_cb);
 
 static int cnss_cold_boot_cal_start_hdlr(struct cnss_plat_data *plat_priv)
 {
@@ -4300,6 +4399,162 @@ static void cnss_sram_dump_init(struct cnss_plat_data *plat_priv)
 	 */
 }
 #endif
+
+static void cnss_read_tsf_irq_ts(struct cnss_wlan_tsf_info *tsf_info)
+{
+	uint64_t data_val;
+	void __iomem *tsf_cmd;
+
+	if (!tsf_info->irq_ts_info.is_valid_addr)
+		return;
+
+	tsf_cmd = tsf_info->irq_ts_info.cmd_ts_addr_io;
+	data_val = readl_relaxed(tsf_cmd + TSF_IRQ_TS_OP_OFFSET);
+	if (!(data_val & TSF_IRQ_TS_OP_VALID))
+		return;
+
+	if (data_val & TSF_IRQ_TS_OP_OVERFLOW)
+		cnss_pr_dbg("tsf irq timestamp overflow detected\n");
+	data_val = readl_relaxed(tsf_cmd + TSF_IRQ_TS_LO_OFFSET);
+	data_val |= ((uint64_t)readl_relaxed(tsf_cmd + TSF_IRQ_TS_HI_OFFSET)) << 32;
+	if (!data_val)
+		return;
+
+	if (data_val * 10 < data_val) {
+		do_div(data_val, TIME_CLOCK_FREQ_HZ / 100000);
+		tsf_info->host_time_us = data_val * 10;
+		return;
+	}
+
+	data_val = data_val * 10;
+	do_div(data_val, TIME_CLOCK_FREQ_HZ / 100000);
+	tsf_info->host_time_us = data_val;
+}
+
+static irqreturn_t cnss_wlan_tsf_capture_threaded_handler(int irq, void *ctx)
+{
+	struct cnss_wlan_tsf_info *tsf_info = ctx;
+
+	if (!tsf_info)
+		return IRQ_HANDLED;
+
+	if (tsf_info->irq_num < 0 || tsf_info->irq_num != irq ||
+	    !tsf_info->wlan_tsf_handler || !tsf_info->context)
+		return IRQ_HANDLED;
+
+	cnss_read_tsf_irq_ts(tsf_info);
+	tsf_info->wlan_tsf_handler(tsf_info->context, tsf_info->host_time_us);
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t cnss_wlan_tsf_capture_irq_handler(int irq, void *ctx)
+{
+	struct cnss_wlan_tsf_info *tsf_info = ctx;
+	struct cnss_plat_data *plat_priv;
+
+	if (!tsf_info)
+		return IRQ_HANDLED;
+
+	plat_priv = container_of(tsf_info, struct cnss_plat_data, tsf_info);
+	tsf_info->host_time_us = cnss_get_host_timestamp(plat_priv);
+
+	return IRQ_WAKE_THREAD;
+}
+
+static int cnss_wlan_tsf_init(struct cnss_wlan_tsf_info *tsf_info)
+{
+	int ret;
+
+	if (tsf_info->wlan_tsf_gpio < 0)
+		return -EINVAL;
+
+	ret = gpio_request(tsf_info->wlan_tsf_gpio, "wlan_tsf_gpio");
+	if (ret) {
+		cnss_pr_err("Failed to request TSF GPIO %d, err = %d\n",
+				tsf_info->wlan_tsf_gpio, ret);
+		return ret;
+	}
+
+	gpio_direction_input(tsf_info->wlan_tsf_gpio);
+	tsf_info->irq_num = gpio_to_irq(tsf_info->wlan_tsf_gpio);
+	cnss_pr_dbg("WLAN TSF IRQ: %d\n", tsf_info->irq_num);
+	if (tsf_info->irq_num < 0) {
+		gpio_free(tsf_info->wlan_tsf_gpio);
+		return -EINVAL;
+	}
+
+	ret = request_threaded_irq(tsf_info->irq_num,
+				   cnss_wlan_tsf_capture_irq_handler,
+				   cnss_wlan_tsf_capture_threaded_handler,
+				   IRQF_SHARED | IRQF_TRIGGER_RISING,
+				   "wlan_tsf", (void *)tsf_info);
+	if (ret) {
+		gpio_free(tsf_info->wlan_tsf_gpio);
+		cnss_pr_err("Failed to request TSF IRQ, err = %d\n", ret);
+	}
+
+	cnss_pr_dbg("request irq[%d], result: %d\n", tsf_info->irq_num, ret);
+	return ret;
+}
+
+static void cnss_wlan_tsf_deinit(struct cnss_wlan_tsf_info *tsf_info)
+{
+	if (tsf_info->irq_num >= 0)
+		free_irq(tsf_info->irq_num, (void *)tsf_info);
+
+	if (tsf_info->wlan_tsf_gpio >= 0)
+		gpio_free(tsf_info->wlan_tsf_gpio);
+
+	tsf_info->irq_num = -EINVAL;
+	tsf_info->wlan_tsf_handler = NULL;
+	tsf_info->context = NULL;
+}
+
+int cnss_register_tsf_captured_handler(struct device *dev,
+				       wlan_tsf_handler_t handler,
+				       void *ctx)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_wlan_tsf_info *tsf_info;
+	int ret;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL!\n");
+		return -EINVAL;
+	}
+
+	tsf_info = &plat_priv->tsf_info;
+	ret = cnss_wlan_tsf_init(tsf_info);
+	if (ret) {
+		cnss_pr_err("wlan tsf irq is not initialized\n");
+		return -EINVAL;
+	}
+
+	tsf_info->wlan_tsf_handler = handler;
+	tsf_info->context = ctx;
+	return 0;
+}
+EXPORT_SYMBOL(cnss_register_tsf_captured_handler);
+
+int cnss_unregister_tsf_captured_handler(struct device *dev, void *ctx)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_wlan_tsf_info *tsf_info;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL!\n");
+		return -EINVAL;
+	}
+
+	tsf_info = &plat_priv->tsf_info;
+	cnss_wlan_tsf_deinit(tsf_info);
+	tsf_info->wlan_tsf_handler = NULL;
+	tsf_info->context = NULL;
+	return 0;
+}
+EXPORT_SYMBOL(cnss_unregister_tsf_captured_handler);
+
 static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 {
 	int ret;
@@ -4504,6 +4759,70 @@ cnss_use_nv_mac(struct cnss_plat_data *plat_priv)
 				     "use-nv-mac");
 }
 #endif
+static int cnss_wlan_device_init(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+	int retry = 0;
+
+	if (test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks))
+		return 0;
+
+retry:
+	ret = cnss_power_on_device(plat_priv);
+	if (ret)
+		goto end;
+
+	ret = cnss_bus_init(plat_priv);
+	if (ret) {
+		if ((ret != -EPROBE_DEFER) &&
+		    retry++ < POWER_ON_RETRY_MAX_TIMES) {
+			cnss_power_off_device(plat_priv);
+			cnss_pr_dbg("Retry cnss_bus_init #%d\n", retry);
+			msleep(POWER_ON_RETRY_DELAY_MS * retry);
+			goto retry;
+		}
+		goto power_off;
+	}
+	return 0;
+
+power_off:
+	cnss_power_off_device(plat_priv);
+end:
+	return ret;
+}
+
+int cnss_wlan_hw_enable(void)
+{
+	struct cnss_plat_data *plat_priv;
+	int ret = 0;
+
+	plat_priv = cnss_get_first_plat_priv();
+	if (!plat_priv)
+		return -ENODEV;
+
+	clear_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state);
+
+	if (test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state))
+		goto register_driver;
+	ret = cnss_wlan_device_init(plat_priv);
+	if (ret) {
+		if (!test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state))
+			CNSS_ASSERT(0);
+		return ret;
+	}
+
+	if (test_bit(CNSS_FS_READY, &plat_priv->driver_state))
+		cnss_driver_event_post(plat_priv,
+				       CNSS_DRIVER_EVENT_COLD_BOOT_CAL_START,
+				       0, NULL);
+
+register_driver:
+	if (plat_priv->driver_ops)
+		ret = cnss_wlan_register_driver(plat_priv->driver_ops);
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_wlan_hw_enable);
 
 int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
 {
@@ -4722,6 +5041,97 @@ int cnss_get_curr_therm_cdev_state(struct device *dev,
 	return -EINVAL;
 }
 EXPORT_SYMBOL(cnss_get_curr_therm_cdev_state);
+
+void cnss_get_cpumask_for_wlan_rx_interrupts(struct device *dev,
+					     unsigned int *cpu_mask)
+{
+	struct cnss_plat_data *priv = cnss_get_plat_priv(NULL);
+
+	*cpu_mask = priv->cpumask_for_rx_intrs;
+}
+EXPORT_SYMBOL(cnss_get_cpumask_for_wlan_rx_interrupts);
+
+void cnss_get_cpumask_for_wlan_tx_comp_interrupts(struct device *dev,
+						  unsigned int *cpu_mask)
+{
+	struct cnss_plat_data *priv = cnss_get_plat_priv(NULL);
+
+	*cpu_mask = priv->cpumask_for_tx_comp_intrs;
+}
+EXPORT_SYMBOL(cnss_get_cpumask_for_wlan_tx_comp_interrupts);
+
+/**
+ * cnss_vendor_wonder_comp_bind - vendor wonder device component bind
+ *  callback
+ * @comp: vendor wonder device
+ * @master: master device
+ * @master_data: master data
+ *
+ * Return: 0 on success else errno
+ */
+static
+int cnss_vendor_wonder_comp_bind(struct device *comp, struct device *master,
+				 void *master_data)
+{
+	cnss_pr_info("vendor wonder bound to master device %s\n",
+		     dev_name(master));
+	return 0;
+}
+
+/**
+ * cnss_vendor_wonder_comp_unbind - vendor wonder device component unbind
+ *  callback
+ * @comp: vendor wonder device
+ * @master: master device
+ * @master_data: master data
+ *
+ * Return: None
+ */
+static
+void cnss_vendor_wonder_comp_unbind(struct device *comp, struct device *master,
+				    void *master_data)
+{
+	cnss_pr_info("vendor wonder unbound to master device\n");
+}
+
+static struct platform_device *wonder_plat_dev;
+static const void *wonder_priv_data;
+
+static const struct component_ops wonder_comp_ops = {
+	.bind = cnss_vendor_wonder_comp_bind,
+	.unbind = cnss_vendor_wonder_comp_unbind,
+};
+
+static inline int cnss_add_vendor_wonder_component(void)
+{
+	platform_set_drvdata(wonder_plat_dev, (void *)wonder_priv_data);
+
+	return component_add(&wonder_plat_dev->dev, &wonder_comp_ops);
+}
+
+static inline void cnss_del_vendor_wonder_component(void)
+{
+	component_del(&wonder_plat_dev->dev, &wonder_comp_ops);
+	platform_set_drvdata(wonder_plat_dev, NULL);
+}
+
+int cnss_set_vendor_wonder_priv_data(const void *priv_data)
+{
+	wonder_priv_data = priv_data;
+
+	if (!wonder_plat_dev) {
+		cnss_pr_info("vendor wonder plat device not available\n");
+		return 0;
+	}
+
+	if (wonder_priv_data)
+		cnss_add_vendor_wonder_component();
+	else
+		cnss_del_vendor_wonder_component();
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_set_vendor_wonder_priv_data);
 
 #ifdef CONFIG_DUMP_FW_TO_FILE_AT_KERNEL
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)

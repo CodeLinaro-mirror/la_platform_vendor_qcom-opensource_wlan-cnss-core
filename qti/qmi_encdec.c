@@ -798,7 +798,7 @@ void *qmi_encode_message(int type, unsigned int msg_id, size_t *len,
 
 	return msg;
 }
-EXPORT_SYMBOL(qmi_encode_message);
+EXPORT_SYMBOL_GPL(qmi_encode_message);
 
 /**
  * qmi_decode_message() - Decode QMI encoded message to C structure
@@ -822,7 +822,7 @@ int qmi_decode_message(const void *buf, size_t len,
 	return qmi_decode(ei, c_struct, buf + sizeof(struct qmi_header),
 			  len - sizeof(struct qmi_header), 1);
 }
-EXPORT_SYMBOL(qmi_decode_message);
+EXPORT_SYMBOL_GPL(qmi_decode_message);
 
 /* Common header in all QMI responses */
 CONST struct qmi_elem_info qmi_response_type_v01_ei[] = {
@@ -854,7 +854,9 @@ CONST struct qmi_elem_info qmi_response_type_v01_ei[] = {
 		.ei_array	= NULL,
 	},
 };
-EXPORT_SYMBOL(qmi_response_type_v01_ei);
+EXPORT_SYMBOL_GPL(qmi_response_type_v01_ei);
 
+#ifndef CONFIG_WLAN_CNSS_CORE
 MODULE_DESCRIPTION("QMI encoder/decoder helper");
 MODULE_LICENSE("GPL v2");
+#endif
