@@ -91,21 +91,20 @@ obj-$(CONFIG_WCNSS_MEM_PRE_ALLOC) += cnss_prealloc/
 obj-y += cnss_utils/
 
 else
-CNSS_CORE_BASE=.
-QRTR_DIR := $(CNSS_CORE_BASE)/qrtr
-MHI_DIR := $(CNSS_CORE_BASE)/mhi/core
-QTI_DIR := $(CNSS_CORE_BASE)/qti
-IPCLOG_DIR := $(CNSS_CORE_BASE)/trace
-CNSS_DIR := $(CNSS_CORE_BASE)/cnss2
-CNSS_UTILS_DIR := $(CNSS_CORE_BASE)/cnss_utils
-CNSS_PREALLOC_DIR := $(CNSS_CORE_BASE)/cnss_prealloc
+QRTR_DIR := qrtr
+MHI_DIR := mhi/core
+QTI_DIR := qti
+IPCLOG_DIR := trace
+CNSS_DIR := cnss2
+CNSS_UTILS_DIR := cnss_utils
+CNSS_PREALLOC_DIR := cnss_prealloc
 
-INIT_OBJS := $(CNSS_CORE_BASE)/unified_wlan_cnsscore.o
+INIT_OBJS := unified_wlan_cnsscore.o
 INIT_INC := -I$(ROOTDIR)
 
 ifeq ($(CONFIG_QRTR), y)
 	QRTR_OBJS := $(QRTR_DIR)/qrtr.o                                         \
-				 $(QRTR_DIR)/ns.o
+	             $(QRTR_DIR)/ns.o
 ifeq ($(CONFIG_QRTR_SMD),y)
 	QRTR_OBJS +=  $(QRTR_DIR)/smd.o
 endif
@@ -119,10 +118,10 @@ endif
 endif
 
 ifeq ($(CONFIG_MHI_BUS), y)
-	MHI_OBJS := $(MHI_DIR)/init.o                                            \
-				$(MHI_DIR)/main.o                                       \
-				$(MHI_DIR)/pm.o                                         \
-				$(MHI_DIR)/boot.o
+	MHI_OBJS := $(MHI_DIR)/init.o                                       \
+	            $(MHI_DIR)/main.o                                       \
+	            $(MHI_DIR)/pm.o                                         \
+	            $(MHI_DIR)/boot.o
 ifeq ($(CONFIG_MHI_BUS_DEBUG),y)
 	MHI_OBJS += $(MHI_DIR)/debugfs.o
 endif
@@ -136,19 +135,19 @@ ifeq ($(CONFIG_QCOM_QMI_HELPERS), y)
 endif
 
 ifeq ($(CONFIG_CNSS2), y)
-	CNSS_OBJS := $(CNSS_DIR)/main.o                                         \
-		         $(CNSS_DIR)/bus.o                                      \
-		         $(CNSS_DIR)/debug.o                                    \
-		         $(CNSS_DIR)/power.o                                    \
-			     $(CNSS_DIR)/genl.o                                     \
-			     $(CNSS_DIR)/coredump.o
+	CNSS_OBJS := $(CNSS_DIR)/main.o                                     \
+	             $(CNSS_DIR)/bus.o                                      \
+	             $(CNSS_DIR)/debug.o                                    \
+	             $(CNSS_DIR)/power.o                                    \
+	             $(CNSS_DIR)/genl.o                                     \
+	             $(CNSS_DIR)/coredump.o
 ifeq ($(CONFIG_CNSS2_PCIE),y)
 	CNSS_OBJS += $(CNSS_DIR)/pci.o
 endif
 ifeq ($(CONFIG_CNSS2_QMI),y)
 	CNSS_OBJS += $(CNSS_DIR)/qmi.o                                          \
-		         $(CNSS_DIR)/coexistence_service_v01.o                   \
-			     $(CNSS_DIR)/ip_multimedia_subsystem_private_service_v01.o
+	             $(CNSS_DIR)/coexistence_service_v01.o                   \
+	             $(CNSS_DIR)/ip_multimedia_subsystem_private_service_v01.o
 endif
 	CNSS_INC := -I$(CNSS_DIR)
 endif
@@ -168,7 +167,7 @@ endif
 
 ifeq ($(CONFIG_IPC_LOGGING_MODULE), y)
 	IPCLOG_OBJS := $(IPCLOG_DIR)/ipc_logging.o           \
-				$(IPCLOG_DIR)/ipc_logging_debug.o      
+	               $(IPCLOG_DIR)/ipc_logging_debug.o      
 	IPCLOG_INC := -I$(ROOTDIR)/(IPCLOG_DIR)
 endif
 
@@ -179,14 +178,14 @@ OBJS := $(INIT_OBJS)
 OBJS += $(QRTR_OBJS)                                                        \
 	    $(MHI_OBJS)                                                     \
 	    $(QMI_HELPERS_OBJS)                                             \
-	    $(IPCLOG_OBJS)                       \
+	    $(IPCLOG_OBJS)                                                  \
 	    $(CNSS_OBJS)                                                    \
 	    $(CNSS_UTILS_OBJS)                                              \
 	    $(CNSS_PREALLOC_OBJS)
 
 INCS := $(INIT_INC)
 
-INCS += $(QRTR_INC)                                                         \
+INCS += $(QRTR_INC)                                                     \
         $(MHI_INC)                                                      \
         $(QMI_HELPERS_INC)                                              \
         $(IPCLOG_INC)                                                   \
@@ -195,7 +194,7 @@ INCS += $(QRTR_INC)                                                         \
         $(CNSS_PREALLOC_INC)
 
 cflags-y += $(INCS)
-ccflags-y += -Os -I$(src)/$(CNSS_CORE_BASE)/inc -I$(src)/$(CNSS_CORE_BASE)/cnss_utils -I$(ROOTDIR)
+ccflags-y += -Os -I$(src)/inc -I$(src)/cnss_utils -I$(ROOTDIR)
 
 obj-$(WLAN_CNSSCORE) +=$(MODNAME).o
 $(MODNAME)-y := $(OBJS)

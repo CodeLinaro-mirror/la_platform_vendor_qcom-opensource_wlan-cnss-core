@@ -40,6 +40,7 @@
 #endif
 #include <linux/iommu.h>
 #include "qmi.h"
+#include <linux/version.h>
 
 #define MAX_NO_OF_MAC_ADDR		4
 #define QMI_WLFW_MAX_TIMESTAMP_LEN	32
@@ -611,6 +612,10 @@ struct cnss_plat_data {
 	bool ipa_shared_cb_enable;
 };
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0))
+#define from_timer timer_container_of
+#endif
+
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
 static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)
 {
@@ -693,4 +698,25 @@ int cnss_iommu_map(struct iommu_domain *domain, unsigned long iova,
 #define FW_RDDM_DUMP "fw_rddm"
 #define FW_SRAM_DUMP "fw_sram"
 int cnss_invoke_qca_dump_app(char *type);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0))
+static inline int cnss_timer_delete(struct timer_list *timer)
+{
+	return timer_delete(timer);
+}
+
+static inline int cnss_timer_delete_sync(struct timer_list *timer)
+{
+	return timer_delete_sync(timer);
+}
+#else
+static inline int cnss_timer_delete(struct timer_list *timer)
+{
+	return del_timer(timer);
+}
+
+static inline int cnss_timer_delete_sync(struct timer_list *timer)
+{
+	return del_timer_sync(timer);
+}
+#endif
 #endif /* _CNSS_MAIN_H */
