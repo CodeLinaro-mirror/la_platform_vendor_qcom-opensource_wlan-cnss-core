@@ -4,7 +4,9 @@
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#ifndef  CONFIG_CNSS2_X86
 #include <asm/arch_timer.h>
+#endif
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
@@ -478,8 +480,11 @@ EXPORT_SYMBOL(tsv_timestamp_write);
 int tsv_qtimer_write(struct encode_context *ectxt)
 {
 	int ret;
-	uint64_t t_now = __arch_counter_get_cntvct();
-
+#ifdef  CONFIG_CNSS2_X86
+		uint64_t t_now = rdtsc();
+#else
+		uint64_t t_now = __arch_counter_get_cntvct();
+#endif
 	ret = tsv_write_header(ectxt, TSV_TYPE_QTIMER, sizeof(t_now));
 	if (ret)
 		return ret;

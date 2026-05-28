@@ -8,6 +8,8 @@
 #include "bus.h"
 #include "debug.h"
 #include "pci.h"
+#include "../mhi/core/internal.h"
+
 
 #define MMIO_REG_ACCESS_MEM_TYPE		0xFF
 #define MMIO_REG_RAW_ACCESS_MEM_TYPE		0xFE

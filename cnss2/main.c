@@ -44,6 +44,8 @@
 #include "reg.h"
 #include "pci.h"
 #include "coredump.h"
+#include "../mhi/core/internal.h"
+
 
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
@@ -126,6 +128,7 @@ static void cnss_msi_interrupt_check(struct cnss_plat_data *plat_priv)
 	struct cnss_pci_data *pci_priv;
 	struct pci_dev *pci_dev;
 	struct irq_desc *desc;
+	struct irq_data *d;
 	int irq;
 	
 	pci_priv = plat_priv ? plat_priv->bus_priv : NULL;
@@ -139,7 +142,8 @@ static void cnss_msi_interrupt_check(struct cnss_plat_data *plat_priv)
 	cnss_pr_info("cnss_msi_interrupt_check: one msi\n");
 	
 	irq = pci_dev->irq;
-	desc = irq_to_desc(irq);
+	d = irq_get_irq_data(irq);
+	desc = irq_data_to_desc(d);
 	/* positive irq depth means irq is disabled */
 	while (desc->depth) {
 		enable_irq(irq);
