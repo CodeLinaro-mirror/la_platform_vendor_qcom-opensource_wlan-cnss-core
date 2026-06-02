@@ -18,9 +18,14 @@
 #include <linux/wait.h>
 #include <linux/delay.h>
 #include <linux/completion.h>
-#include "ipc_logging.h"
+#include <linux/ipc_logging.h>
 
 #include "ipc_logging_private.h"
+
+#ifdef CONFIG_WLAN_CNSS_CORE
+#undef EXPORT_SYMBOL
+#define EXPORT_SYMBOL(x)
+#endif
 
 static DEFINE_MUTEX(ipc_log_debugfs_init_lock);
 static struct dentry *root_dent;

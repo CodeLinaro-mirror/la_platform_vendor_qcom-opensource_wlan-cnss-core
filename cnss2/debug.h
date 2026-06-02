@@ -1,64 +1,68 @@
-/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved. */
 
 #ifndef _CNSS_DEBUG_H
 #define _CNSS_DEBUG_H
-#ifdef CONFIG_IPC_LOGGING
-#include "ipc_logging.h"
-#endif
+
 #include <linux/printk.h>
- 
-extern void *cnss_ipc_log_context;
 
-#ifdef CONFIG_IPC_LOGGING
-#define cnss_ipc_log_string(_x...) do {					\
-		if (cnss_ipc_log_context)				\
-			ipc_log_string(cnss_ipc_log_context, _x);	\
-	} while (0)
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
+#include <linux/ipc_logging.h>
+#include <asm/current.h>
+
+extern void *cnss_ipc_log_context;
+extern void *cnss_ipc_log_long_context;
+
+#ifdef CONFIG_CNSS2_DEBUG
+#define CNSS_IPC_LOG_PAGES              100
 #else
-#define cnss_ipc_log_string(_x...) do {					\
-        } while (0)
+#define CNSS_IPC_LOG_PAGES              50
+#endif
+#define cnss_debug_log_print(_x...) \
+		 cnss_debug_ipc_log_print(cnss_ipc_log_context, _x)
+
+#define cnss_debug_log_long_print(_x...) \
+		 cnss_debug_ipc_log_print(cnss_ipc_log_long_context, _x)
+#else
+#define cnss_debug_log_print(_x...) \
+		 cnss_debug_ipc_log_print((void *)NULL, _x)
+#define cnss_debug_log_long_print(_x...) \
+		 cnss_debug_ipc_log_print((void *)NULL, _x)
 #endif
 
-#define cnss_pr_err(_fmt, ...) do {					\
-		pr_err("cnss: " _fmt, ##__VA_ARGS__);			\
-		cnss_ipc_log_string("ERR: " pr_fmt(_fmt),		\
-				    ##__VA_ARGS__);			\
-	} while (0)
+#define proc_name (in_irq() ? "irq" : \
+		   (in_softirq() ? "soft_irq" : current->comm))
 
-#define cnss_pr_warn(_fmt, ...) do {					\
-		pr_warn("cnss: " _fmt, ##__VA_ARGS__);			\
-		cnss_ipc_log_string("WRN: " pr_fmt(_fmt),		\
-				    ##__VA_ARGS__);			\
-	} while (0)
+#define cnss_pr_err(_fmt, ...) \
+	cnss_debug_log_print(proc_name, __func__, \
+			     KERN_ERR, _fmt, ##__VA_ARGS__)
 
-#define cnss_pr_info(_fmt, ...) do {					\
-		pr_err("cnss: " _fmt, ##__VA_ARGS__);			\
-		cnss_ipc_log_string("INF: " pr_fmt(_fmt),		\
-				    ##__VA_ARGS__);			\
-	} while (0)
+#define cnss_pr_warn(_fmt, ...) \
+	cnss_debug_log_print(proc_name, __func__, \
+			     KERN_WARNING, _fmt, ##__VA_ARGS__)
 
-#define cnss_pr_dbg(_fmt, ...) do {					\
-		pr_err("cnss: " _fmt, ##__VA_ARGS__);			\
-		cnss_ipc_log_string("DBG: " pr_fmt(_fmt),		\
-				    ##__VA_ARGS__);			\
-	} while (0)
+#define cnss_pr_info(_fmt, ...) \
+	cnss_debug_log_print(proc_name, __func__, \
+			     KERN_INFO, _fmt, ##__VA_ARGS__)
+
+#define cnss_pr_dbg(_fmt, ...) \
+	cnss_debug_log_print(proc_name, __func__, \
+			     KERN_DEBUG, _fmt, ##__VA_ARGS__)
+
+#define cnss_pr_vdbg(_fmt, ...) \
+	cnss_debug_log_long_print(proc_name, __func__, \
+				  KERN_DEBUG, _fmt, ##__VA_ARGS__)
+
+#define cnss_pr_buf(_fmt, ...) \
+	cnss_debug_log_long_print(proc_name, __func__, \
+				  NULL, _fmt, ##__VA_ARGS__)
 
 #ifdef CONFIG_CNSS2_DEBUG
 #define CNSS_ASSERT(_condition) do {					\
 		if (!(_condition)) {					\
 			cnss_pr_err("ASSERT at line %d\n",		\
 				    __LINE__);				\
-			WARN_ON(1);					\
+			BUG();						\
 		}							\
 	} while (0)
 #else
@@ -71,12 +75,13 @@ extern void *cnss_ipc_log_context;
 	} while (0)
 #endif
 
+#define cnss_fatal_err(_fmt, ...)					\
+	cnss_pr_err("fatal: " _fmt, ##__VA_ARGS__)
+
 int cnss_debug_init(void);
 void cnss_debug_deinit(void);
 int cnss_debugfs_create(struct cnss_plat_data *plat_priv);
 void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv);
-#ifdef DUMP_TO_FS
-extern int cnss_dump_fw_sram_to_file(struct cnss_plat_data *plat_priv);
-#endif
-
+void cnss_debug_ipc_log_print(void *log_ctx, char *process, const char *fn,
+			      const char *log_level, char *fmt, ...);
 #endif /* _CNSS_DEBUG_H */
