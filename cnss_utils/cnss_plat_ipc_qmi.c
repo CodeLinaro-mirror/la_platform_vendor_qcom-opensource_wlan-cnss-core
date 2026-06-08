@@ -1082,6 +1082,7 @@ free_svc_hdl:
 	kfree(svc->svc_hdl);
 }
 
+#ifndef CONFIG_CNSS2_X86
 /**
  * cnss_plat_ipc_is_valid_dt_node_found - Check if valid device tree node
  *                                        present
@@ -1105,6 +1106,7 @@ static bool cnss_plat_ipc_is_valid_dt_node_found(void)
 
 	return false;
 }
+#endif
 
 static DECLARE_WORK(cnss_plat_ipc_init_work, cnss_plat_ipc_init_fn);
 
@@ -1114,9 +1116,10 @@ int cnss_plat_ipc_qmi_svc_init(void)
 static int __init cnss_plat_ipc_qmi_svc_init(void)
 #endif
 {
+#ifndef CONFIG_CNSS2_X86
 	if (!cnss_plat_ipc_is_valid_dt_node_found())
 		return -ENODEV;
-
+#endif
 	/* Schedule a work to do real init to avoid blocking here */
 	cnss_plat_ipc_logging_init();
 	schedule_work(&cnss_plat_ipc_init_work);

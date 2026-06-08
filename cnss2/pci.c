@@ -1779,6 +1779,26 @@ static int cnss_update_supported_link_info(struct cnss_pci_data *pci_priv)
 	return ret;
 }
 
+static int cnss_pci_disable_aspm(struct cnss_pci_data *pci_priv)
+{
+	u16 link_ctrl;
+	int ret;
+
+	ret = pcie_capability_read_word(pci_priv->pci_dev, PCI_EXP_LNKCTL,
+					&link_ctrl);
+	if (ret)
+		return ret;
+
+	cnss_pr_dbg("pci link_ctl 0x%04x\n", link_ctrl);
+
+	/* disable L0s and L1 */
+	pcie_capability_write_word(pci_priv->pci_dev, PCI_EXP_LNKCTL,
+				   link_ctrl & ~PCI_EXP_LNKCTL_ASPMC);
+
+	return 0;
+}
+
+
 int cnss_pci_get_link_status(struct cnss_pci_data *pci_priv)
 {
 	u16 link_status;
@@ -2111,11 +2131,13 @@ int cnss_pci_link_down(struct device *dev)
 		return -EBUSY;
 	}
 
+#ifndef CONFIG_CNSS2_X86
 	if (pci_priv->drv_connected_last &&
 	    of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				  "cnss-enable-self-recovery") &&
 	    !plat_priv->xdump_helper.wl_over_bt_enabled)
 		plat_priv->ctrl_params.quirks |= BIT(LINK_DOWN_SELF_RECOVERY);
+#endif
 
 	cnss_pr_err("PCI link down is detected by drivers, driver state 0x%lx\n",
 		    plat_priv->driver_state);
@@ -4292,8 +4314,10 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 	if (ret == -EAGAIN)
 		goto out;
 
+#ifndef CONFIG_CNSS2_X86
 	cnss_request_bus_bandwidth(&plat_priv->plat_dev->dev,
 				   CNSS_BUS_WIDTH_NONE);
+#endif
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
 	cnss_pci_set_auto_suspended(pci_priv, 0);
 
@@ -4399,6 +4423,10 @@ static int cnss_qca6290_ramdump(struct cnss_pci_data *pci_priv)
 
 	cnss_pci_clear_dump_info(pci_priv);
 	cnss_pci_power_off_mhi(pci_priv, false);
+
+//	if (plat_priv->pwr_ctrl_mode == CNSS_POWER_CTRL_ALWAYS_ON)
+//		cnss_pci_dev_warm_reset(pci_priv, false);
+	
 	cnss_suspend_pci_link(pci_priv);
 	cnss_pci_deinit_mhi(pci_priv);
 	cnss_power_off_device(plat_priv);
@@ -5895,16 +5923,25 @@ int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+#ifndef CONFIG_CNSS2_X86
 	struct device *dev = &pci_priv->pci_dev->dev;
+#endif
 	int i;
 
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		if (!fw_mem[i].va && fw_mem[i].size) {
 retry:
+#ifndef CONFIG_CNSS2_X86
 			fw_mem[i].va =
 				dma_alloc_attrs(dev, fw_mem[i].size,
 						&fw_mem[i].pa, GFP_KERNEL,
 						fw_mem[i].attrs);
+#else
+			fw_mem[i].va =
+				dma_alloc_coherent(&pci_priv->pci_dev->dev,
+						   fw_mem[i].size,
+						   &fw_mem[i].pa, GFP_KERNEL);
+#endif
 
 			if (!fw_mem[i].va) {
 				if ((fw_mem[i].attrs &
@@ -5949,9 +5986,14 @@ static void cnss_pci_free_fw_mem(struct cnss_pci_data *pci_priv)
 			cnss_pr_dbg("Freeing memory for FW, va: 0x%pK, pa: %pa, size: 0x%zx, type: %u\n",
 				    fw_mem[i].va, &fw_mem[i].pa,
 				    fw_mem[i].size, fw_mem[i].type);
+#ifndef CONFIG_CNSS2_X86
 			dma_free_attrs(dev, fw_mem[i].size,
 				       fw_mem[i].va, fw_mem[i].pa,
 				       fw_mem[i].attrs);
+#else
+			dma_free_coherent(dev, fw_mem[i].size,
+				       fw_mem[i].va, fw_mem[i].pa);
+#endif
 			fw_mem[i].va = NULL;
 			fw_mem[i].pa = 0;
 			fw_mem[i].size = 0;
@@ -7094,6 +7136,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	case QCA6174_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
 		break;
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
@@ -7102,10 +7145,17 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	case PEACH_DEVICE_ID:
 	case COLOGNE_DEVICE_ID:
 	case FIG_DEVICE_ID:
+#ifdef CONFIG_CNSS2_X86
+		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
+#else
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_36_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
+#endif
 		break;
 	default:
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
+		pci_priv->dma_coherent_bit_mask = PCI_DMA_MASK_32_BIT;
 		break;
 	}
 
@@ -7116,8 +7166,10 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("Failed to set PCI DMA mask, err = %d\n", ret);
 		goto release_region;
 	}
+	
+	cnss_pr_dbg("Set PCI COHERENT DMA MASK (0x%llx)\n", pci_priv->dma_coherent_bit_mask);
 
-	ret = cnss_pci_set_coherent_dma_mask(pci_dev, pci_priv->dma_bit_mask);
+	ret = cnss_pci_set_coherent_dma_mask(pci_dev, pci_priv->dma_coherent_bit_mask);
 	if (ret) {
 		cnss_pr_err("Failed to set PCI coherent DMA mask, err = %d\n",
 			    ret);
@@ -8725,7 +8777,7 @@ static int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv)
 {
 	return 0;
 }
-
+#ifndef CONFIG_CNSS2_X86
 static irqreturn_t cnss_pci_wake_handler(int irq, void *data)
 {
 	struct cnss_pci_data *pci_priv = data;
@@ -8826,6 +8878,16 @@ static void cnss_pci_wake_gpio_deinit(struct cnss_pci_data *pci_priv)
 	free_irq(pci_priv->wake_irq, pci_priv);
 	gpio_free(pci_priv->wake_gpio);
 }
+#else
+static int cnss_pci_wake_gpio_init(struct cnss_pci_data *pci_priv)
+{
+	return 0;
+}
+
+static void cnss_pci_wake_gpio_deinit(struct cnss_pci_data *pci_priv)
+{
+}
+#endif
 #endif
 
 #ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
@@ -8895,6 +8957,7 @@ static struct dev_pm_domain cnss_pm_domain = {
 	}
 };
 
+#ifndef CONFIG_CNSS2_X86
 static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 {
 	struct device_node *child;
@@ -8940,7 +9003,7 @@ static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 
 	return -EINVAL;
 }
-
+#endif
 #ifdef CONFIG_CNSS2_CONDITIONAL_POWEROFF
 static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
 {
@@ -9103,12 +9166,13 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (plat_priv->use_pm_domain)
 		dev->pm_domain = &cnss_pm_domain;
 
+#ifndef CONFIG_CNSS2_X86
 	ret = cnss_pci_get_dev_cfg_node(plat_priv);
 	if (ret) {
 		cnss_pr_err("Failed to get device cfg node, err = %d\n", ret);
 		goto reset_ctx;
 	}
-
+#endif
 	cnss_pci_get_wlaon_pwr_ctrl_info(pci_priv);
 	cnss_get_bwscal_info(plat_priv);
 	cnss_pr_dbg("no_bwscale: %d\n", plat_priv->no_bwscale);
@@ -9130,10 +9194,11 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (ret)
 		goto unregister_subsys;
 
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 	ret = cnss_pci_init_smmu(pci_priv);
 	if (ret)
 		goto unregister_ramdump;
-
+#endif
 	/* update drv support flag */
 	cnss_pci_update_drv_supported(pci_priv);
 
@@ -9187,6 +9252,11 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		cnss_pci_get_link_status(pci_priv);
 		cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, true, false);
 		cnss_pci_wake_gpio_init(pci_priv);
+#ifdef CONFIG_CNSS2_X86
+		/* check if it's really needed to disable aspm */
+		if (!test_bit(ENABLE_PCI_LINK_PS, &plat_priv->ctrl_params.quirks))
+			cnss_pci_disable_aspm(pci_priv);
+#endif
 		break;
 	default:
 		cnss_pr_err("Unknown PCI device found: 0x%x\n",
@@ -9218,9 +9288,13 @@ disable_bus:
 dereg_pci_event:
 	cnss_dereg_pci_event(pci_priv);
 deinit_smmu:
+#ifndef CONFIG_CNSS2_X86
 	cnss_pci_deinit_smmu(pci_priv);
+#endif
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 unregister_ramdump:
 	cnss_unregister_ramdump(plat_priv);
+#endif
 unregister_subsys:
 	cnss_unregister_subsys(plat_priv);
 reset_ctx:
@@ -9266,7 +9340,9 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	cnss_pci_disable_msi(pci_priv);
 	cnss_pci_disable_bus(pci_priv);
 	cnss_dereg_pci_event(pci_priv);
+#ifndef CONFIG_CNSS2_X86
 	cnss_pci_deinit_smmu(pci_priv);
+#endif
 	if (plat_priv) {
 		cnss_unregister_ramdump(plat_priv);
 		cnss_unregister_subsys(plat_priv);
@@ -9388,6 +9464,7 @@ static struct pci_driver cnss_pci_driver = {
 	},
 };
 
+#ifndef CONFIG_CNSS2_X86
 static int cnss_pci_enumerate(struct cnss_plat_data *plat_priv, u32 rc_num)
 {
 	int ret, retry = 0;
@@ -9430,9 +9507,11 @@ retry:
 out:
 	return ret;
 }
+#endif
 
 int cnss_pci_init(struct cnss_plat_data *plat_priv)
 {
+#ifndef CONFIG_CNSS2_X86
 	struct device *dev = &plat_priv->plat_dev->dev;
 	const __be32 *prop;
 	int ret = 0, prop_len = 0, rc_count, i;
@@ -9457,6 +9536,9 @@ int cnss_pci_init(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("Failed to suspend, ret: %d\n", ret);
 		goto out;
 	}
+#else
+	int ret;
+#endif
 
 	if (!cnss_driver_registered) {
 		ret = pci_register_driver(&cnss_pci_driver);
