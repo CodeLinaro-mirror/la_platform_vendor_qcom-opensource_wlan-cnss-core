@@ -11,6 +11,7 @@
 #include <net/sock.h>
 
 #include "qrtr.h"
+#include "unified_wlan_cnsscore.h"
 
 struct qrtr_mhi_dev {
 	struct qrtr_endpoint ep;

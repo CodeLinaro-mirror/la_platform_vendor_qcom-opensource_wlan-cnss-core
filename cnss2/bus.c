@@ -24,11 +24,10 @@ enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev)
 
 enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 {
-
-	int ret;
-	struct device *dev;
 	u32 bus_type = CNSS_BUS_NONE;
 #ifndef CONFIG_CNSS2_X86
+	int ret;
+	struct device *dev;
 	if (plat_priv->is_converged_dt) {
 		dev = &plat_priv->plat_dev->dev;
 		ret = of_property_read_u32(dev->of_node, "qcom,bus-type",

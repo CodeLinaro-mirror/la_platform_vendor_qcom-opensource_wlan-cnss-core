@@ -14,6 +14,8 @@
 #include <net/sock.h>
 
 #include "qrtr.h"
+#include "unified_wlan_cnsscore.h"
+
 #include <linux/version.h>
 
 #ifdef CONFIG_WLAN_CNSS_CORE
@@ -764,12 +766,12 @@ static int qrtr_port_assign(struct qrtr_sock *ipc, int *port)
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
-void static ipc_sk_error_report(struct qrtr_sock *ipc)
+static void ipc_sk_error_report(struct qrtr_sock *ipc)
 {
 	sk_error_report(&ipc->sk);
 }
 #else
-void static ipc_sk_error_report(struct qrtr_sock *ipc)
+static void ipc_sk_error_report(struct qrtr_sock *ipc)
 {
 	ipc->sk.sk_error_report(&ipc->sk);
 }

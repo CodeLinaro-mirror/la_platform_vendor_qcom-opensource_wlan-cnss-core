@@ -15,6 +15,8 @@
 #else
 #include <net/cnss_prealloc.h>
 #endif
+#include "unified_wlan_cnsscore.h"
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0))
 /* Ideally header should be from standard include path. So this is not an
  * ideal way of header inclusion but use of slab struct to derive cache

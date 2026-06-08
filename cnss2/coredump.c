@@ -206,6 +206,7 @@ int cnss_coredump_submit(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
+#ifdef CONFIG_RDDM_WORKER
 static void cnss_coredump_buf_release(struct cnss_pci_data *pci_priv)
 {
 	struct fw_remote_crash_data *remote = &pci_priv->plat_priv->remote_crash_data;
@@ -226,6 +227,7 @@ static void cnss_coredump_buf_release(struct cnss_pci_data *pci_priv)
 		mhi->paging_dump_buf = NULL;
 	}
 }
+#endif
 
 void cnss_rddm_submit(void *bus_priv)
 {

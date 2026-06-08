@@ -17,6 +17,7 @@
 #else
 #include <net/cnss_utils.h>
 #endif
+#include "unified_wlan_cnsscore.h"
 
 #define CNSS_MAX_CH_NUM 157
 struct cnss_unsafe_channel_list {

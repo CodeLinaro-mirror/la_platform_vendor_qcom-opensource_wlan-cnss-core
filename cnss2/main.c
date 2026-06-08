@@ -44,6 +44,7 @@
 #include "reg.h"
 #include "pci.h"
 #include "coredump.h"
+#include "unified_wlan_cnsscore.h"
 #include "../mhi/core/internal.h"
 
 
@@ -2577,14 +2578,14 @@ static void cnss_driver_event_work(struct work_struct *work)
 		case CNSS_DRIVER_EVENT_IDLE_RESTART:
 			set_bit(CNSS_DRIVER_IDLE_RESTART,
 				&plat_priv->driver_state);
-		/* fall-thru */
+		fallthrough;
 		case CNSS_DRIVER_EVENT_POWER_UP:
 			ret = cnss_power_up_hdlr(plat_priv);
 			break;
 		case CNSS_DRIVER_EVENT_IDLE_SHUTDOWN:
 			set_bit(CNSS_DRIVER_IDLE_SHUTDOWN,
 				&plat_priv->driver_state);
-		/* fall-thru */
+		fallthrough;
 		case CNSS_DRIVER_EVENT_POWER_DOWN:
 			ret = cnss_power_down_hdlr(plat_priv);
 			break;

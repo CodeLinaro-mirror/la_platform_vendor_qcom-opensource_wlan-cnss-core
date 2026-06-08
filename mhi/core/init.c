@@ -20,6 +20,7 @@
 #include <linux/wait.h>
 #include <linux/version.h>
 #include "internal.h"
+#include "unified_wlan_cnsscore.h"
 
 #ifdef CONFIG_WLAN_CNSS_CORE
 #undef EXPORT_SYMBOL_GPL
@@ -933,7 +934,6 @@ int mhi_register_controller(struct mhi_controller *mhi_cntrl,
 	struct mhi_chan *mhi_chan;
 	struct mhi_cmd *mhi_cmd;
 	struct mhi_device *mhi_dev;
-	u32 soc_info;
 	int ret, i;
 
 	if (!mhi_cntrl || !mhi_cntrl->cntrl_dev || !mhi_cntrl->regs ||
@@ -1441,7 +1441,7 @@ static int mhi_uevent(struct device *dev, struct kobj_uevent_env *env)
 static int mhi_match(struct device *dev, const struct device_driver *drv)
 {
 	struct mhi_device *mhi_dev = to_mhi_device(dev);
-	struct mhi_driver *mhi_drv = to_mhi_driver(drv);
+	const struct mhi_driver *mhi_drv = to_mhi_driver(drv);
 	const struct mhi_device_id *id;
 
 	/*

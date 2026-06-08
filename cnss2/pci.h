@@ -289,7 +289,7 @@ int cnss_pci_debug_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
 int cnss_pci_get_iova(struct cnss_pci_data *pci_priv, u64 *addr, u64 *size);
 int cnss_pci_get_iova_ipa(struct cnss_pci_data *pci_priv, u64 *addr,
 			  u64 *size);
-
+bool cnss_pci_is_smmu_s1_enabled(struct cnss_pci_data *pci_priv);
 void cnss_pci_sw_reset(struct pci_dev *pdev, bool power_on);
 void cnss_pci_show_hw_revision(struct cnss_pci_data *pci_priv);
 int cnss_pci_dump_fw_sram(struct cnss_pci_data *pci_priv);
@@ -308,20 +308,6 @@ bool cnss_pci_is_one_msi(struct cnss_pci_data *pci_priv);
 
 #define ACCESS_ALWAYS_OFF 0xFE0
 #define PCIE_REMAP_1M_BAR_CTRL (0x310c)
-
-#define MHISTATUS (0x48)
-#define MHISTATUS_MHISTATE_MASK 0x0000ff00
-#define MHISTATUS_MHISTATE_SHIFT 0x8
-#define MHISTATUS_SYSERR_MASK 0x4
-#define MHISTATUS_SYSERR_SHIFT 0x2
-#define MHISTATUS_READY_MASK 0x1
-#define MHISTATUS_READY_SHIFT 0x0
-
-#define MHICTRL (0x38)
-#define MHICTRL_MHISTATE_MASK 0x0000FF00
-#define MHICTRL_MHISTATE_SHIFT 0x8
-#define MHICTRL_RESET_MASK 0x2
-#define MHICTRL_RESET_SHIFT 0x1
 
 #define PCIE_Q6_COOKIE_ADDR         (0x01F80500)
 #define PCIE_Q6_COOKIE_DATA         (0xC0000000)

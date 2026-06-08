@@ -5,6 +5,7 @@
 #include "wlan_firmware_service_v01.h"
 #include <linux/module.h>
 #include <linux/of.h>
+#include "unified_wlan_cnsscore.h"
 
 static struct qmi_elem_info wlfw_ce_tgt_pipe_cfg_s_v01_ei[] = {
 	{

@@ -2969,20 +2969,23 @@ static void cnss_pci_dump_shadow_reg(struct cnss_pci_data *pci_priv)
 		reg_offset = PCIE_SHADOW_REG_VALUE_0 + i * 4;
 		pci_priv->debug_reg[j].offset = reg_offset;
 		if (cnss_pci_reg_read(pci_priv, reg_offset,
-				      &pci_priv->debug_reg[j].val))
+				      &pci_priv->debug_reg[j].val)){
+				      
 			cnss_pr_dbg("PCIE_SHADOW_REG_VALUE_%d = 0x%x\n",
 					i, pci_priv->debug_reg[j].val);
 			goto force_wake_put;
+		}
 	}
 
 	for (i = 0; i < SHADOW_REG_INTER_COUNT; i++, j++) {
 		reg_offset = PCIE_SHADOW_REG_INTER_0 + i * 4;
 		pci_priv->debug_reg[j].offset = reg_offset;
 		if (cnss_pci_reg_read(pci_priv, reg_offset,
-				      &pci_priv->debug_reg[j].val))
+				      &pci_priv->debug_reg[j].val)){
 			cnss_pr_dbg("PCIE_SHADOW_REG_INTER_%d = 0x%x\n",
 					i, pci_priv->debug_reg[j].val);
 			goto force_wake_put;
+		}			
 	}
 
 force_wake_put:
@@ -6939,7 +6942,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (ret)
 		goto unregister_subsys;
 
-#if !defined(CONFIG_CNSS2_X86) && defined(CONFIG_ARM_DMA_USE_IOMMU)
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 	ret = cnss_pci_init_smmu(pci_priv);
 	if (ret)
 		goto unregister_ramdump;
@@ -7002,11 +7005,11 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	cnss_pci_config_regs(pci_priv);
 	if (EMULATION_HW)
 		goto out;
-#ifndef CONFIG_CNSS2_X86
+
 	ret = cnss_suspend_pci_link(pci_priv);
 	if (ret)
 		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
-#endif
+
 
 	cnss_power_off_device(plat_priv);
 	set_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state);
@@ -7035,8 +7038,10 @@ deinit_smmu:
 #ifndef CONFIG_CNSS2_X86
 	cnss_pci_deinit_smmu(pci_priv);
 #endif
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
 unregister_ramdump:
 	cnss_unregister_ramdump(plat_priv);
+#endif
 unregister_subsys:
 	cnss_unregister_subsys(plat_priv);
 reset_ctx:

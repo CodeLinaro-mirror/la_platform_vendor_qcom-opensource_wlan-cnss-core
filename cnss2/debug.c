@@ -130,11 +130,41 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_QMI_DMS_CONNECTED:
 			seq_puts(s, "DMS_CONNECTED");
 			continue;
+		case CNSS_DMS_DEL_SERVER:
+			seq_puts(s, "DMS_DEL_SERVER");
+			continue;
 		case CNSS_DAEMON_CONNECTED:
 			seq_puts(s, "DAEMON_CONNECTED");
 			continue;
 		case CNSS_PCI_PROBE_DONE:
 			seq_puts(s, "PCI PROBE DONE");
+			continue;
+		case CNSS_DRIVER_REGISTER:
+			seq_puts(s, "DRIVER REGISTERED");
+			continue;
+		case CNSS_WLAN_HW_DISABLED:
+			seq_puts(s, "WLAN HW DISABLED");
+			continue;
+		case CNSS_FS_READY:
+			seq_puts(s, "FS READY");
+			continue;
+		case CNSS_DRIVER_REGISTERED:
+			seq_puts(s, "DRIVER REGISTERED");
+			continue;
+		case CNSS_POWER_OFF:
+			seq_puts(s, "POWER OFF");
+			continue;
+		case CNSS_SHUTDOWN_DEVICE:
+			seq_puts(s, "SHUTDOWN DEVICE");
+			continue;
+		case CNSS_POWERING_ON:
+			seq_puts(s, "POWERING ON");
+			continue;
+		case CNSS_SEC_DOWNLOAD:
+			seq_puts(s, "DOWNLOAD SEC_IN_BOOTUP");
+			continue;
+		case CNSS_RADIO_OFF:
+			seq_puts(s, "RADIO OFF");
 			continue;
 		}
 
