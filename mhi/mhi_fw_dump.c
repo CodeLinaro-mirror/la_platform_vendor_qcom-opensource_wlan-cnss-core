@@ -400,7 +400,7 @@ void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt)
 	len = scnprintf(p, len_left, "remote.bin");
 	ret = fw_remote_mem_dump(mhi_dev_ctxt, fw_mem, count, file_full_path);
 
-	len = scnprintf(p, len_left, "fwsram.bin");
+	len = scnprintf(p, len_left, "rddm.bin");
 	ret = firmware_dump(mhi_dev_ctxt, rddm_table, file_full_path);
 
 	head = (ramdump_header_t *)(rddm_table->bhie_mem_info[0].aligned);
@@ -413,7 +413,11 @@ void dump_fw_to_file(struct mhi_device_ctxt *mhi_dev_ctxt)
 		entry = &head->ramdump_table[i];
 		if (entry->size == 0)
 			continue;
-		scnprintf(p, len_left, entry->file_name);
+		if (strncmp(entry->file_name, "Q6-SRAM.bin",
+			    sizeof(entry->file_name)) == 0)
+			scnprintf(p, len_left, "fwsram.bin");
+		else
+			scnprintf(p, len_left, entry->file_name);
 		extract_fw_mem_dump(mhi_dev_ctxt,
 		 rddm_table, file_full_path, offset, entry->size);
 		offset += entry->size;
