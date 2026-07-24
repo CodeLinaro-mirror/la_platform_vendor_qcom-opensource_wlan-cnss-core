@@ -23,6 +23,9 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/time64.h>
+#ifdef CONFIG_USE_IMX95_EXT_32K_CLK
+#include <linux/clk.h>
+#endif
 #if IS_ENABLED(CONFIG_MSM_QMP)
 #include <linux/mailbox/qmp.h>
 #endif
@@ -673,6 +676,9 @@ struct cnss_plat_data {
 	struct list_head clk_list;
 	struct cnss_pinctrl_info pinctrl_info;
 	struct cnss_sol_gpio sol_gpio;
+#ifdef CONFIG_USE_IMX95_EXT_32K_CLK
+	struct clk *ext_clk;
+#endif
 #if IS_ENABLED(CONFIG_MSM_SUBSYSTEM_RESTART)
 	struct cnss_subsys_info subsys_info;
 #endif

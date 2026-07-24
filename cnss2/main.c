@@ -8043,6 +8043,20 @@ static int cnss_probe(struct platform_device *plat_dev)
 		}
 	}
 
+#ifdef CONFIG_USE_IMX95_EXT_32K_CLK
+	plat_priv->ext_clk = devm_clk_get(&plat_dev->dev, "cko4");
+	if (IS_ERR(plat_priv->ext_clk)) {
+		cnss_pr_err("failed to get cko4 clock, err = %ld\n",
+			    PTR_ERR(plat_priv->ext_clk));
+	} else {
+		ret = clk_prepare_enable(plat_priv->ext_clk);
+		if (ret)
+			cnss_pr_err("failed to enable cko4 clock: %d\n", ret);
+		else
+			cnss_pr_info("cko4 clock enabled\n");
+	}
+#endif
+
 	cnss_xdump_init(plat_priv);
 	plat_priv->use_fw_path_with_prefix =
 		cnss_use_fw_path_with_prefix(plat_priv);
@@ -8242,6 +8256,10 @@ static void cnss_remove(struct platform_device *plat_dev)
 	cnss_aop_interface_deinit(plat_priv);
 	cnss_host_param_deinit(plat_priv);
 	cnss_deinitialize_mem_pool();
+#ifdef CONFIG_USE_IMX95_EXT_32K_CLK
+	if (!IS_ERR_OR_NULL(plat_priv->ext_clk))
+		clk_disable_unprepare(plat_priv->ext_clk);
+#endif
 	platform_set_drvdata(plat_dev, NULL);
 	cnss_clear_plat_priv(plat_priv);
 
