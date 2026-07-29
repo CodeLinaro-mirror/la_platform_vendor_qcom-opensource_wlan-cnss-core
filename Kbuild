@@ -177,6 +177,11 @@ obj-$(CONFIG_IPC_LOGGING) += trace/
 obj-$(CONFIG_WCNSS_MEM_PRE_ALLOC) += cnss_prealloc/
 else
 
+# When invoked directly by the kernel Kbuild (e.g. from buildroot) the package
+# Makefile that normally exports ROOTDIR is bypassed, leaving it empty. Fall
+# back to the module source dir so the -I include paths below resolve.
+ROOTDIR ?= $(src)
+
 KS_BRIDGE_DIR := ks_bridge
 MHI_DIR := mhi
 IPC_ROUTER_DIR := ipc_router

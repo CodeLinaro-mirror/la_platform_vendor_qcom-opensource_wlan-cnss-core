@@ -22,6 +22,10 @@
 #include "cnss_prealloc.h"
 #include <linux/version.h>
 
+#ifdef CONFIG_WLAN_CNSS_CORE
+#include "unified_wlan_cnsscore.h"
+#endif
+
 static DEFINE_SPINLOCK(alloc_lock);
 
 #ifdef CONFIG_SLUB_DEBUG
@@ -212,7 +216,7 @@ static struct wcnss_prealloc wcnss_skb_allocs[] = {
 };
 #endif
 
-int wcnss_prealloc_init(void)
+static int wcnss_prealloc_init(void)
 {
 	int i;
 
@@ -236,7 +240,7 @@ int wcnss_prealloc_init(void)
 	return 0;
 }
 
-void wcnss_prealloc_deinit(void)
+static void wcnss_prealloc_deinit(void)
 {
 	int i = 0;
 
