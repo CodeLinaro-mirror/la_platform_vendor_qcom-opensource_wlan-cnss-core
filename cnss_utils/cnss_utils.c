@@ -478,6 +478,12 @@ static int __init cnss_utils_init(void)
 	return 0;
 }
 
+static void cnss_utils_debugfs_destroy(struct cnss_utils_priv *priv)
+{
+	debugfs_remove_recursive(priv->root_dentry);
+}
+
+
 #ifdef CONFIG_WLAN_CNSS_CORE
 void cnss_utils_exit(void);
 void cnss_utils_exit(void)
@@ -485,6 +491,8 @@ void cnss_utils_exit(void)
 static void __exit cnss_utils_exit(void)
 #endif
 {
+	cnss_utils_debugfs_destroy(cnss_utils_priv);
+	mutex_destroy(&cnss_utils_priv->unsafe_channel_list_lock);
 	kfree(cnss_utils_priv);
 	cnss_utils_priv = NULL;
 }

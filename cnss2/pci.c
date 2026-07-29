@@ -201,6 +201,16 @@ void cnss_pci_dump_qdss_reg(struct cnss_pci_data *pci_priv)
 	}
 }
 
+void cnss_pci_free_qdss_reg(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	if (plat_priv->qdss_reg)
+	{
+		devm_kfree(&pci_priv->pci_dev->dev, plat_priv->qdss_reg);
+		plat_priv->qdss_reg = NULL;
+	}
+}
+
 void cnss_pci_enable_l1(struct cnss_pci_data *pci_priv)
 {
 	struct pci_dev *pdev = pci_priv->pci_dev;
@@ -3807,7 +3817,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	}
 
 	pci_load_and_free_saved_state(pci_dev, &pci_priv->saved_state);
-
+	cnss_pci_free_qdss_reg(pci_priv);
 	cnss_pci_disable_bus(pci_priv);
 #ifdef CONFIG_ARCH_QCOM
 	cnss_dereg_pci_event(pci_priv);

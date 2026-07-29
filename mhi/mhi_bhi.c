@@ -867,12 +867,15 @@ void bhi_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 	kfree(fw_table->sg_list);
 	fw_table->sg_list = NULL;
 	bhie_mem_info = fw_table->bhie_mem_info;
+	if (!bhie_mem_info)
+		fw_table->segment_count = 0;
 	for (i = 0; i < fw_table->segment_count; i++, bhie_mem_info++)
 		cnss_dma_free_coherent(dev, bhie_mem_info->alloc_size,
 				  bhie_mem_info->pre_aligned,
 				  bhie_mem_info->dma_handle);
 	kfree(fw_table->bhie_mem_info);
 	fw_table->bhie_mem_info = NULL;
+	fw_table->segment_count = 0;
 	/* vector table is the last entry in bhie_mem_info */
 	fw_table->bhi_vec_entry = NULL;
 
@@ -891,6 +894,7 @@ void bhi_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 				  bhie_mem_info->dma_handle);
 	kfree(rddm_table->bhie_mem_info);
 	rddm_table->bhie_mem_info = NULL;
+	rddm_table->segment_count = 0;
 	rddm_table->bhi_vec_entry = NULL;
 
 	mhi_log(mhi_dev_ctxt, MHI_MSG_INFO, "Freed rddm fw\n");

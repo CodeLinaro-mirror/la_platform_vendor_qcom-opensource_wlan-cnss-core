@@ -164,31 +164,21 @@ irq_error:
 void mhi_ctxt_exit(struct mhi_device_ctxt *mhi_dev_ctxt)
 {
 	int i;
-
-	if (mhi_dev_ctxt->state_change_work_item_list.q_lock) {
-		kfree(mhi_dev_ctxt->state_change_work_item_list.q_lock);
-		mhi_dev_ctxt->state_change_work_item_list.q_lock = NULL;
-	}
-
-	kfree(mhi_dev_ctxt->mhi_ev_wq.m0_event);
-	kfree(mhi_dev_ctxt->mhi_ev_wq.m3_event);
-	kfree(mhi_dev_ctxt->mhi_ev_wq.bhi_event);
-
-	cnss_dma_free_coherent(&mhi_dev_ctxt->pcie_device->dev,
-		   mhi_dev_ctxt->dev_space.dev_mem_len,
-		   mhi_dev_ctxt->dev_space.dev_mem_start,
-		   mhi_dev_ctxt->dev_space.dma_dev_mem_start);
-
-	for (i = 0; i < mhi_dev_ctxt->core.max_nr_msis; i++)
-	{
+	for (i = 0; i < mhi_dev_ctxt->core.max_nr_msis; i++) {
+		/*
+		* Free the event IRQs first, before mhi_deinit_device_ctxt() frees the
+		* contexts their handlers reference (ev_ring_props, mhi_local_event_ctxt).
+		*/
 		mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
-		"mhi_ctxt_exit = %d, MSI_number = %d, event ring number = %d\n",
-		mhi_dev_ctxt->core.irq_base, mhi_dev_ctxt->ev_ring_props[i].msi_vec, i);
+			"mhi_ctxt_exit = %d, MSI_number = %d, event ring number = %d\n",
+			mhi_dev_ctxt->core.irq_base,
+			mhi_dev_ctxt->ev_ring_props[i].msi_vec, i);
 		free_irq(mhi_dev_ctxt->core.irq_base +
 			mhi_dev_ctxt->ev_ring_props[i].msi_vec,
 			(void *)&mhi_dev_ctxt->mhi_local_event_ctxt[i]);
 	}
-	kfree(mhi_dev_ctxt->ev_ring_props);
+
+	mhi_deinit_device_ctxt(mhi_dev_ctxt);
 }
 
 static const struct dev_pm_ops pm_ops = {

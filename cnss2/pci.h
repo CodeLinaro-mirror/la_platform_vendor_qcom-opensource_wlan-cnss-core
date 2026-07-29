@@ -203,6 +203,7 @@ int cnss_pci_recovery_update_status(struct cnss_pci_data *pci_priv);
 void cnss_pci_shutdown(struct pci_dev *pci_dev);
 int cnss_pci_get_bus_pm_state(struct cnss_pci_data *pci_priv);
 int cnss_get_pci_msi_vectors(struct cnss_pci_data *pci_priv);
+void cnss_pci_free_qdss_reg(struct cnss_pci_data *pci_priv);
 void cnss_pci_enable_l1(struct cnss_pci_data *pci_priv);
 #else
 static inline int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
