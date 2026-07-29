@@ -433,24 +433,18 @@ static int cnss_wlfw_request_mem_ind_hdlr(struct cnss_plat_data *plat_priv,
 
 			pci_priv = plat_priv->bus_priv;
 			if (pci_priv) {
-				for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
-					if (plat_priv->fw_mem[i].va && plat_priv->fw_mem[i].size) {
-						cnss_pr_info("Freeing old FW mem[%d]: type=%u, size=0x%zx\n",
-							   i, plat_priv->fw_mem[i].type,
-							   plat_priv->fw_mem[i].size);
-
-						dma_free_coherent(&pci_priv->pci_dev->dev,
-								plat_priv->fw_mem[i].size,
-								plat_priv->fw_mem[i].va,
-								plat_priv->fw_mem[i].pa);
-
-						plat_priv->fw_mem[i].va = NULL;
-						plat_priv->fw_mem[i].pa = 0;
-					}
-				}
+				/*
+				 * Free via cnss_pci_free_fw_mem() so the buffers are
+				 * returned to the cnss_dma_prealloc pool (frees
+				 * pre_aligned with size+align via cnss_dma_free_coherent),
+				 * all fw_mem fields are cleared, mhi_clear_fw_remote_mem()
+				 * is called and fw_mem_seg_len is reset. Freeing the
+				 * aligned va with raw dma_free_coherent() corrupted the
+				 * allocator.
+				 */
+				cnss_pci_free_fw_mem(pci_priv);
 			}
-			mhi_clear_fw_remote_mem(&(pci_priv->mhi_dev));
-			/* Clear old allocation info */
+			/* Clear any residual segment metadata */
 			memset(plat_priv->fw_mem, 0, sizeof(plat_priv->fw_mem));
 			plat_priv->fw_mem_seg_len = 0;
 		}

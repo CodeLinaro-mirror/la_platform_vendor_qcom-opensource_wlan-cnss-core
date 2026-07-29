@@ -162,6 +162,7 @@ static inline int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
 int cnss_pci_init(struct cnss_plat_data *plat_priv);
 void cnss_pci_deinit(struct cnss_plat_data *plat_priv);
 int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv);
+void cnss_pci_free_fw_mem(struct cnss_pci_data *pci_priv);
 void cnss_pci_fw_name_add_path(struct cnss_pci_data *pci_priv,
 			       char *file_name, char *name);
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv);
@@ -290,6 +291,10 @@ static inline int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv
 static inline int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
 {
 	return 0;
+}
+static inline void cnss_pci_free_fw_mem(struct cnss_pci_data *pci_priv)
+{
+	return;
 }
 static inline int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 {
