@@ -697,6 +697,7 @@ int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv)
 			goto out;
 		}
 		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
+		clear_bit(CNSS_DEV_SHUTDOWN, &plat_priv->driver_state);
 	} else if (test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state)) {
 		ret = pci_priv->driver_ops->probe(pci_priv->pci_dev,
 						  pci_priv->pci_device_id);
@@ -980,7 +981,7 @@ static void cnss_qca6290_crash_shutdown(struct cnss_pci_data *pci_priv)
 		return;
 	}
 
-	if (test_bit(CNSS_MHI_RDDM_DONE, &plat_priv->driver_state)) {
+	if (test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state)) {
 		cnss_pr_dbg("RDDM already collected, return\n");
 		return;
 	}
@@ -3377,7 +3378,7 @@ static enum mhi_dev_ctrl cnss_to_mhi_dev_state(enum cnss_mhi_state state)
 	case CNSS_MHI_NOTIFY_LINK_ERROR:
 		return MHI_DEV_CTRL_NOTIFY_LINK_ERROR;
 	default:
-		cnss_pr_err("Unknown CNSS MHI state (%d)\n", state);
+		cnss_pr_err("Unknown CNSS MHI state: %s(%d)\n", cnss_mhi_state_to_str(state), state);
 		return -EINVAL;
 	}
 }
