@@ -4620,7 +4620,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-static void cnss_pci_free_fw_mem(struct cnss_pci_data *pci_priv)
+void cnss_pci_free_fw_mem(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;

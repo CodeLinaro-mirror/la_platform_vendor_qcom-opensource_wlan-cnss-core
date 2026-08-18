@@ -641,6 +641,9 @@ struct cnss_plat_data {
 	bool ipa_shared_cb_enable;
 	struct cnss_wlan_host_param *host_param;
 	struct cnss_wlan_tsf_info tsf_info;
+	/* Cached DDR memory info for fast comparison on subsequent boots */
+	u32 prev_ddr_seg_count;
+	u64 prev_ddr_total_size;
 };
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0))
