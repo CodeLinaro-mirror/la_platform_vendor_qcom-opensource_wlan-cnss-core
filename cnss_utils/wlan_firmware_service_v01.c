@@ -8157,6 +8157,7 @@ struct qmi_elem_info wlfw_partner_chip_state_info_resp_msg_v01_ei[] = {
 };
 EXPORT_SYMBOL(wlfw_partner_chip_state_info_resp_msg_v01_ei);
 
+#ifndef CONFIG_CNSS2_X86
 /**
  * wlfw_is_valid_dt_node_found - Check if valid device tree node present
  *
@@ -8179,6 +8180,7 @@ static bool wlfw_is_valid_dt_node_found(void)
 
 	return false;
 }
+#endif
 
 #ifdef CONFIG_WLAN_CNSS_CORE
 int wlfw_init(void)
@@ -8186,8 +8188,10 @@ int wlfw_init(void)
 static int __init wlfw_init(void)
 #endif
 {
+#ifndef CONFIG_CNSS2_X86
 	if (!wlfw_is_valid_dt_node_found())
 		return -ENODEV;
+#endif
 
 	return 0;
 }

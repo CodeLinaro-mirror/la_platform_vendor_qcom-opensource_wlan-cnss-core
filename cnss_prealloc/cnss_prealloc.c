@@ -1159,6 +1159,7 @@ EXPORT_SYMBOL(wcnss_prealloc_check_memory_leak);
 int wcnss_pre_alloc_reset(void) { return -EOPNOTSUPP; }
 EXPORT_SYMBOL(wcnss_pre_alloc_reset);
 
+#ifndef CONFIG_CNSS2_X86
 /**
  * cnss_prealloc_is_valid_dt_node_found - Check if valid device tree node
  *                                        present
@@ -1182,6 +1183,7 @@ static bool cnss_prealloc_is_valid_dt_node_found(void)
 
 	return false;
 }
+#endif
 
 #ifdef CONFIG_WLAN_CNSS_CORE
 int cnss_prealloc_init(void)
@@ -1189,8 +1191,10 @@ int cnss_prealloc_init(void)
 static int __init cnss_prealloc_init(void)
 #endif
 {
+#ifndef CONFIG_CNSS2_X86
 	if (!cnss_prealloc_is_valid_dt_node_found())
 		return -ENODEV;
+#endif
 
 	cnss_prealloc_sysfs_init();
 	return 0;
