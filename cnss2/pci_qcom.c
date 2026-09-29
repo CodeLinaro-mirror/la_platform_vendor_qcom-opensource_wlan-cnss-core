@@ -385,9 +385,9 @@ retry:
 	} else {
 		/* Since DRV suspend cannot be done in Gen 3, set it to
 		 * Gen 2 if current link speed is larger than Gen 2.
+		 * cur_link_speed holds a fresh value already, updated at
+		 * enumeration time and on every MHI bus bandwidth change.
 		 */
-
-		cnss_pci_get_link_status(pci_priv);
 		if (pci_priv->drv_connected_last &&
 		    pci_priv->cur_link_speed > PCI_EXP_LNKSTA_CLS_5_0GB)
 			cnss_set_pci_link_status(pci_priv, PCI_GEN2);
@@ -520,6 +520,30 @@ bool cnss_pci_is_sync_probe(void)
 	return true;
 }
 
+const char *cnss_pci_mhi_notify_status_extra_to_str(enum mhi_callback status)
+{
+	switch (status) {
+	case MHI_CB_EE_SBL_MODE:
+		return "SBL_MODE";
+	default:
+		return NULL;
+	}
+}
+
+bool cnss_pci_mhi_notify_status_extra(struct cnss_pci_data *pci_priv,
+				      enum mhi_callback reason)
+{
+	switch (reason) {
+	case MHI_CB_EE_SBL_MODE:
+		cnss_timer_delete_sync(&pci_priv->boot_debug_timer);
+		mod_timer(&pci_priv->boot_debug_timer,
+			  jiffies + msecs_to_jiffies(BOOT_DEBUG_TIMEOUT_MS));
+		return true;
+	default:
+		return false;
+	}
+}
+
 int cnss_pci_get_msi_assignment(struct cnss_pci_data *pci_priv)
 {
 	pci_priv->msi_config = &msi_config;
@@ -544,7 +568,8 @@ cnss_pci_smmu_dev_fault_handler(struct iommu_fault *fault,  void *data)
 
 	pci_priv->is_smmu_fault = true;
 	cnss_pci_update_status(pci_priv, CNSS_FW_DOWN);
-	cnss_force_fw_assert(&pci_priv->pci_dev->dev);
+	if (cnss_force_fw_assert(&pci_priv->pci_dev->dev) == -EOPNOTSUPP)
+		CNSS_ASSERT(0);
 
 	/* IOMMU driver requires -ENOSYS to print debug info. */
 	return -ENOSYS;
@@ -575,18 +600,29 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 
 	pci_priv->is_smmu_fault = true;
 	cnss_pci_update_status(pci_priv, CNSS_FW_DOWN);
-	cnss_force_fw_assert(&pci_priv->pci_dev->dev);
+	if (cnss_force_fw_assert(&pci_priv->pci_dev->dev) == -EOPNOTSUPP)
+		CNSS_ASSERT(0);
 
 	/* IOMMU driver requires -ENOSYS to print debug info. */
 	return -ENOSYS;
 }
 
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0))
+static
+void cnss_register_iommu_fault_handler(struct cnss_pci_data *pci_priv)
+{
+	qcom_iommu_set_fault_handler(pci_priv->iommu_domain,
+				     cnss_pci_smmu_fault_handler, pci_priv);
+}
+#else
 static
 void cnss_register_iommu_fault_handler(struct cnss_pci_data *pci_priv)
 {
 	iommu_set_fault_handler(pci_priv->iommu_domain,
 				cnss_pci_smmu_fault_handler, pci_priv);
 }
+#endif
 #endif
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0))
@@ -597,11 +633,35 @@ int cnss_pci_get_iommu_addr(struct cnss_pci_data *pci_priv,
 	struct device_node *of_node;
 	const u32 *maps;
 	const u32 *end;
-	int size;
+	int size, ret;
+	char iommu_name[CNSS_IOMMU_NODE_NAME_MAX_LEN];
+
+	if (!pci_priv->plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -EINVAL;
+	}
+
+	ret = snprintf(iommu_name, CNSS_IOMMU_NODE_NAME_MAX_LEN,
+			"cnss_pci%d_iommu_region_partition",
+			pci_priv->plat_priv->rc_num);
+	if (ret < 0 || ret >= CNSS_IOMMU_NODE_NAME_MAX_LEN) {
+		cnss_pr_err("Failed to get iommu node rc:%d ret:%d\n",
+			    pci_priv->plat_priv->rc_num, ret);
+		return -EINVAL;
+	}
 
 	of_node = of_find_node_by_name(pci_dev->dev.of_node,
-				       "cnss_pci0_iommu_region_partition");
+				       iommu_name);
 	if (!of_node)
+		/*
+		 * fallback to check default name
+		 * cnss_pci0_iommu_region_partition
+		 * again,in case DTS name is not
+		 * matching to actual rc number
+		 */
+		of_node = of_find_node_by_name(pci_dev->dev.of_node,
+				"cnss_pci0_iommu_region_partition");
+	if(!of_node)
 		return -EINVAL;
 
 	maps = of_get_property(of_node, "iommu-addresses", &size);

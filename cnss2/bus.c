@@ -28,6 +28,7 @@ enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 	int ret;
 	struct device *dev;
 	u32 bus_type_dt = CNSS_BUS_NONE;
+
 	if (plat_priv->dt_type == CNSS_DTT_MULTIEXCHG) {
 		dev = &plat_priv->plat_dev->dev;
 		ret = of_property_read_u32(dev->of_node, "qcom,bus-type",
@@ -146,6 +147,11 @@ int cnss_bus_load_tme_patch(struct cnss_plat_data *plat_priv)
 	if (!plat_priv)
 		return -ENODEV;
 
+	if (test_bit(NO_TME_PATCH, &plat_priv->ctrl_params.quirks)) {
+		cnss_pr_dbg("TME patch loading disabled by quirk\n");
+		return -EPERM;
+	}
+
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
 		return cnss_pci_load_tme_patch(plat_priv->bus_priv);
@@ -160,6 +166,11 @@ int cnss_bus_load_sku_license(struct cnss_plat_data *plat_priv)
 {
 	if (!plat_priv)
 		return -ENODEV;
+
+	if (test_bit(NO_SKU_LICENSE, &plat_priv->ctrl_params.quirks)) {
+		cnss_pr_dbg("SKU license loading disabled by quirk\n");
+		return -EPERM;
+	}
 
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
@@ -176,6 +187,11 @@ int cnss_bus_load_tme_opt_file(struct cnss_plat_data *plat_priv,
 {
 	if (!plat_priv)
 		return -ENODEV;
+
+	if (test_bit(NO_TME_OPT_FILES, &plat_priv->ctrl_params.quirks)) {
+		cnss_pr_dbg("TME opt file loading disabled by quirk\n");
+		return -EPERM;
+	}
 
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
@@ -620,6 +636,23 @@ int cnss_bus_update_uevent(struct cnss_plat_data *plat_priv,
 	}
 }
 
+int cnss_bus_config_io_coherency(struct cnss_plat_data *plat_priv,
+				 bool reset)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_config_io_coherency(plat_priv->bus_priv,
+						    reset);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return -EINVAL;
+	}
+}
+
 int cnss_bus_is_device_down(struct cnss_plat_data *plat_priv)
 {
 	if (!plat_priv)
@@ -928,4 +961,18 @@ u8 **cnss_bus_collect_rddm_seg_info(struct cnss_plat_data *plat_priv,
 	}
 
 	return NULL;
+}
+
+int cnss_bus_lookup_board_id(struct cnss_plat_data *plat_priv, u32 *board_id)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_lookup_board_id(plat_priv->bus_priv, board_id);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n", plat_priv->bus_type);
+		return -EINVAL;
+	}
 }

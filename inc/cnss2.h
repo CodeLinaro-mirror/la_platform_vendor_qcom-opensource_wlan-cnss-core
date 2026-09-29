@@ -93,6 +93,7 @@ enum cnss_driver_status {
 	CNSS_HANG_EVENT,
 	CNSS_BUS_EVENT,
 	CNSS_SYS_REBOOT,
+	CNSS_UPDATE_DMA_DEV,
 };
 
 enum cnss_bus_event_type {
@@ -286,6 +287,7 @@ extern int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info);
 extern int cnss_request_bus_bandwidth(struct device *dev, int bandwidth);
 extern int cnss_power_up(struct device *dev);
 extern int cnss_power_down(struct device *dev);
+extern int cnss_set_bmps(struct device *dev, bool disable);
 extern int cnss_idle_restart(struct device *dev);
 extern int cnss_idle_shutdown(struct device *dev);
 extern void cnss_request_pm_qos(struct device *dev, u32 qos_val);
@@ -377,4 +379,5 @@ extern void cnss_get_cpumask_for_wlan_tx_comp_interrupts(struct device *dev,
 extern int cnss_set_cxpc(struct device *dev, enum cxpc_status arg);
 extern int cnss_pci_get_iova_info(struct device *dev, u64 *addr, u64 *size);
 extern int cnss_set_vendor_wonder_priv_data(const void *priv_data);
+extern bool cnss_get_napi_ipi_redirect_enabled(struct device *dev);
 #endif /* _NET_CNSS2_H */

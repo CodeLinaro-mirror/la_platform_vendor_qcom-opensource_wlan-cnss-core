@@ -30,6 +30,8 @@
 
 #include "main.h"
 
+#define CNSS_BDF_MAP_FILE     "wlan_pci_subsys_bdf_map.ini"
+
 #define PM_OPTIONS_DEFAULT		0
 #define PCI_LINK_DOWN			0
 
@@ -41,6 +43,8 @@
 
 #define LINK_TRAINING_RETRY_DELAY_MS		500
 #define MSI_USERS			4
+
+#define BOOT_DEBUG_TIMEOUT_MS			7000
 
 #define CNSS_MHI_IN_MISSION_MODE(ee) (ee == MHI_EE_AMSS || \
 				      ee == MHI_EE_WFW || \
@@ -160,6 +164,11 @@ struct cnss_pci_data {
 	const struct pci_device_id *pci_device_id;
 	u32 device_id;
 	u16 revision_id;
+	u16 pci_vendor_id;
+	u16 pci_subsystem_vendor;
+	u16 pci_subsystem_device;
+	u32 pcie_board_id;
+	bool pcie_board_id_valid;
 	u64 dma_bit_mask;
 	u64 dma_coherent_bit_mask;
 	struct cnss_wlan_driver *driver_ops;
@@ -339,6 +348,7 @@ int cnss_pci_load_tme_patch(struct cnss_pci_data *pci_priv);
 int cnss_pci_load_tme_opt_file(struct cnss_pci_data *pci_priv,
 				enum wlfw_tme_lite_file_type_v01 file);
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv);
+int cnss_pci_lookup_board_id(struct cnss_pci_data *pci_priv, u32 *board_id);
 void cnss_pci_free_blob_mem(struct cnss_pci_data *pci_priv);
 int cnss_pci_load_aux(struct cnss_pci_data *pci_priv);
 int cnss_pci_handle_dev_sol_irq(struct cnss_pci_data *pci_priv);
@@ -389,6 +399,8 @@ int cnss_pci_update_status(struct cnss_pci_data *pci_priv,
 			   enum cnss_driver_status status);
 int cnss_pci_call_driver_uevent(struct cnss_pci_data *pci_priv,
 				enum cnss_driver_status status, void *data);
+int cnss_pci_config_io_coherency(struct cnss_pci_data *pci_priv,
+				 bool reset);
 int cnss_pcie_is_device_down(struct cnss_pci_data *pci_priv);
 int cnss_pci_shutdown_cleanup(struct cnss_pci_data *pci_priv);
 int cnss_pci_suspend_bus(struct cnss_pci_data *pci_priv);
